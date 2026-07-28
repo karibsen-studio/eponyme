@@ -4,5 +4,8 @@
     "dist",
     "node_modules",
     "playground",
+    // A standalone Nuxt app: its auto-imports live in its own .nuxt, which this
+    // project's tsconfig cannot see.
+    "test/fixtures",
   ]
 }

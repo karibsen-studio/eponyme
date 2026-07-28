@@ -179,13 +179,23 @@ describe('form()', () => {
     })).not.toThrow()
   })
 
+  // TypeScript already rejects these at the call site — the @ts-expect-error
+  // directives are part of the assertion. The runtime guard is the second line of
+  // defence, for JavaScript consumers and for values built dynamically.
   it('rejects authoring-only field types', () => {
+    // @ts-expect-error richText is not a public form field
     expect(() => form({ fields: { body: field.richText() } })).toThrow(/field\.richText\(\)/)
+    // @ts-expect-error slug is not a public form field
     expect(() => form({ fields: { slug: field.slug() } })).toThrow(/not available in a public form/)
+    // @ts-expect-error image is not a public form field
     expect(() => form({ fields: { cover: field.image() } })).toThrow(/field\.image\(\)/)
+    // @ts-expect-error date is not a public form field
     expect(() => form({ fields: { day: field.date() } })).toThrow(/field\.date\(\)/)
+    // @ts-expect-error color is not a public form field
     expect(() => form({ fields: { tint: field.color() } })).toThrow(/field\.color\(\)/)
+    // @ts-expect-error array is not a public form field
     expect(() => form({ fields: { items: field.array({ of: field.string() }) } })).toThrow(/field\.array\(\)/)
+    // @ts-expect-error section is not a public form field
     expect(() => form({ fields: { meta: field.section({ fields: { a: field.string() } }) } })).toThrow(/field\.section\(\)/)
   })
 

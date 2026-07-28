@@ -13,6 +13,12 @@ import { useEponymeValidation } from './useEponymeValidation'
 
 type ConfigFormName = EponymeFormName<typeof eponymeConfig>
 
+function resolveForm(name: string): EponymeFormDefinitionBase {
+  const definition = getEponymeForms(useEponymeConfig())[name] as EponymeFormDefinitionBase | undefined
+  if (!definition) throw new Error(`[Eponyme] Unknown form "${name}". Declare it with form() in eponyme.config.ts.`)
+  return definition
+}
+
 export interface UseEponymeFormField {
   name: string
   definition: EponymeFormFieldDefinition
@@ -48,8 +54,7 @@ export function useEponymeForm<const Name extends ConfigFormName>(
   name: Name,
   options: UseEponymeFormOptions<EponymeFormDataByName<typeof eponymeConfig, Name>> = {},
 ): UseEponymeFormResult<EponymeFormDataByName<typeof eponymeConfig, Name>> {
-  const definition = getEponymeForms(useEponymeConfig())[name as string] as EponymeFormDefinitionBase | undefined
-  if (!definition) throw new Error(`[Eponyme] Unknown form "${name}". Declare it with form() in eponyme.config.ts.`)
+  const definition = resolveForm(name)
 
   const requestFetch = useRequestFetch()
   const serverErrors = ref<ValidationErrors>({})
@@ -95,7 +100,9 @@ export function useEponymeForm<const Name extends ConfigFormName>(
       else {
         if (options.onSubmit && import.meta.dev)
           console.warn(`[Eponyme] Form "${name}" is managed, so its onSubmit handler is ignored.`)
-        await requestFetch(`/api/eponyme-forms/${name}`, { method: 'POST', body: values.value })
+        // The wildcard route is not in Nitro's generated route map, so its method
+        // cannot be inferred from the literal path.
+        await requestFetch(`/api/eponyme-forms/${name}` as string, { method: 'POST', body: values.value })
       }
       submitted.value = true
       return true
