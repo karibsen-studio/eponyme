@@ -1,0 +1,20 @@
+import { array } from './array'
+import { boolean } from './boolean'
+import { checkboxGroup } from './checkbox-group'
+import { color } from './color'
+import { date, today } from './date'
+import { email } from './email'
+import { image } from './image'
+import { number } from './number'
+import { radio } from './radio'
+import { richText } from './rich-text'
+import { section } from './section'
+import { select } from './select'
+import { slug } from './slug'
+import { string } from './string'
+import { tab } from './tab'
+import { textarea } from './textarea'
+import { url } from './url'
+
+export const field = { string, slug, email, url, textarea, richText, number, boolean, image, select, radio, checkboxGroup, date, color, array, section, tab }
+export { today }

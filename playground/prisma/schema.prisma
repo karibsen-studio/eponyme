@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Eponyme {
+  name      String   @id
+  data      Json     @db.JsonB
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  versions  EponymeVersion[]
+
+  @@map("eponyme_entries")
+}
+
+model EponymeVersion {
+  id          Int      @id @default(autoincrement())
+  entryName   String
+  data        Json     @db.JsonB
+  action      String
+  status      String
+  createdAt   DateTime @default(now())
+  userId      String?
+  entry       Eponyme  @relation(fields: [entryName], references: [name], onDelete: Cascade)
+  user        EponymeUser? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entryName, createdAt])
+  @@index([userId])
+  @@map("eponyme_versions")
+}
+
+model EponymeUser {
+  id                   String               @id
+  username             String
+  usernameNormalized   String               @unique
+  passwordHash         String
+  role                 String
+  active               Boolean              @default(true)
+  mustChangePassword   Boolean              @default(true)
+  failedLoginAttempts  Int                  @default(0)
+  lockedUntil          DateTime?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  sessions             EponymeUserSession[]
+  versions             EponymeVersion[]
+
+  @@index([role, active])
+  @@map("eponyme_users")
+}
+
+model EponymeUserSession {
+  id        String      @id
+  tokenHash String      @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime    @default(now())
+  user      EponymeUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("eponyme_user_sessions")
+}
+
+model EponymeFormSubmission {
+  id        String   @id
+  formName  String
+  data      Json     @db.JsonB
+  createdAt DateTime @default(now())
+
+  @@index([formName, createdAt])
+  @@map("eponyme_form_submissions")
+}

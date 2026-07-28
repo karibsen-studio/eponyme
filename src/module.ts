@@ -1,0 +1,200 @@
+import {
+  addImports,
+  addImportsDir,
+  addRouteMiddleware,
+  addServerHandler,
+  addServerImports,
+  addServerPlugin,
+  addTypeTemplate,
+  createResolver,
+  defineNuxtModule,
+  findPath,
+  installModule,
+  useLogger,
+} from '@nuxt/kit'
+import pc from 'picocolors'
+import tailwindcss from '@tailwindcss/vite'
+import { resolve } from 'node:path'
+
+// Re-exported so `import type { FieldDefinition } from '@karibsen/eponyme'` resolves.
+// The runtime helpers (`field`, `collection`, `defineEponymeConfig`) live at
+// `@karibsen/eponyme/config`, since the package root has to stay the Nuxt module itself.
+export type * from './eponyme'
+
+export interface ModuleOptions {
+  dashboardPath?: string
+  /** Public routes used for previews and sitemap entries. Collections use a `:slug` placeholder. */
+  previewPaths?: Record<string, string>
+  /** Path to a server module exporting an already initialized PrismaClient. */
+  prismaClient: string
+  /** Default palette offered by every color field; a field can override it with its own `presets`. */
+  colorPresets?: Array<string | { label: string, value: string }>
+  auth?: {
+    /** Fixed lifetime of an authenticated session. */
+    sessionDurationDays?: number
+  }
+}
+
+export default defineNuxtModule<ModuleOptions>({
+  meta: {
+    name: '@karibsen/eponyme',
+    configKey: 'eponyme',
+  },
+
+  defaults: {
+    dashboardPath: '/__eponyme',
+    previewPaths: {},
+    prismaClient: '',
+    colorPresets: [],
+    auth: {
+      sessionDurationDays: 7,
+    },
+  },
+
+  async setup(options, nuxt) {
+    const logger = useLogger('eponyme')
+    const resolver = createResolver(import.meta.url)
+    const dashboardPath = `/${(options.dashboardPath || '__eponyme').replace(/^\/+|\/+$/g, '')}`
+    const publicRuntimeConfig = nuxt.options.runtimeConfig.public as Record<string, unknown>
+    publicRuntimeConfig.eponyme = {
+      previewPaths: options.previewPaths ?? {},
+      dashboardPath,
+      colorPresets: options.colorPresets ?? [],
+    }
+    nuxt.options.runtimeConfig.eponymeAuth = {
+      sessionDurationDays: options.auth?.sessionDurationDays ?? 7,
+    }
+
+    await installModule('@nuxt/icon', {
+      serverBundle: { collections: ['mingcute'] },
+      clientBundle: {
+        // Explicit list: an icon missing here is not bundled and renders blank in production.
+        icons: [
+          'mingcute:history-anticlockwise-line',
+          'mingcute:eye-2-line',
+          'mingcute:layout-leftbar-close-line',
+          'mingcute:layout-leftbar-open-line',
+          'mingcute:down-small-line',
+          'mingcute:search-line',
+          'mingcute:close-line',
+          'mingcute:arrow-right-line',
+          'mingcute:align-arrow-right-line',
+          'mingcute:link-2-line',
+          'mingcute:settings-3-line',
+          'mingcute:refresh-2-line',
+          'mingcute:external-link-line',
+          'mingcute:paragraph-line',
+          'mingcute:heading-2-line',
+          'mingcute:heading-3-line',
+          'mingcute:bold-line',
+          'mingcute:italic-line',
+          'mingcute:strikethrough-line',
+          'mingcute:link-line',
+          'mingcute:pic-line',
+          'mingcute:list-check-line',
+          'mingcute:list-ordered-line',
+          'mingcute:quote-left-line',
+          'mingcute:back-2-line',
+          'mingcute:forward-2-line',
+        ],
+      },
+    }, nuxt)
+
+    // `nuxt prepare` also runs on the module's own repository, where there is no host app
+    // to configure — the requirements below only make sense when actually serving.
+    const preparing = Boolean(nuxt.options._prepare)
+
+    if (!options.prismaClient) {
+      if (!preparing) throw new Error(`${pc.red('[Eponyme]')} eponyme.prismaClient is required.`)
+      logger.info('No prismaClient configured, skipping wiring (prepare).')
+      return
+    }
+
+    const prismaPath = await findPath(resolve(nuxt.options.rootDir, options.prismaClient))
+    if (!prismaPath)
+      throw new Error(`${pc.red('[Eponyme]')} Prisma client module not found: ${options.prismaClient}`)
+
+    addImports([
+      { name: 'defineEponymeConfig', from: resolver.resolve('./config/config') },
+      { name: 'collection', from: resolver.resolve('./config/collection') },
+      { name: 'form', from: resolver.resolve('./config/form') },
+      { name: 'field', from: resolver.resolve('./runtime/fields') },
+      { name: 'today', from: resolver.resolve('./runtime/fields') },
+    ])
+    addImportsDir(resolver.resolve('./runtime/composables'))
+    // Lets the host app build its own sitemap route without an internal HTTP request.
+    addServerImports([
+      { name: 'getEponymeSitemapEntries', from: resolver.resolve('./runtime/server/utils/eponyme-sitemap') },
+      // A `custom` form posts to the host application's own route, so this is what
+      // keeps server-side validation as the security boundary.
+      { name: 'validateEponymeForm', from: resolver.resolve('./runtime/server/utils/eponyme-form') },
+    ])
+    addRouteMiddleware({
+      name: 'eponyme-auth',
+      path: resolver.resolve('./runtime/middleware/eponyme-auth'),
+    })
+    addRouteMiddleware({
+      name: 'eponyme-owner',
+      path: resolver.resolve('./runtime/middleware/eponyme-owner'),
+    })
+    // reka-ui ships client-compiled render functions that call `renderSlot`. Left
+    // external, they resolve their own CJS copy of Vue, whose
+    // `currentRenderingInstance` is always null during SSR — the dashboard then
+    // crashes in production builds only. Transpiling keeps one copy of Vue.
+    nuxt.options.build.transpile.push('reka-ui')
+    nuxt.options.css.push(resolver.resolve('./runtime/assets/dashboard.css'))
+    nuxt.hook('vite:extendConfig', (viteConfig) => {
+      const plugins = viteConfig.plugins as unknown as Array<unknown> | undefined
+      plugins?.push(tailwindcss())
+    })
+
+    const configPath = await findPath(resolve(nuxt.options.rootDir, 'eponyme.config.ts'))
+    if (!configPath) {
+      if (!preparing) throw new Error(`${pc.red('[Eponyme]')} eponyme.config.ts not found at the project root.`)
+      logger.info('No eponyme.config.ts found, skipping wiring (prepare).')
+      return
+    }
+
+    nuxt.options.alias['#eponyme/config'] = configPath
+    nuxt.options.alias['#eponyme/prisma'] = prismaPath
+
+    addTypeTemplate({
+      filename: 'types/eponyme-config.d.ts',
+      getContents: () => `declare module '#eponyme/config' {\n  const config: typeof import(${JSON.stringify(configPath)})['default']\n  export default config\n}\n`,
+    })
+
+    addServerHandler({ route: '/api/eponyme/**', handler: resolver.resolve('./runtime/server/api/eponyme/[name].get') })
+    addServerHandler({ route: '/api/eponyme/**', method: 'patch', handler: resolver.resolve('./runtime/server/api/eponyme/[name].patch') })
+    addServerHandler({ route: '/api/eponyme-statuses', handler: resolver.resolve('./runtime/server/api/eponyme-statuses.get') })
+    addServerHandler({ route: '/api/eponyme-sitemap', handler: resolver.resolve('./runtime/server/api/eponyme-sitemap.get') })
+    addServerHandler({ route: '/api/eponyme-history/**', handler: resolver.resolve('./runtime/server/api/eponyme-history/[path].get') })
+    addServerHandler({ route: '/api/eponyme-history/**', method: 'patch', handler: resolver.resolve('./runtime/server/api/eponyme-history/[path].patch') })
+    addServerHandler({ route: '/api/eponyme-collections/**', handler: resolver.resolve('./runtime/server/api/eponyme-collections/[path].get') })
+    addServerHandler({ route: '/api/eponyme-collections/**', method: 'post', handler: resolver.resolve('./runtime/server/api/eponyme-collections/[path].post') })
+    addServerHandler({ route: '/api/eponyme-collections/**', method: 'delete', handler: resolver.resolve('./runtime/server/api/eponyme-collections/[path].delete') })
+    addServerHandler({ route: '/api/eponyme-forms/**', handler: resolver.resolve('./runtime/server/api/eponyme-forms/[path].get') })
+    addServerHandler({ route: '/api/eponyme-forms/**', method: 'post', handler: resolver.resolve('./runtime/server/api/eponyme-forms/[path].post') })
+    addServerHandler({ route: '/api/eponyme-forms/**', method: 'delete', handler: resolver.resolve('./runtime/server/api/eponyme-forms/[path].delete') })
+    addServerHandler({ route: '/api/eponyme-auth/session', handler: resolver.resolve('./runtime/server/api/eponyme-auth/session.get') })
+    addServerHandler({ route: '/api/eponyme-auth/login', method: 'post', handler: resolver.resolve('./runtime/server/api/eponyme-auth/login.post') })
+    addServerHandler({ route: '/api/eponyme-auth/logout', method: 'post', handler: resolver.resolve('./runtime/server/api/eponyme-auth/logout.post') })
+    addServerHandler({ route: '/api/eponyme-auth/change-password', method: 'post', handler: resolver.resolve('./runtime/server/api/eponyme-auth/change-password.post') })
+    addServerHandler({ route: '/api/eponyme-users', handler: resolver.resolve('./runtime/server/api/eponyme-users/index.get') })
+    addServerHandler({ route: '/api/eponyme-users', method: 'post', handler: resolver.resolve('./runtime/server/api/eponyme-users/index.post') })
+    addServerHandler({ route: '/api/eponyme-users/:id', method: 'patch', handler: resolver.resolve('./runtime/server/api/eponyme-users/[id].patch') })
+    addServerHandler({ route: '/api/eponyme-users/:id/reset-password', method: 'post', handler: resolver.resolve('./runtime/server/api/eponyme-users/[id]/reset-password.post') })
+    addServerPlugin(resolver.resolve('./runtime/server/plugins/eponyme-sync'))
+
+    nuxt.hook('pages:extend', (pages) => {
+      pages.push(
+        { name: 'eponyme-login', path: `${dashboardPath}/login`, file: resolver.resolve('./runtime/pages/EponymeLoginPage.vue') },
+        { name: 'eponyme-change-password', path: `${dashboardPath}/change-password`, file: resolver.resolve('./runtime/pages/EponymeChangePasswordPage.vue'), meta: { middleware: ['eponyme-auth'] } },
+        { name: 'eponyme-users', path: `${dashboardPath}/users`, file: resolver.resolve('./runtime/pages/EponymeUsersPage.vue'), meta: { middleware: ['eponyme-auth', 'eponyme-owner'] } },
+        { name: 'eponyme-index', path: dashboardPath, file: resolver.resolve('./runtime/pages/EponymeIndexPage.vue'), meta: { middleware: ['eponyme-auth'] } },
+        { name: 'eponyme-detail', path: `${dashboardPath}/:eponyme(.*)*`, file: resolver.resolve('./runtime/pages/EponymeDetailPage.vue'), meta: { middleware: ['eponyme-auth'] } },
+      )
+    })
+
+    logger.debug(`config loaded: ${configPath}`)
+  },
+})

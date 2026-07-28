@@ -1,0 +1,366 @@
+import { fileURLToPath } from 'node:url'
+import { beforeAll, describe, it, expect } from 'vitest'
+import { setup, $fetch, url } from '@nuxt/test-utils/e2e'
+
+describe('ssr', async () => {
+  await setup({
+    rootDir: fileURLToPath(new URL('./fixtures/basic', import.meta.url)),
+  })
+  let authCookie = ''
+  const authenticated = () => ({ headers: { cookie: authCookie } })
+
+  beforeAll(async () => {
+    const response = await fetch(url('/api/eponyme-auth/login'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'EponymeOwner', password: 'InitialPassword123!' }),
+    })
+    authCookie = response.headers.get('set-cookie')?.split(';')[0] ?? ''
+  })
+
+  it('renders the index page', async () => {
+    const html = await $fetch('/')
+    expect(html).toContain('<div>basic</div>')
+  })
+
+  it('renders the generated dashboard index', async () => {
+    const html = await $fetch('/__eponyme', authenticated())
+    expect(html).toContain('Content entries')
+    expect(html).toContain('Homepage')
+    expect(html).toContain('href="/__eponyme/pages"')
+  })
+
+  it('exposes and updates Eponyme data', async () => {
+    await expect($fetch('/api/eponyme-statuses', authenticated())).resolves.toEqual({
+      statuses: { 'pages/homepage': 'published' },
+    })
+
+    await expect($fetch('/api/eponyme/pages/homepage')).resolves.toEqual({
+      data: { title: 'Welcome', maxGuests: 10, enabled: true, tags: ['nuxt'], meta: { description: 'Homepage description' } },
+    })
+
+    await expect($fetch('/api/eponyme/pages/homepage', {
+      method: 'PATCH',
+      body: { maxGuests: 12 },
+      ...authenticated(),
+    })).resolves.toEqual({
+      data: { title: 'Welcome', maxGuests: 12, enabled: true, tags: ['nuxt'], meta: { description: 'Homepage description' } },
+    })
+
+    await $fetch('/api/eponyme/pages/homepage?action=draft', {
+      method: 'PATCH',
+      body: { maxGuests: 14 },
+      ...authenticated(),
+    })
+    await expect($fetch('/api/eponyme-statuses', authenticated())).resolves.toEqual({
+      statuses: { 'pages/homepage': 'draft' },
+    })
+  })
+
+  it('rejects invalid Eponyme data', async () => {
+    const response = await $fetch('/api/eponyme/pages/homepage', {
+      method: 'PATCH',
+      body: { maxGuests: 100, unknown: true },
+      ignoreResponseError: true,
+      ...authenticated(),
+    })
+    expect(response).toEqual({
+      errors: {
+        maxGuests: ['Must be at most 20.'],
+        unknown: ['Unknown field.'],
+      },
+    })
+  })
+
+  it('renders a nested Eponyme dashboard page', async () => {
+    const html = String(await $fetch('/__eponyme/pages/homepage', authenticated()))
+    expect(html).toContain('homepage')
+    expect(html).toContain('href="/__eponyme/pages/homepage"')
+    expect(html.match(/aria-current="page"/g)).toHaveLength(1)
+    const activeLink = html.match(/<a[^>]*aria-current="page"[^>]*>/)?.[0]
+    expect(activeLink).toContain('href="/__eponyme/pages/homepage"')
+    expect(html).toContain('Welcome')
+    expect(html).toContain('Add item')
+    expect(html).toContain('Metadata')
+    expect(html).not.toContain('Loading…')
+  })
+
+  it('exposes the general sitemap metadata', async () => {
+    await $fetch('/api/eponyme-collections/articles', {
+      method: 'POST',
+      body: { title: 'Sitemap article' },
+      ...authenticated(),
+    })
+    await expect($fetch<{ entries: Array<{ loc: string }> }>('/api/eponyme-sitemap').then(result => result.entries.map(entry => entry.loc))).resolves.toEqual(['/'])
+
+    await $fetch('/api/eponyme/articles/sitemap-article?action=publish', {
+      method: 'PATCH',
+      body: { title: 'Sitemap article', slug: 'sitemap-article', excerpt: 'Listed publicly.' },
+      ...authenticated(),
+    })
+    await expect($fetch('/api/eponyme-sitemap')).resolves.toMatchObject({
+      entries: [
+        { loc: '/' },
+        { loc: '/articles/sitemap-article', lastmod: expect.any(String) },
+      ],
+    })
+    // The auto-imported server utility must produce exactly the same list.
+    await expect($fetch('/sitemap-util')).resolves.toEqual(await $fetch('/api/eponyme-sitemap'))
+
+    await $fetch('/api/eponyme-collections/articles/sitemap-article', { method: 'DELETE', ...authenticated() })
+    await expect($fetch<{ entries: Array<{ loc: string }> }>('/api/eponyme-sitemap').then(result => result.entries.map(entry => entry.loc))).resolves.toEqual(['/'])
+  })
+
+  it('creates and publishes collection entries', async () => {
+    const created = await $fetch('/api/eponyme-collections/articles', {
+      method: 'POST',
+      body: { title: 'First article' },
+      ...authenticated(),
+    })
+    expect(created).toMatchObject({ slug: 'first-article', status: 'draft' })
+    await expect($fetch('/api/eponyme-collections/articles')).resolves.toEqual({ entries: [] })
+
+    await $fetch('/api/eponyme/articles/first-article?action=publish', {
+      method: 'PATCH',
+      body: { title: 'First article', slug: 'first-article', excerpt: 'A public article.' },
+      ...authenticated(),
+    })
+    await expect($fetch('/api/eponyme-collections/articles')).resolves.toMatchObject({
+      entries: [{ slug: 'first-article', title: 'First article', data: { excerpt: 'A public article.' } }],
+    })
+    const html = String(await $fetch('/__eponyme/articles/first-article', authenticated()))
+    expect(html).toContain('First article')
+
+    await expect($fetch('/api/eponyme-collections/articles/first-article', { method: 'DELETE', ...authenticated() })).resolves.toEqual({ deleted: true })
+  })
+
+  it('previews collection entry drafts and history versions on the public route', async () => {
+    await $fetch('/api/eponyme-collections/articles', {
+      method: 'POST',
+      body: { title: 'Preview article' },
+      ...authenticated(),
+    })
+    const previewQuery = '__eponyme_preview=articles%2Fpreview-article&__eponyme_preview_version'
+
+    // An unpublished entry stays invisible on its public route, preview or not.
+    expect(String(await $fetch('/articles/preview-article'))).toContain('article-not-available')
+    expect(String(await $fetch(`/articles/preview-article?${previewQuery}=draft`))).toContain('article-not-available')
+
+    // With a session, the draft renders through the dynamic preview path.
+    const draftHtml = String(await $fetch(`/articles/preview-article?${previewQuery}=draft`, authenticated()))
+    expect(draftHtml).toContain('Preview article')
+
+    await $fetch('/api/eponyme/articles/preview-article?action=publish', {
+      method: 'PATCH',
+      body: { title: 'Preview article', slug: 'preview-article', excerpt: 'First excerpt.' },
+      ...authenticated(),
+    })
+    await $fetch('/api/eponyme/articles/preview-article?action=draft', {
+      method: 'PATCH',
+      body: { title: 'Preview article', slug: 'preview-article', excerpt: 'Unpublished excerpt.' },
+      ...authenticated(),
+    })
+
+    expect(String(await $fetch('/articles/preview-article'))).toContain('First excerpt.')
+    expect(String(await $fetch(`/articles/preview-article?${previewQuery}=draft`, authenticated()))).toContain('Unpublished excerpt.')
+    expect(String(await $fetch(`/articles/preview-article?${previewQuery}=published`, authenticated()))).toContain('First excerpt.')
+
+    const { history } = await $fetch<{ history: Array<{ id: number, action: string }> }>('/api/eponyme-history/articles/preview-article', authenticated())
+    const published = history.find(version => version.action === 'publish')!
+    const historyHtml = String(await $fetch(`/articles/preview-article?${previewQuery}=${published.id}`, authenticated()))
+    expect(historyHtml).toContain('First excerpt.')
+
+    await $fetch('/api/eponyme-collections/articles/preview-article', { method: 'DELETE', ...authenticated() })
+  })
+
+  it('accepts, validates and stores managed form submissions', async () => {
+    await expect($fetch('/api/eponyme-forms/contact', {
+      method: 'POST',
+      body: { name: 'Ada', email: 'ada@example.com', message: 'Hello there.' },
+    })).resolves.toMatchObject({ submitted: true })
+
+    await expect($fetch('/api/eponyme-forms/contact', {
+      method: 'POST',
+      body: { name: 'A', email: 'not-an-email', message: '' },
+    })).rejects.toMatchObject({
+      statusCode: 422,
+      data: { errors: { email: expect.any(Array), message: expect.any(Array), name: expect.any(Array) } },
+    })
+
+    // Unknown fields are refused rather than silently stored.
+    await expect($fetch('/api/eponyme-forms/contact', {
+      method: 'POST',
+      body: { name: 'Ada', email: 'ada@example.com', message: 'Hi.', role: 'admin' },
+    })).rejects.toMatchObject({ statusCode: 422, data: { errors: { role: ['Unknown field.'] } } })
+
+    const listed = await $fetch<{ submissions: Array<{ data: { name: string } }>, total: number }>(
+      '/api/eponyme-forms/contact/submissions',
+      authenticated(),
+    )
+    expect(listed.total).toBe(1)
+    expect(listed.submissions[0]!.data).toMatchObject({ name: 'Ada', email: 'ada@example.com' })
+  })
+
+  it('turns away bots and oversized bodies without storing anything', async () => {
+    const before = await $fetch<{ total: number }>('/api/eponyme-forms/contact/submissions', authenticated())
+
+    // A filled honeypot gets the normal success response, so the bot learns nothing.
+    await expect($fetch('/api/eponyme-forms/contact', {
+      method: 'POST',
+      body: { name: 'Bot', email: 'bot@example.com', message: 'Spam.', _eponyme_hp: 'https://spam.example' },
+    })).resolves.toMatchObject({ submitted: true })
+
+    await expect($fetch('/api/eponyme-forms/contact', {
+      method: 'POST',
+      body: { name: 'Ada', email: 'ada@example.com', message: 'x'.repeat(2000) },
+    })).rejects.toMatchObject({ statusCode: 413 })
+
+    const after = await $fetch<{ total: number }>('/api/eponyme-forms/contact/submissions', authenticated())
+    expect(after.total).toBe(before.total)
+  })
+
+  it('keeps custom forms out of the managed submission route', async () => {
+    // `newsletter` declares no submission mode, so it defaults to custom.
+    await expect($fetch('/api/eponyme-forms/newsletter', {
+      method: 'POST',
+      body: { email: 'ada@example.com' },
+    })).rejects.toMatchObject({ statusCode: 404 })
+
+    // The host application owns the route and calls validateEponymeForm().
+    await expect($fetch('/newsletter', { method: 'POST', body: { email: 'ada@example.com' } }))
+      .resolves.toMatchObject({ delivered: true, data: { email: 'ada@example.com' } })
+    await expect($fetch('/newsletter', { method: 'POST', body: { email: 'nope' } }))
+      .rejects.toMatchObject({ statusCode: 422, data: { errors: { email: expect.any(Array) } } })
+  })
+
+  it('renders a public form from the composable alone', async () => {
+    const html = String(await $fetch('/contact'))
+    // Labels and the honeypot come from the config, the markup from the host app.
+    expect(html).toContain('id="contact-name"')
+    expect(html).toContain('id="contact-email"')
+    expect(html).toContain('Message')
+    expect(html).toContain('name="_eponyme_hp"')
+    // No dashboard styling or editor primitives leak into a public page.
+    expect(html).not.toContain('ep:')
+  })
+
+  it('lists submissions in the dashboard and explains custom forms', async () => {
+    await $fetch('/api/eponyme-forms/contact', {
+      method: 'POST',
+      body: { name: 'Hopper', email: 'hopper@example.com', message: 'Dashboard row.' },
+    })
+
+    const html = String(await $fetch('/__eponyme/contact', authenticated()))
+    // Table headers come from the field labels, rows from the stored submissions.
+    expect(html).toContain('Message')
+    expect(html).toContain('hopper@example.com')
+    expect(html).toContain('managed')
+
+    // The Received column renders a human date. The raw ISO value still appears in
+    // the serialised Nuxt payload, so only the formatted form can be asserted.
+    const listed = await $fetch<{ submissions: Array<{ createdAt: string }> }>('/api/eponyme-forms/contact/submissions', authenticated())
+    const stored = listed.submissions[0]!.createdAt
+    expect(html).toContain(new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(stored)))
+
+    // A custom form has nothing to store, so it says so instead of showing a table.
+    const custom = String(await $fetch('/__eponyme/newsletter', authenticated()))
+    expect(custom).toContain('does not store its submissions')
+
+    // Forms show up in the dashboard index next to entries and collections.
+    expect(String(await $fetch('/__eponyme', authenticated()))).toContain('href="/__eponyme/contact"')
+  })
+
+  it('protects and deletes submissions', async () => {
+    await $fetch('/api/eponyme-forms/contact', {
+      method: 'POST',
+      body: { name: 'Grace', email: 'grace@example.com', message: 'Second message.' },
+    })
+    const listed = await $fetch<{ submissions: Array<{ id: string }> }>('/api/eponyme-forms/contact/submissions', authenticated())
+    const target = listed.submissions[0]!
+
+    await expect($fetch('/api/eponyme-forms/contact/submissions')).rejects.toMatchObject({ statusCode: 401 })
+    await expect($fetch(`/api/eponyme-forms/contact/submissions/${target.id}`)).rejects.toMatchObject({ statusCode: 401 })
+
+    await expect($fetch(`/api/eponyme-forms/contact/submissions/${target.id}`, authenticated()))
+      .resolves.toMatchObject({ submission: { id: target.id } })
+    await expect($fetch(`/api/eponyme-forms/contact/submissions/${target.id}`, { method: 'DELETE', ...authenticated() }))
+      .resolves.toEqual({ deleted: true })
+    await expect($fetch(`/api/eponyme-forms/contact/submissions/${target.id}`, authenticated()))
+      .rejects.toMatchObject({ statusCode: 404 })
+  })
+
+  it('clears every submission of a form at once', async () => {
+    for (const name of ['Ada', 'Grace', 'Hopper']) {
+      await $fetch('/api/eponyme-forms/contact', {
+        method: 'POST',
+        body: { name, email: `${name.toLowerCase()}@example.com`, message: 'Bulk delete.' },
+      })
+    }
+    const before = await $fetch<{ total: number }>('/api/eponyme-forms/contact/submissions', authenticated())
+    expect(before.total).toBeGreaterThanOrEqual(3)
+
+    await expect($fetch('/api/eponyme-forms/contact/submissions', { method: 'DELETE' }))
+      .rejects.toMatchObject({ statusCode: 401 })
+    await expect($fetch('/api/eponyme-forms/contact/submissions', { method: 'DELETE', ...authenticated() }))
+      .resolves.toEqual({ deleted: before.total })
+
+    await expect($fetch<{ total: number }>('/api/eponyme-forms/contact/submissions', authenticated()))
+      .resolves.toMatchObject({ total: 0 })
+
+    // Clearing is scoped to the submissions path, never to the form itself.
+    await expect($fetch('/api/eponyme-forms/contact', { method: 'DELETE', ...authenticated() }))
+      .rejects.toMatchObject({ statusCode: 404 })
+  })
+
+  it('enforces viewer permissions and serves user management routes', async () => {
+    const created = await $fetch<{ user: { id: string }, temporaryPassword: string }>('/api/eponyme-users', {
+      method: 'POST',
+      body: { username: 'ReadOnlyUser', role: 'viewer' },
+      ...authenticated(),
+    })
+    const reset = await $fetch<{ temporaryPassword: string }>(`/api/eponyme-users/${created.user.id}/reset-password`, {
+      method: 'POST',
+      ...authenticated(),
+    })
+    expect(reset.temporaryPassword).not.toBe(created.temporaryPassword)
+
+    // A POST without the `/reset-password` suffix used to fall through to the reset handler.
+    const strayPost = await fetch(url(`/api/eponyme-users/${created.user.id}`), {
+      method: 'POST',
+      headers: { cookie: authCookie },
+    })
+    expect(strayPost.status).toBeGreaterThanOrEqual(400)
+    const afterStrayPost = await fetch(url('/api/eponyme-auth/login'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'ReadOnlyUser', password: reset.temporaryPassword }),
+    })
+    // The password from the legitimate reset still works, so nothing was reset behind our back.
+    expect(afterStrayPost.status).toBe(200)
+
+    const loginResponse = await fetch(url('/api/eponyme-auth/login'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'ReadOnlyUser', password: reset.temporaryPassword }),
+    })
+    const temporaryCookie = loginResponse.headers.get('set-cookie')?.split(';')[0] ?? ''
+    const changeResponse = await fetch(url('/api/eponyme-auth/change-password'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'cookie': temporaryCookie },
+      body: JSON.stringify({ currentPassword: reset.temporaryPassword, newPassword: 'Viewer password 123!' }),
+    })
+    const viewerCookie = changeResponse.headers.get('set-cookie')?.split(';')[0] ?? ''
+
+    await expect($fetch('/api/eponyme/pages/homepage', {
+      query: { version: 'draft' },
+      headers: { cookie: viewerCookie },
+    })).resolves.toMatchObject({ data: { title: 'Welcome' } })
+    const forbidden = await fetch(url('/api/eponyme/pages/homepage'), {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', 'cookie': viewerCookie },
+      body: JSON.stringify({ title: 'Forbidden edit' }),
+    })
+    expect(forbidden.status).toBe(403)
+    await expect($fetch('/api/eponyme/pages/homepage')).resolves.toMatchObject({ data: { title: 'Welcome' } })
+  })
+})

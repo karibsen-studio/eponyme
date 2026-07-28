@@ -1,0 +1,20 @@
+{
+  "private": true,
+  "name": "eponyme-playground",
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.16.2",
+    "@karibsen/eponyme": "link:..",
+    "nuxt": "^4.4.8"
+  },
+  "devDependencies": {
+    "prisma": "^6.16.2"
+  }
+}
