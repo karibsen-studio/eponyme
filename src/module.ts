@@ -184,10 +184,15 @@ export default defineNuxtModule<ModuleOptions>({
     const variablesPath = await findPath(resolve(nuxt.options.rootDir, 'eponyme.variables.ts'))
     nuxt.options.alias['#eponyme/variables'] = variablesPath ?? resolver.resolve('./runtime/utils/empty-variables')
 
+    // A captcha adapter module overrides this alias in its own setup. Left alone, the
+    // stand-in refuses every token, so a form requiring a captcha fails closed.
+    nuxt.options.alias['#eponyme/captcha'] ??= resolver.resolve('./runtime/utils/no-captcha')
+
     addTypeTemplate({
       filename: 'types/eponyme-config.d.ts',
       getContents: () => `declare module '#eponyme/config' {\n  const config: typeof import(${JSON.stringify(configPath)})['default']\n  export default config\n}\n`
-        + `declare module '#eponyme/variables' {\n  const variables: typeof import(${JSON.stringify(nuxt.options.alias['#eponyme/variables'])})['default']\n  export default variables\n}\n`,
+        + `declare module '#eponyme/variables' {\n  const variables: typeof import(${JSON.stringify(nuxt.options.alias['#eponyme/variables'])})['default']\n  export default variables\n}\n`
+        + `declare module '#eponyme/captcha' {\n  const verifier: import('${resolver.resolve('./runtime/types/captcha')}').EponymeCaptchaVerifier\n  export default verifier\n}\n`,
     })
 
     addServerHandler({ route: '/api/eponyme/**', handler: resolver.resolve('./runtime/server/api/eponyme/[name].get') })

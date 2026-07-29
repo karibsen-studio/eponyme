@@ -25,6 +25,12 @@ export default defineEponymeConfig({
     submission: { mode: 'managed' },
     maxBodyBytes: 512,
   }),
+  guarded: form({
+    fields: { email: field.email({ required: true }) },
+    submission: { mode: 'managed' },
+    captcha: true,
+    honeypot: false,
+  }),
   // No `submission` key: this must default to `custom`, so it has no POST route.
   newsletter: form({
     fields: { email: field.email({ required: true }) },

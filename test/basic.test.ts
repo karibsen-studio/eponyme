@@ -309,6 +309,42 @@ describe('ssr', async () => {
     expect(after.total).toBe(before.total)
   })
 
+  it('requires a valid captcha token when the form asks for one', async () => {
+    const body = { email: 'ada@example.com' }
+
+    // No token at all.
+    await expect($fetch('/api/eponyme-forms/guarded', { method: 'POST', body }))
+      .rejects.toMatchObject({ statusCode: 422, data: { errors: { _form: expect.any(Array) } } })
+
+    // A token the verifier rejects.
+    await expect($fetch('/api/eponyme-forms/guarded', {
+      method: 'POST',
+      body: { ...body, _eponyme_captcha: 'wrong-token' },
+    })).rejects.toMatchObject({ statusCode: 422 })
+
+    await expect($fetch('/api/eponyme-forms/guarded', {
+      method: 'POST',
+      body: { ...body, _eponyme_captcha: 'valid-token' },
+    })).resolves.toMatchObject({ submitted: true })
+
+    // The token is transport, not content: it must not be stored or rejected as an
+    // unknown field.
+    const listed = await $fetch<{ submissions: Array<{ data: Record<string, unknown> }>, total: number }>(
+      '/api/eponyme-forms/guarded/submissions',
+      authenticated(),
+    )
+    expect(listed.total).toBe(1)
+    expect(listed.submissions[0]!.data).toEqual({ email: 'ada@example.com' })
+
+    // A form without `captcha: true` keeps accepting submissions untouched.
+    await expect($fetch('/api/eponyme-forms/contact', {
+      method: 'POST',
+      body: { name: 'Ada', email: 'ada@example.com', message: 'No captcha here.' },
+    })).resolves.toMatchObject({ submitted: true })
+
+    await $fetch('/api/eponyme-forms/guarded/submissions', { method: 'DELETE', ...authenticated() })
+  })
+
   it('keeps custom forms out of the managed submission route', async () => {
     // `newsletter` declares no submission mode, so it defaults to custom.
     await expect($fetch('/api/eponyme-forms/newsletter', {

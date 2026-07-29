@@ -7,6 +7,7 @@ import { collection } from '../src/config/collection'
 import { form } from '../src/config/form'
 import { field } from '../src/runtime/fields'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas, isEponymeForm, isEponymeSchema } from '../src/runtime/utils/get-eponyme-schemas'
+import noCaptcha from '../src/runtime/utils/no-captcha'
 import { interpolateEponymeText, interpolateEponymeValue, resolveEponymeVariables, summariseEponymeVariables } from '../src/runtime/utils/variables'
 import { applyPreviewSlug, readPreviewQuery, readPreviewVersion, resolvePreviewPath } from '../src/runtime/utils/preview'
 
@@ -298,5 +299,19 @@ describe('content variables', () => {
     const summary = summariseEponymeVariables({ clubName: { label: 'Club', value: 'AS Chelles' } })
     expect(summary.find(entry => entry.name === 'clubName')).toMatchObject({ label: 'Club', preview: 'AS Chelles' })
     expect(summary.find(entry => entry.name === 'currentYear')?.label).toBe('Current year')
+  })
+})
+
+describe('captcha contract', () => {
+  it('refuses every token when no adapter is installed', async () => {
+    // Failing closed matters: a form that asked for a captcha must not accept
+    // submissions just because the adapter is missing.
+    expect(noCaptcha.name).toBe('none')
+    await expect(noCaptcha.verify('anything', {})).resolves.toMatchObject({ success: false })
+  })
+
+  it('keeps the captcha option off unless asked', () => {
+    expect(form({ fields: { email: field.email() } }).captcha).toBe(false)
+    expect(form({ fields: { email: field.email() }, captcha: true }).captcha).toBe(true)
   })
 })

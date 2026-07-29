@@ -16,3 +16,10 @@ declare module '#eponyme/variables' {
   const variables: EponymeVariables
   export default variables
 }
+
+declare module '#eponyme/captcha' {
+  import type { EponymeCaptchaVerifier } from './captcha'
+
+  const verifier: EponymeCaptchaVerifier
+  export default verifier
+}

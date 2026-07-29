@@ -1,4 +1,5 @@
 export * from './auth'
 export * from './eponyme'
 export * from './field'
+export * from './captcha'
 export * from './variables'
