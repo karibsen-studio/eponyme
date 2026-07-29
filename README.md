@@ -587,14 +587,43 @@ shorten. A visitor holding a copy keeps it until it expires, publication or not,
 why the default is deliberately small. Set it to `0` if a publication must be visible
 immediately to everyone; navigation then costs a round trip again.
 
-The CDN window can be long because it can be purged, and `eponyme:entry:published` is the
-place to do it:
+### Purging the CDN
+
+The CDN window can be long because it can be purged. CDNs purge by **tag** rather than by
+URL — one entry appears in several cached responses, its own and its collection's listing —
+so every cacheable response carries `Vercel-Cache-Tag` and `Cache-Tag`:
+
+| Response | Tags |
+|---|---|
+| `pages/homepage` | `eponyme`, `eponyme:pages/homepage` |
+| `articles/my-article` | `eponyme`, `eponyme:articles/my-article`, `eponyme:articles` |
+| The `articles` listing | `eponyme`, `eponyme:articles` |
+
+`getEponymeCacheTags()` returns exactly those tags and is auto-imported into server code,
+so a listener purges precisely what the responses were tagged with. On Vercel:
 
 ```ts
-nitroApp.hooks.hook('eponyme:entry:published', async ({ name, collection }) => {
-  await purgeCdnCache(collection ? `/${collection.name}/${collection.slug}` : `/${name}`)
+// server/plugins/purge.ts
+import { invalidateByTag } from '@vercel/functions'
+
+export default defineNitroPlugin((nitroApp) => {
+  const purge = async ({ name, collection }: { name: string, collection?: { name: string } }) => {
+    if (!import.meta.env.VERCEL) return
+    await invalidateByTag(getEponymeCacheTags(name, collection)).catch(() => {})
+  }
+
+  nitroApp.hooks.hook('eponyme:entry:published', purge)
+  nitroApp.hooks.hook('eponyme:entry:restored', purge)
+  nitroApp.hooks.hook('eponyme:entry:trashed', purge)
+  nitroApp.hooks.hook('eponyme:entry:untrashed', purge)
+  nitroApp.hooks.hook('eponyme:entry:purged', purge)
 })
 ```
+
+Invalidating marks the entry stale and revalidates in the background, so no visitor waits
+for it. A failed purge is swallowed: a CDN that cannot be reached must not turn a
+successful publication into an error the editor cannot act on. The worst case is the
+content appearing when `cdnCacheSeconds` expires on its own.
 
 **Only published content is ever cached.** Drafts, historical versions, `raw=1` reads,
 submissions, the trash, the user list and the session route all answer `no-store`. That is
@@ -806,7 +835,7 @@ a trash move leaves the entry itself untouched.
 
 ## Current status
 
-Eponyme is at version `0.4.0`. It is ready for controlled projects and production pilots. A few workflows still need hardening before a broad public release:
+Eponyme is at version `0.5.0`. It is ready for controlled projects and production pilots. A few workflows still need hardening before a broad public release:
 
 - Client revision tokens for long-running concurrent edits: the current `updatedAt` check protects overlapping writes within one request, not two editors who loaded the same older revision. A deletion is not guarded by a revision either
 - Retention controls for the trash: entries stay there until someone empties it

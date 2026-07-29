@@ -704,6 +704,26 @@ describe('ssr', async () => {
         expect(await cacheControl(path, authenticated()), path).toBe('no-store')
     })
 
+    it('tags a cached response with what a purge will name', async () => {
+      const tags = async (path: string) => (await fetch(url(path))).headers.get('vercel-cache-tag')
+      await $fetch('/api/eponyme-collections/articles', { method: 'POST', body: { title: 'Tagged entry' }, ...authenticated() })
+      await $fetch('/api/eponyme/articles/tagged-entry?action=publish', {
+        method: 'PATCH',
+        body: { title: 'Tagged entry', slug: 'tagged-entry' },
+        ...authenticated(),
+      })
+
+      expect(await tags('/api/eponyme/pages/homepage')).toBe('eponyme,eponyme:pages/homepage')
+      // A collection entry also carries its collection, so publishing it drops the listing
+      // that shows it and not only its own page.
+      expect(await tags('/api/eponyme/articles/tagged-entry')).toBe('eponyme,eponyme:articles/tagged-entry,eponyme:articles')
+      expect(await tags('/api/eponyme-collections/articles')).toBe('eponyme,eponyme:articles')
+      // Nothing uncacheable is tagged: there would be nothing to purge.
+      expect(await tags('/api/eponyme-auth/session')).toBeNull()
+
+      await removeArticle('tagged-entry')
+    })
+
     it('holds back a route that never opted in, even unauthenticated', async () => {
       // The default comes from the middleware, so it applies before any handler runs
       // and regardless of whether the request is allowed through.

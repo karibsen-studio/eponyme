@@ -6,6 +6,33 @@ import { useRuntimeConfig } from 'nitropack/runtime'
 const STALE_WHILE_REVALIDATE_FACTOR = 12
 
 /**
+ * Cache tags for one entry, most specific first.
+ *
+ * A CDN cannot usually be purged by URL — Vercel and Cloudflare both purge by tag — and one
+ * entry appears in more than one cached response: its own, and its collection's listing.
+ * Tagging both is what lets publishing an article drop the article *and* the index that
+ * lists it.
+ *
+ * A comma is the delimiter every CDN uses for this header, so it is stripped rather than
+ * escaped: a tag containing one would silently become two.
+ */
+export function getEponymeCacheTags(name: string, collection?: { name: string } | string): string[] {
+  const collectionName = typeof collection === 'string' ? collection : collection?.name
+  const tags = ['eponyme', `eponyme:${name}`]
+  if (collectionName) tags.push(`eponyme:${collectionName}`)
+  return [...new Set(tags)].map(tag => tag.replace(/,/g, '').slice(0, 256))
+}
+
+function setCacheTags(event: H3Event, tags: string[]) {
+  if (!tags.length) return
+  const value = tags.join(',')
+  // Vercel reads its own header; `Cache-Tag` is what Cloudflare and Fastly-style CDNs read.
+  // Both are set so the same deployment can move between them without a code change.
+  setResponseHeader(event, 'Vercel-Cache-Tag', value)
+  setResponseHeader(event, 'Cache-Tag', value)
+}
+
+/**
  * Published content is identical for every visitor, so both the browser and the CDN may
  * hold on to it. The two windows are deliberately different:
  *
@@ -14,7 +41,7 @@ const STALE_WHILE_REVALIDATE_FACTOR = 12
  * - `max-age` is the browser's, and a browser cache cannot be purged by anyone. Whatever
  *   it holds is served until it expires, publication or not, which is why it stays short.
  */
-export function setEponymePublicCache(event: H3Event) {
+export function setEponymePublicCache(event: H3Event, tags: string[] = []) {
   const config = useRuntimeConfig().eponymeContent as { browserCacheSeconds?: number, cdnCacheSeconds?: number } | undefined
   const browser = Math.max(0, Math.trunc(config?.browserCacheSeconds ?? 30))
   const cdn = Math.max(0, Math.trunc(config?.cdnCacheSeconds ?? 300))
@@ -27,6 +54,7 @@ export function setEponymePublicCache(event: H3Event) {
     'Cache-Control',
     `public, max-age=${browser}, s-maxage=${cdn}, stale-while-revalidate=${cdn * STALE_WHILE_REVALIDATE_FACTOR}`,
   )
+  setCacheTags(event, tags)
 }
 
 /**

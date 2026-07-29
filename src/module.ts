@@ -169,6 +169,9 @@ export default defineNuxtModule<ModuleOptions>({
       // A `custom` form posts to the host application's own route, so this is what
       // keeps server-side validation as the security boundary.
       { name: 'validateEponymeForm', from: resolver.resolve('./runtime/server/utils/eponyme-form') },
+      // The tags a CDN purge has to invalidate when an entry changes, matching exactly what
+      // the cached responses were tagged with.
+      { name: 'getEponymeCacheTags', from: resolver.resolve('./runtime/server/utils/eponyme-cache') },
     ])
     addRouteMiddleware({
       name: 'eponyme-auth',

@@ -1,7 +1,8 @@
 import { createError, defineEventHandler, getQuery, getRequestURL } from 'h3'
 import { useEponymeService } from '../../services/eponyme-service'
 import { requireEponymeUser } from '../../utils/auth'
-import { setEponymePublicCache } from '../../utils/eponyme-cache'
+import { getEponymeCacheTags, setEponymePublicCache } from '../../utils/eponyme-cache'
+import { splitEponymeCollectionEntry } from '../../utils/eponyme-entry'
 import { interpolateEponymeContent } from '../../utils/eponyme-variables'
 import type { EponymeVersionSelector } from '../../services/eponyme-store'
 
@@ -23,7 +24,9 @@ export default defineEventHandler(async (event) => {
   if (version !== 'published') await requireEponymeUser(event)
   // `raw` is the dashboard editor asking for the unresolved source text: the same published
   // content, but not what a public page renders, so it stays out of the shared cache.
-  else if (!raw) setEponymePublicCache(event)
+  // A collection entry is tagged with its collection too, so publishing it also drops the
+  // listing that shows it.
+  else if (!raw) setEponymePublicCache(event, getEponymeCacheTags(name, splitEponymeCollectionEntry(useEponymeService(), name)?.name))
   const result = name ? await useEponymeService().getResult(name, version) : undefined
   if (!result) throw createError({ statusCode: 404, statusMessage: 'Eponyme entry not found.' })
   // `raw=1` is what the dashboard editor asks for: it must show `{{ currentYear }}`

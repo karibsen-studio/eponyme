@@ -1,7 +1,7 @@
 import { createError, defineEventHandler, getQuery, getRequestURL } from 'h3'
 import { useEponymeService } from '../../services/eponyme-service'
 import { requireEponymeUser } from '../../utils/auth'
-import { setEponymePublicCache } from '../../utils/eponyme-cache'
+import { getEponymeCacheTags, setEponymePublicCache } from '../../utils/eponyme-cache'
 import { interpolateEponymeContent } from '../../utils/eponyme-variables'
 
 const MAX_TAKE = 200
@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
   // A draft listing carries unpublished titles and content. The no-store middleware keeps
   // it out of every cache, so only the published listing declares anything here.
   if (version === 'draft') await requireEponymeUser(event)
-  else if (!query.raw) setEponymePublicCache(event)
+  else if (!query.raw) setEponymePublicCache(event, getEponymeCacheTags(name))
   if (!name) throw createError({ statusCode: 404, statusMessage: 'Eponyme collection not found.' })
 
   const service = useEponymeService()
