@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url'
 import { beforeAll, describe, it, expect } from 'vitest'
 import { setup, $fetch, url } from '@nuxt/test-utils/e2e'
 import { EPONYME_DATE_LOCALE } from '../src/runtime/utils/date-locale'
+import type { EponymeExportFile } from '../src/runtime/server/services/eponyme-store'
 
 describe('ssr', async () => {
   await setup({
@@ -35,6 +36,9 @@ describe('ssr', async () => {
     expect(html).toContain('Content entries')
     expect(html).toContain('Homepage')
     expect(html).toContain('href="/__eponyme/pages"')
+    // Transferring content between environments is only offered from this overview.
+    expect(html).toContain('Export')
+    expect(html).toContain('Import')
   })
 
   it('keeps the host layout out of the dashboard', async () => {
@@ -559,5 +563,73 @@ describe('ssr', async () => {
     })
     expect(forbidden.status).toBe(403)
     await expect($fetch('/api/eponyme/pages/homepage')).resolves.toMatchObject({ data: { title: 'Welcome' } })
+  })
+
+  it('exports the content and imports it back, with import reserved to owners', async () => {
+    await $fetch('/api/eponyme-collections/articles', {
+      method: 'POST',
+      body: { title: 'Export round trip', excerpt: 'Written on dev' },
+      ...authenticated(),
+    })
+
+    const file = await $fetch<EponymeExportFile>('/api/eponyme-export', authenticated())
+    expect(file.eponyme.format).toBe(1)
+    // Forms own their submissions, so they are not part of a content export.
+    expect(Object.keys(file.eponyme.schemas).sort()).toEqual(['articles', 'pages/homepage'])
+    expect(file.entries.map(entry => entry.name)).toContain('articles/export-round-trip')
+
+    // Simulate the target environment drifting, then bring it back with the file.
+    await $fetch('/api/eponyme/articles/export-round-trip', {
+      method: 'PATCH',
+      body: { excerpt: 'Overwritten in production' },
+      ...authenticated(),
+    })
+    await expect($fetch('/api/eponyme-import', {
+      method: 'POST',
+      query: { dryRun: 1 },
+      body: file,
+      ...authenticated(),
+    })).resolves.toMatchObject({ dryRun: true, created: 0, skipped: [] })
+    await expect($fetch('/api/eponyme-import', { method: 'POST', body: file, ...authenticated() }))
+      .resolves.toMatchObject({ dryRun: false, skipped: [] })
+    await expect($fetch('/api/eponyme/articles/export-round-trip', {
+      query: { version: 'draft' },
+      ...authenticated(),
+    })).resolves.toMatchObject({ data: { excerpt: 'Written on dev' } })
+
+    // A divergent schema is refused as a whole, and names what diverged.
+    const tampered = { ...file, eponyme: { ...file.eponyme, schemas: { ...file.eponyme.schemas, articles: 'not-the-same-schema' } } }
+    await expect($fetch('/api/eponyme-import', { method: 'POST', body: tampered, ...authenticated() }))
+      .rejects.toMatchObject({ statusCode: 409, data: { data: { schemaMismatch: ['articles'] } } })
+
+    // An editor may export, but overwriting the whole site stays with owners.
+    const editor = await $fetch<{ user: { id: string }, temporaryPassword: string }>('/api/eponyme-users', {
+      method: 'POST',
+      body: { username: 'ImportEditor', role: 'editor' },
+      ...authenticated(),
+    })
+    const editorLogin = await fetch(url('/api/eponyme-auth/login'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'ImportEditor', password: editor.temporaryPassword }),
+    })
+    const temporaryCookie = editorLogin.headers.get('set-cookie')?.split(';')[0] ?? ''
+    const changed = await fetch(url('/api/eponyme-auth/change-password'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'cookie': temporaryCookie },
+      body: JSON.stringify({ currentPassword: editor.temporaryPassword, newPassword: 'Editor password 123!' }),
+    })
+    const editorCookie = changed.headers.get('set-cookie')?.split(';')[0] ?? ''
+
+    await expect($fetch('/api/eponyme-export', { headers: { cookie: editorCookie } }))
+      .resolves.toMatchObject({ eponyme: { format: 1 } })
+    const refused = await fetch(url('/api/eponyme-import'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'cookie': editorCookie },
+      body: JSON.stringify(file),
+    })
+    expect(refused.status).toBe(403)
+
+    await removeArticle('export-round-trip')
   })
 })

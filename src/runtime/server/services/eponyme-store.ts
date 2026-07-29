@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 import type { EponymeCollectionDefinitionBase, EponymeConfig, EponymeSchema } from '../../types'
 import { createDefaultEponymeData } from '../../utils/create-default-eponyme-data'
@@ -22,7 +23,7 @@ export interface EponymeVersionAuthor {
 }
 export interface EponymeHistoryEntry {
   id: number
-  action: EponymeAction | 'restore'
+  action: EponymeAction | 'restore' | 'import'
   status: EponymeStatus
   createdAt: string
   user: EponymeVersionAuthor | null
@@ -46,6 +47,41 @@ export interface EponymeCollectionEntry<Data extends Record<string, unknown> = R
 export interface EponymeSitemapEntry {
   loc: string
   lastmod?: string
+}
+
+/** One entry of an export file: the complete stored state, without the envelope. */
+export interface EponymeExportEntry {
+  name: string
+  /** Set for collection entries, so a reader can group them without re-parsing the name. */
+  collection?: string
+  draft: Record<string, unknown>
+  published: Record<string, unknown>
+  status: EponymeStatus
+  publishedAt: string | null
+}
+
+export interface EponymeExportFile {
+  eponyme: {
+    format: 1
+    exportedAt: string
+    /** Schema fingerprint per singleton and per collection, checked before an import writes anything. */
+    schemas: Record<string, string>
+  }
+  entries: EponymeExportEntry[]
+}
+
+export interface EponymeImportResult {
+  dryRun: boolean
+  created: number
+  updated: number
+  skipped: Array<{ name: string, reason: string }>
+}
+
+/** The import was refused as a whole, before any write. */
+export interface EponymeImportRejection {
+  errors: string[]
+  /** Names whose configured schema differs from the one the file was exported with. */
+  schemaMismatch?: string[]
 }
 
 export type EponymeSortDirection = 'asc' | 'desc'
@@ -346,6 +382,129 @@ export class EponymeService {
     return [...entries.values()]
   }
 
+  /**
+   * Every singleton and every live collection entry, as a portable file.
+   * Collections are read with one query each rather than one per entry.
+   */
+  async exportContent(): Promise<EponymeExportFile> {
+    const schemas: Record<string, string> = {}
+    const entries: EponymeExportEntry[] = []
+
+    for (const [name, schema] of Object.entries(this.schemas)) {
+      schemas[name] = schemaFingerprint(schema)
+      const row = await this.loadRow(name)
+      if (row) entries.push({ name, ...toExportEntry(row.state) })
+    }
+
+    for (const [name, definition] of Object.entries(this.collections)) {
+      schemas[name] = schemaFingerprint(definition.fields)
+      const rows = await this.client.eponyme.findMany({
+        where: { name: { startsWith: `${name}/` }, deletedAt: null },
+        orderBy: [
+          { updatedAt: 'desc' },
+          { name: 'asc' },
+        ],
+      })
+      for (const row of rows) {
+        const slug = row.name.slice(name.length + 1)
+        if (!slug || slug.includes('/')) continue
+        entries.push({ name: row.name, collection: name, ...toExportEntry(this.normalizeState(definition.fields, row.data)) })
+      }
+    }
+
+    return {
+      eponyme: { format: 1, exportedAt: new Date().toISOString(), schemas },
+      entries,
+    }
+  }
+
+  /**
+   * Applies an export file on top of the current content: every entry it carries is
+   * upserted, everything else is left alone. Nothing is ever deleted.
+   *
+   * The schema check runs first and refuses the whole file, so an import can never
+   * land half of its entries into a configuration that no longer matches.
+   */
+  async importContent(
+    file: unknown,
+    options: { dryRun?: boolean, actorId?: string } = {},
+  ): Promise<EponymeImportResult | EponymeImportRejection> {
+    const parsed = parseExportFile(file)
+    if (!parsed) return { errors: ['This file is not an Eponyme export.'] }
+
+    const declared = parsed.eponyme.schemas
+    const mismatch = Object.keys(declared).filter((name) => {
+      const local = this.schemas[name] ?? this.collections[name]?.fields
+      return !local || schemaFingerprint(local) !== declared[name]
+    })
+    // An entry whose schema the file never described cannot be checked at all, which
+    // is the same risk as a divergent fingerprint.
+    for (const entry of parsed.entries) {
+      const owner = entry.collection ?? this.getCollectionEntry(entry.name)?.name ?? entry.name
+      if (!(owner in declared) && !mismatch.includes(owner)) mismatch.push(owner)
+    }
+    if (mismatch.length) {
+      return {
+        errors: ['The exported schema does not match this application\'s configuration.'],
+        schemaMismatch: mismatch,
+      }
+    }
+
+    const result: EponymeImportResult = { dryRun: Boolean(options.dryRun), created: 0, updated: 0, skipped: [] }
+    for (const entry of parsed.entries) {
+      const collectionEntry = this.getCollectionEntry(entry.name)
+      const schema = this.schemas[entry.name] ?? collectionEntry?.definition.fields
+      if (!schema) {
+        result.skipped.push({ name: entry.name, reason: 'No schema is configured for this entry.' })
+        continue
+      }
+
+      const row = await this.client.eponyme.findUnique({ where: { name: entry.name } })
+      if (row?.deletedAt) {
+        result.skipped.push({ name: entry.name, reason: 'An entry with this name is in the trash. Restore it or delete it permanently first.' })
+        continue
+      }
+
+      // Same gate as a read: an unusable value falls back to its default instead of
+      // being stored as is.
+      const state = this.normalizeState(schema, {
+        __eponyme: {
+          version: 1,
+          draft: entry.draft,
+          published: entry.published,
+          status: entry.status,
+          publishedAt: entry.publishedAt,
+        },
+      })
+      if (collectionEntry) {
+        const { slugField } = collectionEntry.definition
+        // The name is authoritative: a mismatched slug in the payload would break the
+        // immutable-slug invariant every other write relies on.
+        if (slugField in state.__eponyme.draft) state.__eponyme.draft[slugField] = collectionEntry.slug
+        if (slugField in state.__eponyme.published) state.__eponyme.published[slugField] = collectionEntry.slug
+      }
+
+      if (!options.dryRun) {
+        const data = state as unknown as Record<string, unknown>
+        await this.client.eponyme.upsert({ where: { name: entry.name }, create: { name: entry.name, data }, update: { data } })
+        // One version per imported entry, so an import stays reversible from the timeline.
+        await this.client.eponymeVersion.create({
+          data: {
+            entryName: entry.name,
+            data,
+            action: 'import',
+            status: state.__eponyme.status,
+            userId: options.actorId ?? null,
+          },
+        })
+      }
+      if (row) result.updated++
+      else result.created++
+    }
+
+    return result
+  }
+
   async createCollectionEntry(
     name: string,
     payload: unknown,
@@ -535,7 +694,7 @@ export class EponymeService {
     })
     return versions.map(version => ({
       id: version.id,
-      action: version.action === 'draft' || version.action === 'publish' ? version.action : 'restore',
+      action: isHistoryAction(version.action) ? version.action : 'restore',
       status: version.status === 'draft' ? 'draft' : 'published',
       createdAt: new Date(version.createdAt).toISOString(),
       user: version.user ? { id: version.user.id, username: version.user.username } : null,
@@ -581,6 +740,89 @@ function getStoredState(value: unknown): StoredEponymeState['__eponyme'] | undef
     && (state.publishedAt === null || typeof state.publishedAt === 'string'),
   )
   return valid ? state : undefined
+}
+
+function isHistoryAction(action: string): action is EponymeHistoryEntry['action'] {
+  return action === 'draft' || action === 'publish' || action === 'import'
+}
+
+function toExportEntry(state: StoredEponymeState): Omit<EponymeExportEntry, 'name' | 'collection'> {
+  return {
+    draft: state.__eponyme.draft,
+    published: state.__eponyme.published,
+    status: state.__eponyme.status,
+    publishedAt: state.__eponyme.publishedAt,
+  }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
+ * Describes the shape of a schema — field names and types, nested containers included —
+ * while ignoring labels, placeholders and validators. Renaming a label must not block
+ * an import; adding or retyping a field must.
+ */
+function describeSchema(schema: object): string {
+  const fields = schema as Record<string, unknown>
+  return Object.keys(fields).sort().map(key => `${key}:${describeField(fields[key])}`).join(',')
+}
+
+function describeField(field: unknown): string {
+  if (!isPlainObject(field) || typeof field.type !== 'string') return 'unknown'
+  const options = isPlainObject(field.options) ? field.options : {}
+  if (field.type === 'array') {
+    // `of` is either a single field definition or a record of them.
+    const item = isPlainObject(options.of) ? options.of : {}
+    return `array(${typeof item.type === 'string' ? describeField(item) : describeSchema(item)})`
+  }
+  if (field.type === 'section')
+    return `section(${describeSchema(isPlainObject(options.fields) ? options.fields : {})})`
+  if (field.type === 'tabs') {
+    const tabs = isPlainObject(options.tabs) ? options.tabs : {}
+    return `tabs(${Object.keys(tabs).sort().map((key) => {
+      const tab = tabs[key]
+      return `${key}:${describeSchema(isPlainObject(tab) && isPlainObject(tab.fields) ? tab.fields : {})}`
+    }).join(',')})`
+  }
+  return field.type
+}
+
+/** Stable hash of a schema's shape, embedded in an export and checked on import. */
+export function schemaFingerprint(schema: EponymeSchema): string {
+  return createHash('sha256').update(describeSchema(schema)).digest('hex').slice(0, 32)
+}
+
+/** Accepts a parsed export file, rejecting anything whose envelope or entries are unusable. */
+function parseExportFile(value: unknown): EponymeExportFile | undefined {
+  if (!isPlainObject(value)) return undefined
+  const envelope = value.eponyme
+  if (!isPlainObject(envelope) || envelope.format !== 1 || !isPlainObject(envelope.schemas)) return undefined
+  if (!Object.values(envelope.schemas).every(fingerprint => typeof fingerprint === 'string')) return undefined
+  if (!Array.isArray(value.entries)) return undefined
+
+  const entries: EponymeExportEntry[] = []
+  for (const entry of value.entries) {
+    if (!isPlainObject(entry)) return undefined
+    const { name, collection, draft, published, status, publishedAt } = entry
+    const valid = typeof name === 'string' && name.length > 0
+      && isPlainObject(draft) && isPlainObject(published)
+      && (status === 'draft' || status === 'published')
+      && (publishedAt === null || typeof publishedAt === 'string')
+      && (collection === undefined || typeof collection === 'string')
+    if (!valid) return undefined
+    entries.push({ name, collection, draft, published, status, publishedAt } as EponymeExportEntry)
+  }
+
+  return {
+    eponyme: {
+      format: 1,
+      exportedAt: typeof envelope.exportedAt === 'string' ? envelope.exportedAt : new Date().toISOString(),
+      schemas: envelope.schemas as Record<string, string>,
+    },
+    entries,
+  }
 }
 
 function mergeErrors(...groups: ValidationErrors[]) {

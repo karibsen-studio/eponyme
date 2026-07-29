@@ -3,7 +3,7 @@ import { defineEponymeConfig } from '../src/config/config'
 import { collection } from '../src/config/collection'
 import { field } from '../src/runtime/fields'
 import { today } from '../src/runtime/fields/date'
-import { EponymeService, type PrismaEponymeClient } from '../src/runtime/server/services/eponyme-store'
+import { EponymeService, schemaFingerprint, type EponymeExportFile, type PrismaEponymeClient } from '../src/runtime/server/services/eponyme-store'
 import { createDefaultEponymeData } from '../src/runtime/utils/create-default-eponyme-data'
 import { validateEponymeData } from '../src/runtime/utils/validate-eponyme-data'
 import { normalizeSlug } from '../src/runtime/utils/normalize-slug'
@@ -622,5 +622,171 @@ describe('EponymeService', () => {
       slug: ['Must contain only lowercase letters, numbers and single hyphens.'],
     })
     expect(validateEponymeData(schema, { slug: 'hello-world' })).toEqual({})
+  })
+})
+
+describe('Eponyme export and import', () => {
+  async function seed() {
+    const { client, rows, versions, deletions } = createClient()
+    const service = new EponymeService(config, client)
+    await service.syncAll()
+    await service.patch('homepage', { title: 'Live homepage' })
+    await service.createCollectionEntry('articles', { title: 'Été à Paris', summary: 'Draft summary' })
+    await service.patch('articles/ete-a-paris', { summary: 'Published summary' }, 'publish')
+    await service.createCollectionEntry('articles', { title: 'Still a draft' })
+    return { service, client, rows, versions, deletions }
+  }
+
+  it('exports every singleton and live collection entry with its complete state', async () => {
+    const { service } = await seed()
+
+    const file = await service.exportContent()
+
+    expect(file.eponyme.format).toBe(1)
+    expect(Object.keys(file.eponyme.schemas).sort()).toEqual(['articles', 'homepage'])
+    expect(file.entries.map(entry => entry.name).sort()).toEqual([
+      'articles/ete-a-paris',
+      'articles/still-a-draft',
+      'homepage',
+    ])
+    const article = file.entries.find(entry => entry.name === 'articles/ete-a-paris')!
+    expect(article.collection).toBe('articles')
+    expect(article.status).toBe('published')
+    expect(article.draft.summary).toBe('Published summary')
+    // A never-published entry keeps its draft, which is the point of exporting the full state.
+    const draft = file.entries.find(entry => entry.name === 'articles/still-a-draft')!
+    expect(draft.status).toBe('draft')
+    expect(draft.publishedAt).toBeNull()
+  })
+
+  it('leaves the trash out of the export', async () => {
+    const { service } = await seed()
+    await service.deleteCollectionEntry('articles/still-a-draft')
+
+    const file = await service.exportContent()
+
+    expect(file.entries.map(entry => entry.name)).not.toContain('articles/still-a-draft')
+  })
+
+  it('applies an export onto another instance without touching what the file does not carry', async () => {
+    const { service: source } = await seed()
+    const file = await source.exportContent()
+
+    const { client, rows } = createClient()
+    const target = new EponymeService(config, client)
+    await target.syncAll()
+    await target.createCollectionEntry('articles', { title: 'Only on the target' })
+
+    const result = await target.importContent(file, { actorId: 'user-1' })
+
+    expect(result).toMatchObject({ dryRun: false, created: 2, updated: 1, skipped: [] })
+    await expect(target.get('homepage')).resolves.toMatchObject({ title: 'Live homepage' })
+    await expect(target.get('articles/ete-a-paris')).resolves.toMatchObject({ summary: 'Published summary' })
+    // Nothing is ever deleted: an entry the file never mentioned stays untouched.
+    expect(rows.has('articles/only-on-the-target')).toBe(true)
+  })
+
+  it('records one history version per imported entry, so an import stays reversible', async () => {
+    const { service: source } = await seed()
+    const file = await source.exportContent()
+    const { client } = createClient()
+    const target = new EponymeService(config, client)
+    await target.syncAll()
+
+    await target.importContent(file, { actorId: 'user-2' })
+
+    const history = await target.history('articles/ete-a-paris')
+    expect(history).toMatchObject([{ action: 'import', status: 'published', user: { username: 'Bob' } }])
+  })
+
+  it('refuses the whole import when the configured schema differs', async () => {
+    const { service: source } = await seed()
+    const file = await source.exportContent()
+    const { client, rows } = createClient()
+    const divergent = defineEponymeConfig({
+      homepage: {
+        title: field.string({ required: true, defaultValue: 'Welcome' }),
+        enabled: field.boolean({ defaultValue: true }),
+        // `tags` went from an array of strings to a plain string.
+        tags: field.string(),
+      },
+      articles: collection({
+        label: 'Articles',
+        titleField: 'title',
+        slugField: 'slug',
+        fields: {
+          title: field.string({ required: true }),
+          slug: field.slug({ required: true }),
+          summary: field.textarea(),
+        },
+      }),
+    })
+    const target = new EponymeService(divergent, client)
+    await target.syncAll()
+    const before = new Map(rows)
+
+    const result = await target.importContent(file)
+
+    expect(result).toMatchObject({ errors: expect.any(Array), schemaMismatch: ['homepage'] })
+    // Refused before the first write: nothing moved, not even the entries that matched.
+    expect([...rows.entries()]).toEqual([...before.entries()])
+  })
+
+  it('ignores relabelled fields, since only the shape of a schema matters', () => {
+    const before = { title: field.string({ label: 'Title', required: true }) }
+    const after = { title: field.string({ label: 'Headline', placeholder: 'Type here' }) }
+    expect(schemaFingerprint(after)).toBe(schemaFingerprint(before))
+    expect(schemaFingerprint({ title: field.textarea() })).not.toBe(schemaFingerprint(before))
+  })
+
+  it('reports what a dry run would do without writing anything', async () => {
+    const { service: source } = await seed()
+    const file = await source.exportContent()
+    const { client, rows, versions } = createClient()
+    const target = new EponymeService(config, client)
+    await target.syncAll()
+    const before = new Map(rows)
+
+    const result = await target.importContent(file, { dryRun: true })
+
+    expect(result).toMatchObject({ dryRun: true, created: 2, updated: 1 })
+    expect([...rows.entries()]).toEqual([...before.entries()])
+    expect(versions).toHaveLength(0)
+  })
+
+  it('skips a trashed entry and an entry whose collection is not configured', async () => {
+    const { service: source } = await seed()
+    const file = await source.exportContent()
+    const { client } = createClient()
+    const target = new EponymeService(config, client)
+    await target.syncAll()
+    await target.createCollectionEntry('articles', { title: 'Été à Paris' })
+    await target.deleteCollectionEntry('articles/ete-a-paris')
+    file.entries.push({ ...file.entries[0]!, name: 'unknown/entry', collection: 'unknown' })
+    file.eponyme.schemas.unknown = schemaFingerprint({})
+
+    const result = await target.importContent(file)
+
+    expect(result).toMatchObject({ schemaMismatch: ['unknown'] })
+
+    // Without the unknown collection, the trashed entry alone is skipped.
+    file.entries.pop()
+    delete file.eponyme.schemas.unknown
+    const applied = await target.importContent(file) as Exclude<Awaited<ReturnType<EponymeService['importContent']>>, { errors: string[] }>
+    expect(applied.skipped).toEqual([
+      { name: 'articles/ete-a-paris', reason: expect.stringContaining('trash') },
+    ])
+    expect(applied.created).toBe(1)
+    expect(applied.updated).toBe(1)
+  })
+
+  it('rejects a file that is not an Eponyme export', async () => {
+    const { client } = createClient()
+    const service = new EponymeService(config, client)
+
+    await expect(service.importContent({ entries: [] })).resolves.toMatchObject({ errors: [expect.any(String)] })
+    await expect(service.importContent(null)).resolves.toMatchObject({ errors: [expect.any(String)] })
+    const malformed = { eponyme: { format: 1, exportedAt: '', schemas: {} }, entries: [{ name: 'homepage' }] } as unknown as EponymeExportFile
+    await expect(service.importContent(malformed)).resolves.toMatchObject({ errors: [expect.any(String)] })
   })
 })
