@@ -104,7 +104,35 @@ function createClient(initial: Record<string, unknown> = {}) {
       },
     },
   }
-  return { client, rows, versions, deletions }
+  // Counts the queries a call actually sends, so a regression back to N+1 or to
+  // writing during a read fails the suite instead of only being slower.
+  const counts: Record<string, number> = {}
+  const countingClient = Object.fromEntries(Object.entries(client).map(([model, methods]) => [
+    model,
+    Object.fromEntries(Object.entries(methods).map(([method, fn]) => [
+      method,
+      (...args: unknown[]) => {
+        const key = `${model}.${method}`
+        counts[key] = (counts[key] ?? 0) + 1
+        counts.total = (counts.total ?? 0) + 1
+        return (fn as (...a: unknown[]) => unknown)(...args)
+      },
+    ])),
+  ])) as PrismaEponymeClient
+
+  return {
+    client: countingClient,
+    rows,
+    versions,
+    deletions,
+    counts,
+    resetCounts: () => {
+      for (const key of Object.keys(counts)) counts[key] = 0
+    },
+    /** Queries that mutate a row. A public read must send none of these. */
+    writeCount: () => (counts['eponyme.upsert'] ?? 0) + (counts['eponyme.update'] ?? 0)
+      + (counts['eponyme.updateMany'] ?? 0) + (counts['eponyme.create'] ?? 0) + (counts['eponyme.delete'] ?? 0),
+  }
 }
 
 const config = defineEponymeConfig({
@@ -370,11 +398,16 @@ describe('EponymeService', () => {
       entries: [{ slug: 'lete-a-paris', title: 'L’été à Paris', data: { title: 'L’été à Paris' }, status: 'published' }],
       total: 1,
     })
+    // Read on a cold service, so this still asserts one query per collection rather
+    // than one per entry. On the live service the rows are already cached by the
+    // listing above, and the sitemap reuses them without querying at all.
     const findMany = vi.spyOn(client.eponyme, 'findMany')
-    const sitemap = await service.getSitemapEntries({
+    const sitemap = await new EponymeService(config, client).getSitemapEntries({
       homepage: '/',
       articles: '/articles/:slug',
     })
+    expect(findMany).toHaveBeenCalledTimes(1)
+    await expect(service.getSitemapEntries({ articles: '/articles/:slug' })).resolves.toHaveLength(1)
     expect(findMany).toHaveBeenCalledTimes(1)
     expect(sitemap).toEqual([
       { loc: '/' },
@@ -788,5 +821,103 @@ describe('Eponyme export and import', () => {
     await expect(service.importContent(null)).resolves.toMatchObject({ errors: [expect.any(String)] })
     const malformed = { eponyme: { format: 1, exportedAt: '', schemas: {} }, entries: [{ name: 'homepage' }] } as unknown as EponymeExportFile
     await expect(service.importContent(malformed)).resolves.toMatchObject({ errors: [expect.any(String)] })
+  })
+})
+
+/**
+ * Rendering a public page costs one database round trip per query, so the number of
+ * queries a read sends is the number that matters, not how long the fake client takes.
+ * These assert the count directly.
+ */
+describe('EponymeService query count', () => {
+  async function seedArticles(count: number) {
+    const harness = createClient()
+    const service = new EponymeService(config, harness.client)
+    await service.syncAll()
+    for (let index = 0; index < count; index++) {
+      const slug = `article-${index}`
+      await service.createCollectionEntry('articles', { title: `Article ${index}`, slug })
+      await service.patch(`articles/${slug}`, { title: `Article ${index}` }, 'publish')
+    }
+    harness.resetCounts()
+    return { ...harness, service }
+  }
+
+  it('reads a singleton without writing', async () => {
+    const { service, counts, writeCount, resetCounts } = await seedArticles(0)
+
+    await service.getResult('homepage', 'published')
+
+    expect(writeCount()).toBe(0)
+    expect(counts.total).toBe(1)
+
+    // A second read is served from the cache rather than from the database.
+    resetCounts()
+    await service.getResult('homepage', 'published')
+    expect(counts.total ?? 0).toBe(0)
+  })
+
+  it('lists a collection with a single query, whatever its size', async () => {
+    const { service, counts } = await seedArticles(5)
+
+    const page = await service.listCollection('articles', 'published')
+
+    expect(page!.entries).toHaveLength(5)
+    expect(counts.total).toBe(1)
+    expect(counts['eponyme.findMany']).toBe(1)
+  })
+
+  it('does not re-read the same entry twice in a row', async () => {
+    const { service, counts } = await seedArticles(1)
+
+    await service.getResult('articles/article-0', 'published')
+    await service.getResult('articles/article-0', 'published')
+    await service.get('articles/article-0', 'published')
+
+    expect(counts.total).toBe(1)
+  })
+
+  it('serves fresh content after a write', async () => {
+    const { service } = await seedArticles(0)
+
+    await service.getResult('homepage', 'published')
+    await service.patch('homepage', { title: 'Updated' }, 'publish')
+
+    await expect(service.get('homepage', 'published')).resolves.toMatchObject({ title: 'Updated' })
+  })
+
+  it('serves a fresh listing after an entry is created, published, deleted and restored', async () => {
+    const { service } = await seedArticles(1)
+    const published = () => service.listCollection('articles', 'published')
+
+    // Each step primes the cache, then changes the row set behind it.
+    await expect(published()).resolves.toMatchObject({ total: 1 })
+    await service.createCollectionEntry('articles', { title: 'Fresh', slug: 'fresh' })
+    await expect(published()).resolves.toMatchObject({ total: 1 })
+
+    await service.patch('articles/fresh', {}, 'publish')
+    await expect(published()).resolves.toMatchObject({ total: 2 })
+
+    await service.deleteCollectionEntry('articles/fresh')
+    await expect(published()).resolves.toMatchObject({ total: 1 })
+
+    await service.restoreCollectionEntry('articles/fresh')
+    await expect(published()).resolves.toMatchObject({ total: 2 })
+
+    // Purging only acts on a trashed entry, so it has to go back to the trash first.
+    await service.deleteCollectionEntry('articles/fresh')
+    await service.purgeCollectionEntry('articles/fresh')
+    await expect(published()).resolves.toMatchObject({ total: 1 })
+    await expect(service.getResult('articles/fresh', 'published')).resolves.toBeUndefined()
+  })
+
+  it('never serves a draft from the cache, so the preview panel shows a save immediately', async () => {
+    const { service, counts } = await seedArticles(0)
+
+    await service.getResult('homepage', 'draft')
+    await service.getResult('homepage', 'draft')
+
+    // Two reads, two queries: draft content is dashboard-only and must stay exact.
+    expect(counts['eponyme.findUnique']).toBe(2)
   })
 })

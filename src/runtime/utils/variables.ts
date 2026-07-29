@@ -63,14 +63,34 @@ export function interpolateEponymeText(text: string, variables: Record<string, s
   return text.replace(VARIABLE_PATTERN, (match, name: string) => variables[name] ?? match)
 }
 
-/** Walks strings nested in objects and arrays, leaving every other value alone. */
+/**
+ * Walks strings nested in objects and arrays, leaving every other value alone.
+ *
+ * A branch containing no `{{ name }}` is returned as-is rather than rebuilt, so content
+ * without variables — which is most of it — costs no copy. The result therefore shares
+ * structure with its input and must be treated as read-only, which is already true of
+ * everything the read routes return.
+ */
 export function interpolateEponymeValue<T>(value: T, variables: Record<string, string>): T {
   if (typeof value === 'string') return interpolateEponymeText(value, variables) as T
-  if (Array.isArray(value)) return value.map(item => interpolateEponymeValue(item, variables)) as T
+  if (Array.isArray(value)) {
+    let changed = false
+    const next = value.map((item) => {
+      const interpolated = interpolateEponymeValue(item, variables)
+      if (interpolated !== item) changed = true
+      return interpolated
+    })
+    return (changed ? next : value) as T
+  }
   if (value && typeof value === 'object') {
-    return Object.fromEntries(
-      Object.entries(value as Record<string, unknown>).map(([key, nested]) => [key, interpolateEponymeValue(nested, variables)]),
-    ) as T
+    let changed = false
+    const next: Record<string, unknown> = {}
+    for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+      const interpolated = interpolateEponymeValue(nested, variables)
+      if (interpolated !== nested) changed = true
+      next[key] = interpolated
+    }
+    return (changed ? next : value) as T
   }
   return value
 }

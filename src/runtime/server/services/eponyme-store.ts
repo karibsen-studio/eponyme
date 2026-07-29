@@ -151,10 +151,45 @@ interface StoredEponymeState {
 export class EponymeService {
   private readonly schemas: Record<string, EponymeSchema>
   private readonly collections: Record<string, EponymeCollectionDefinitionBase>
+  /** Entries a read has already persisted the normalized shape for, so it only attempts it once. */
+  private readonly healedByRead = new Set<string>()
+  /**
+   * Read-path cache of normalized rows, so a page that reads the same entry from a
+   * singleton, a listing and a layout pays one round trip instead of one per read.
+   * Writers never read from it, so the `updatedAt` they lock on always comes from the
+   * database and a stale key can never turn into a spurious conflict.
+   */
+  private readonly cache = new Map<string, { value: unknown, expires: number }>()
+  private readonly cacheMs: number
 
-  constructor(config: EponymeConfig, private readonly client: PrismaEponymeClient) {
+  constructor(config: EponymeConfig, private readonly client: PrismaEponymeClient, options: { cacheSeconds?: number } = {}) {
     this.schemas = getEponymeSchemas(config)
     this.collections = getEponymeCollections(config)
+    this.cacheMs = Math.max(0, options.cacheSeconds ?? 5) * 1000
+  }
+
+  private cached<T>(key: string, load: () => Promise<T>): Promise<T> {
+    if (!this.cacheMs) return load()
+    const hit = this.cache.get(key)
+    if (hit && hit.expires > Date.now()) return hit.value as Promise<T>
+    // The promise itself is stored, so concurrent readers of a cold key share one query
+    // rather than each starting their own.
+    const pending = load().catch((error) => {
+      this.cache.delete(key)
+      throw error
+    })
+    this.cache.set(key, { value: pending, expires: Date.now() + this.cacheMs })
+    return pending
+  }
+
+  /**
+   * Drops what a write to `name` invalidates: the entry itself, and the listing of the
+   * collection that contains it, whose row set just changed.
+   */
+  private invalidate(name: string) {
+    this.cache.delete(`row:${name}`)
+    const collection = this.getCollectionEntry(name)?.name
+    if (collection) this.cache.delete(`rows:${collection}`)
   }
 
   getSchema(name: string): EponymeSchema | undefined {
@@ -174,9 +209,9 @@ export class EponymeService {
     }
   }
 
-  /** Reconcile every configured eponyme at application startup. */
+  /** Reconcile every configured eponyme at application startup. This is the one place that heals. */
   async syncAll() {
-    await Promise.all(Object.keys(this.schemas).map(name => this.loadState(name)))
+    await Promise.all(Object.keys(this.schemas).map(name => this.loadState(name, { heal: true })))
   }
 
   private reconcile(schema: EponymeSchema, value: unknown, mode: ValidationMode): Record<string, unknown> {
@@ -218,25 +253,66 @@ export class EponymeService {
     }
   }
 
-  /** Reads the stored state along with the `updatedAt` it was read at, used as the optimistic lock token. */
-  private async loadRow(name: string): Promise<{ state: StoredEponymeState, updatedAt?: Date | string } | undefined> {
+  /**
+   * A singleton row is created on first read, but only when it is genuinely missing.
+   * An `upsert` would send a write on every read instead, and each one costs a database
+   * round trip on the critical path of a public page.
+   */
+  private async loadSingletonRow(name: string, schema: EponymeSchema): Promise<PrismaEponymeRow | null> {
+    const row = await this.client.eponyme.findUnique({ where: { name } })
+    if (row) return row
+    try {
+      return await this.client.eponyme.create({ data: { name, data: this.createState(schema) as unknown as Record<string, unknown> } })
+    }
+    catch (error) {
+      // A concurrent request created the row between our read and our insert.
+      if (isPrismaError(error, 'P2002')) return await this.client.eponyme.findUnique({ where: { name } })
+      throw error
+    }
+  }
+
+  /**
+   * Reads the stored state along with the `updatedAt` it was read at, used as the optimistic lock token.
+   *
+   * `heal` persists the normalized state when it differs from what is stored. It has to stay on for
+   * writers, because healing moves `updatedAt` and so decides the lock token they are about to compare.
+   *
+   * `cache` is only ever set for published content. Draft reads serve the preview panel, which has to
+   * show a save immediately, and they come from the dashboard rather than from a public page — so
+   * there is nothing to gain by caching them and a stale preview to lose.
+   */
+  private async loadRow(
+    name: string,
+    { heal = false, cache = false }: { heal?: boolean, cache?: boolean } = {},
+  ): Promise<{ state: StoredEponymeState, updatedAt?: Date | string } | undefined> {
+    if (!cache || heal) return await this.readRow(name, heal)
+    return await this.cached(`row:${name}`, () => this.readRow(name, false))
+  }
+
+  private async readRow(name: string, heal: boolean): Promise<{ state: StoredEponymeState, updatedAt?: Date | string } | undefined> {
     const schema = this.getSchema(name)
     if (!schema) return undefined
-    const defaults = this.createState(schema)
     const row = this.getCollectionEntry(name)
       ? await this.client.eponyme.findUnique({ where: { name } })
-      : await this.client.eponyme.upsert({ where: { name }, create: { name, data: defaults as unknown as Record<string, unknown> }, update: {} })
+      : await this.loadSingletonRow(name, schema)
     // A trashed entry reads as missing everywhere: this is the single gate every
     // reader goes through, so nothing has to remember to filter it out.
     if (!row || row.deletedAt) return undefined
     const state = this.normalizeState(schema, row.data)
     if (sameData(state, row.data)) return { state, updatedAt: row.updatedAt }
+    // The stored shape drifted from the configured one — a storage-envelope migration, or a
+    // field that no longer validates. Persisting it converges, so a reader does it once per
+    // process: the migration still lands on first read, but a drift that never converges
+    // cannot turn every later read of a public page into a write.
+    if (!heal && this.healedByRead.has(name)) return { state, updatedAt: row.updatedAt }
+    this.healedByRead.add(name)
     const healed = await this.client.eponyme.update({ where: { name }, data: { data: state as unknown as Record<string, unknown> } })
+    this.invalidate(name)
     return { state, updatedAt: healed.updatedAt ?? row.updatedAt }
   }
 
-  private async loadState(name: string): Promise<StoredEponymeState | undefined> {
-    return (await this.loadRow(name))?.state
+  private async loadState(name: string, options: { heal?: boolean, cache?: boolean } = {}): Promise<StoredEponymeState | undefined> {
+    return (await this.loadRow(name, options))?.state
   }
 
   /**
@@ -246,12 +322,35 @@ export class EponymeService {
    */
   private async writeState(name: string, next: StoredEponymeState, expectedUpdatedAt?: Date | string): Promise<boolean> {
     const data = next as unknown as Record<string, unknown>
-    if (!expectedUpdatedAt) {
-      await this.client.eponyme.update({ where: { name }, data: { data } })
-      return true
+    // Always dropped after the write lands, never before: a read racing an in-flight write
+    // would otherwise re-cache the pre-write row and hold it for the whole TTL.
+    try {
+      if (!expectedUpdatedAt) {
+        await this.client.eponyme.update({ where: { name }, data: { data } })
+        return true
+      }
+      const { count } = await this.client.eponyme.updateMany({ where: { name, updatedAt: expectedUpdatedAt }, data: { data } })
+      return count > 0
     }
-    const { count } = await this.client.eponyme.updateMany({ where: { name, updatedAt: expectedUpdatedAt }, data: { data } })
-    return count > 0
+    finally {
+      this.invalidate(name)
+    }
+  }
+
+  /**
+   * The live rows of a collection, shared by the public listing and the sitemap so both
+   * read them once. The trash and the export deliberately query around it: one wants the
+   * rows this filter excludes, the other must not see a cached view of the content.
+   */
+  private async liveCollectionRows(name: string, cache = false): Promise<PrismaEponymeRow[]> {
+    const load = () => this.client.eponyme.findMany({
+      where: { name: { startsWith: `${name}/` }, deletedAt: null },
+      orderBy: [
+        { updatedAt: 'desc' },
+        { name: 'asc' },
+      ],
+    })
+    return cache ? await this.cached(`rows:${name}`, load) : await load()
   }
 
   async get(name: string, version: EponymeVersionSelector = 'published'): Promise<Record<string, unknown> | undefined> {
@@ -261,7 +360,7 @@ export class EponymeService {
   async getResult(name: string, version: EponymeVersionSelector = 'published'): Promise<EponymeResult | undefined> {
     // A numeric selector reads a point in history rather than the entry's current state.
     if (typeof version === 'number') return this.getVersionResult(name, version)
-    const state = await this.loadState(name)
+    const state = await this.loadState(name, { cache: version === 'published' })
     if (!state) return undefined
     if (version === 'published' && this.getCollectionEntry(name) && !state.__eponyme.publishedAt) return undefined
     return {
@@ -309,25 +408,22 @@ export class EponymeService {
   ): Promise<EponymeCollectionPage | undefined> {
     const definition = this.collections[name]
     if (!definition) return undefined
-    const rows = await this.client.eponyme.findMany({
-      where: { name: { startsWith: `${name}/` }, deletedAt: null },
-      orderBy: [
-        { updatedAt: 'desc' },
-        { name: 'asc' },
-      ],
-    })
-    const entries = await Promise.all(rows.filter(row => !row.name.slice(name.length + 1).includes('/')).map(async (row) => {
+    const rows = await this.liveCollectionRows(name, version === 'published')
+    // `findMany` already carries every row's payload, so the state is normalized here
+    // rather than re-read one entry at a time: the listing costs one query, not N+1.
+    const entries = rows.flatMap((row) => {
       const slug = row.name.slice(name.length + 1)
-      const result = await this.getResult(row.name, version)
-      return {
+      if (!slug || slug.includes('/')) return []
+      const state = this.normalizeState(definition.fields, row.data)
+      return [{
         slug,
-        title: String(result?.data[definition.titleField] || slug),
-        data: result?.data ?? {},
-        status: version === 'published' ? 'published' : result?.status ?? 'draft',
-        publishedAt: result?.publishedAt ?? null,
+        title: String(state.__eponyme[version][definition.titleField] || slug),
+        data: state.__eponyme[version],
+        status: version === 'published' ? 'published' as const : state.__eponyme.status,
+        publishedAt: state.__eponyme.publishedAt,
         updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : null,
-      }
-    }))
+      }]
+    })
 
     // Sorting and slicing happen here rather than in SQL: the publication status
     // lives inside the JSONB envelope, so a database-side `take` would count rows
@@ -360,13 +456,7 @@ export class EponymeService {
       if (!path.includes(':slug'))
         throw new Error(`[Eponyme] previewPaths.${name} must include ":slug" to generate collection sitemap URLs.`)
 
-      const rows = await this.client.eponyme.findMany({
-        where: { name: { startsWith: `${name}/` }, deletedAt: null },
-        orderBy: [
-          { updatedAt: 'desc' },
-          { name: 'asc' },
-        ],
-      })
+      const rows = await this.liveCollectionRows(name, true)
       return rows.flatMap((row) => {
         const slug = row.name.slice(name.length + 1)
         if (!slug || slug.includes('/')) return []
@@ -487,6 +577,7 @@ export class EponymeService {
       if (!options.dryRun) {
         const data = state as unknown as Record<string, unknown>
         await this.client.eponyme.upsert({ where: { name: entry.name }, create: { name: entry.name, data }, update: { data } })
+        this.invalidate(entry.name)
         // One version per imported entry, so an import stays reversible from the timeline.
         await this.client.eponymeVersion.create({
           data: {
@@ -539,6 +630,7 @@ export class EponymeService {
     }
     try {
       await this.client.eponyme.create({ data: { name: entryName, data: state as unknown as Record<string, unknown> } })
+      this.invalidate(entryName)
     }
     catch (error) {
       // Another request created the same slug between our check and this insert.
@@ -577,6 +669,7 @@ export class EponymeService {
       where: { name, deletedAt: null },
       data: { deletedAt: new Date() },
     })
+    this.invalidate(name)
     return count > 0
   }
 
@@ -586,6 +679,7 @@ export class EponymeService {
       where: { name, deletedAt: { not: null } },
       data: { deletedAt: null },
     })
+    this.invalidate(name)
     return count > 0
   }
 
@@ -596,6 +690,7 @@ export class EponymeService {
     if (!row?.deletedAt) return false
     try {
       await this.client.eponyme.delete({ where: { name } })
+      this.invalidate(name)
     }
     catch (error) {
       // Already gone, or purged by a concurrent request.
@@ -642,7 +737,7 @@ export class EponymeService {
   ): Promise<(EponymeResult & { errors?: never, conflict?: never }) | { errors: ValidationErrors, conflict?: never } | EponymeConflict | undefined> {
     const schema = this.getSchema(name)
     if (!schema) return undefined
-    const row = await this.loadRow(name)
+    const row = await this.loadRow(name, { heal: true })
     if (!row) return undefined
     const { state, updatedAt } = row
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { errors: { _form: ['Body must be an object.'] } }
@@ -706,7 +801,7 @@ export class EponymeService {
     if (!schema) return undefined
     const version = await this.client.eponymeVersion.findUnique({ where: { id: versionId } })
     if (!version || version.entryName !== name) return undefined
-    const current = await this.loadRow(name)
+    const current = await this.loadRow(name, { heal: true })
     if (!current) return undefined
     const state = this.normalizeState(schema, version.data)
     if (!await this.writeState(name, state, current.updatedAt)) return { conflict: true }

@@ -32,6 +32,12 @@ export interface ModuleOptions {
     /** Fixed lifetime of an authenticated session. */
     sessionDurationDays?: number
   }
+  /**
+   * How long a server instance may reuse content it has already read, in seconds.
+   * A save clears what it changed on its own instance, so this only bounds how long
+   * another instance can still serve the previous content. `0` disables the cache.
+   */
+  cacheSeconds?: number
 }
 
 export default defineNuxtModule<ModuleOptions>({
@@ -48,6 +54,7 @@ export default defineNuxtModule<ModuleOptions>({
     auth: {
       sessionDurationDays: 7,
     },
+    cacheSeconds: 5,
   },
 
   moduleDependencies: {
@@ -103,6 +110,9 @@ export default defineNuxtModule<ModuleOptions>({
     }
     nuxt.options.runtimeConfig.eponymeAuth = {
       sessionDurationDays: options.auth?.sessionDurationDays ?? 7,
+    }
+    nuxt.options.runtimeConfig.eponymeContent = {
+      cacheSeconds: options.cacheSeconds ?? 5,
     }
 
     // `nuxt prepare` also runs on the module's own repository, where there is no host app
