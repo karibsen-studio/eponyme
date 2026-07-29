@@ -38,6 +38,18 @@ export interface ModuleOptions {
    * another instance can still serve the previous content. `0` disables the cache.
    */
   cacheSeconds?: number
+  /**
+   * How long a browser may reuse published content, in seconds. This is what makes a
+   * client-side navigation instant, and it is the one window nobody can purge: a visitor
+   * who already holds a copy keeps it until it expires. Keep it short. `0` disables it.
+   */
+  browserCacheSeconds?: number
+  /**
+   * How long a CDN may reuse published content, in seconds. A CDN can be purged — the
+   * `eponyme:entry:published` hook is the place to do it — so this can be generous.
+   * `0` disables it.
+   */
+  cdnCacheSeconds?: number
 }
 
 export default defineNuxtModule<ModuleOptions>({
@@ -55,6 +67,8 @@ export default defineNuxtModule<ModuleOptions>({
       sessionDurationDays: 7,
     },
     cacheSeconds: 5,
+    browserCacheSeconds: 30,
+    cdnCacheSeconds: 300,
   },
 
   moduleDependencies: {
@@ -113,6 +127,8 @@ export default defineNuxtModule<ModuleOptions>({
     }
     nuxt.options.runtimeConfig.eponymeContent = {
       cacheSeconds: options.cacheSeconds ?? 5,
+      browserCacheSeconds: options.browserCacheSeconds ?? 30,
+      cdnCacheSeconds: options.cdnCacheSeconds ?? 300,
     }
 
     // `nuxt prepare` also runs on the module's own repository, where there is no host app
@@ -208,6 +224,9 @@ export default defineNuxtModule<ModuleOptions>({
         + `declare module '#eponyme/captcha' {\n  const verifier: import('${resolver.resolve('./runtime/types/captcha')}').EponymeCaptchaVerifier\n  export default verifier\n}\n`,
     })
 
+    // Registered before the routes: it marks every Eponyme response uncacheable, and the
+    // few that may be cached override it themselves.
+    addServerHandler({ middleware: true, handler: resolver.resolve('./runtime/server/middleware/eponyme-no-store') })
     addServerHandler({ route: '/api/eponyme/**', handler: resolver.resolve('./runtime/server/api/eponyme/[name].get') })
     addServerHandler({ route: '/api/eponyme/**', method: 'patch', handler: resolver.resolve('./runtime/server/api/eponyme/[name].patch') })
     addServerHandler({ route: '/api/eponyme-statuses', handler: resolver.resolve('./runtime/server/api/eponyme-statuses.get') })

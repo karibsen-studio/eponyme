@@ -60,7 +60,8 @@ export function useEponymeCollection<const Name extends ConfigCollectionName>(
     // The options belong in the key, otherwise two differently sorted calls to the
     // same collection would share one cache entry.
     `eponyme:collection:public:${name}:${options.take ?? ''}:${options.skip ?? ''}:${options.orderBy ?? ''}:${options.order ?? ''}`,
-    () => requestFetch<{ entries: EponymeCollectionEntry<Data>[], total: number }>(`/api/eponyme-collections/${name}`, { query, cache: 'no-store' }),
+    // Always the published listing, which is publicly cacheable: the browser cache may answer it.
+    () => requestFetch<{ entries: EponymeCollectionEntry<Data>[], total: number }>(`/api/eponyme-collections/${name}`, { query }),
     { getCachedData: cacheDuringHydrationOnly },
   )
   const entries = computed(() => result.data.value?.entries ?? [])
@@ -89,7 +90,11 @@ export function useEponymeCollectionEntry<const Name extends ConfigCollectionNam
   const requestFetch = useRequestFetch()
   const result = useAsyncData(
     `eponyme:collection-entry:${name}:${slug}:${version}`,
-    () => requestFetch<Response>(`/api/eponyme/${name}/${encodeURIComponent(slug)}`, { query: { version }, cache: 'no-store' }),
+    () => requestFetch<Response>(`/api/eponyme/${name}/${encodeURIComponent(slug)}`, {
+      query: { version },
+      // A draft or a historical version must never be stored, whatever the server says.
+      cache: version === 'published' ? undefined : 'no-store',
+    }),
     { getCachedData: cacheDuringHydrationOnly },
   )
   if (import.meta.client) useEventListener(window, 'focus', () => void result.refresh())

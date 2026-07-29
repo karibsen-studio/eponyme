@@ -668,4 +668,47 @@ describe('ssr', async () => {
 
     await removeArticle('export-round-trip')
   })
+
+  /**
+   * Published content is cached by browsers and CDNs, which makes the boundary around
+   * everything else load-bearing: a draft or a session that leaked into a shared cache
+   * would be served to people who were never allowed to see it.
+   */
+  describe('cache headers', () => {
+    const cacheControl = async (path: string, options?: RequestInit) =>
+      (await fetch(url(path), options)).headers.get('cache-control')
+
+    it('lets a browser and a CDN keep published content', async () => {
+      // The browser window is the short one because nothing can purge it.
+      expect(await cacheControl('/api/eponyme/pages/homepage'))
+        .toBe('public, max-age=30, s-maxage=300, stale-while-revalidate=3600')
+      expect(await cacheControl('/api/eponyme-collections/articles')).toContain('public')
+      expect(await cacheControl('/api/eponyme-sitemap')).toContain('public')
+    })
+
+    it('never lets anything unpublished or personal be stored', async () => {
+      const private_ = [
+        '/api/eponyme/pages/homepage?version=draft',
+        // Unresolved `{{ variables }}`: published, but not what a public page renders.
+        '/api/eponyme/pages/homepage?raw=1',
+        '/api/eponyme-collections/articles?version=draft',
+        '/api/eponyme-statuses',
+        '/api/eponyme-history/pages/homepage',
+        '/api/eponyme-trash/articles',
+        '/api/eponyme-users',
+        '/api/eponyme-export',
+        // Answers who the caller is, so it is the one that must never be shared.
+        '/api/eponyme-auth/session',
+      ]
+      for (const path of private_)
+        expect(await cacheControl(path, authenticated()), path).toBe('no-store')
+    })
+
+    it('holds back a route that never opted in, even unauthenticated', async () => {
+      // The default comes from the middleware, so it applies before any handler runs
+      // and regardless of whether the request is allowed through.
+      expect(await cacheControl('/api/eponyme-users')).toBe('no-store')
+      expect(await cacheControl('/api/eponyme/pages/homepage?version=draft')).toBe('no-store')
+    })
+  })
 })

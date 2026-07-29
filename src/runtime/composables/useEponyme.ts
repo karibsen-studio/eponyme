@@ -34,9 +34,13 @@ export function useEponyme<const Name extends ConfigEponymeName>(name: Name, opt
   // Built once: publishing clears sibling keys by prefix and has to be able to
   // recognise this exact one, `:raw` suffix included.
   const cacheKey = `eponyme:${name}:${version}${options.raw ? ':raw' : ''}`
+  // Published content answers with a public `Cache-Control`, so the browser cache is
+  // allowed to serve it and a client-side navigation costs no round trip. Everything
+  // else is unreleased material that must never be stored, whatever the server says.
+  const fetchCache = version === 'published' && !options.raw ? undefined : 'no-store' as const
   const { data: response, pending: loading, error, refresh: load } = useAsyncData(
     cacheKey,
-    () => requestFetch<EponymeResponse<Name>>(`/api/eponyme/${name}`, { query: { version, raw: options.raw ? 1 : undefined }, cache: 'no-store' }),
+    () => requestFetch<EponymeResponse<Name>>(`/api/eponyme/${name}`, { query: { version, raw: options.raw ? 1 : undefined }, cache: fetchCache }),
     { getCachedData: cacheDuringHydrationOnly },
   )
   const data = computed(() => response.value?.data)

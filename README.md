@@ -559,6 +559,49 @@ ${entries.map(entry => `  <url><loc>https://example.com${entry.loc}</loc>${entry
 })
 ```
 
+## Caching
+
+Published content is the same for every visitor, so it is cached at three levels. The
+defaults suit a content site and can be tuned or switched off:
+
+```ts
+export default defineNuxtConfig({
+  eponyme: {
+    prismaClient: '~~/server/utils/prisma',
+    cacheSeconds: 5,          // server instance
+    browserCacheSeconds: 30,  // visitor's browser
+    cdnCacheSeconds: 300,     // CDN or edge
+  },
+})
+```
+
+| Option | Who holds the copy | Purgeable |
+|---|---|---|
+| `cacheSeconds` | The server instance, in memory | Yes — cleared on every write |
+| `browserCacheSeconds` | The visitor's browser | **No** |
+| `cdnCacheSeconds` | The CDN | Yes — see below |
+
+`browserCacheSeconds` is what makes a client-side navigation instant: the browser answers
+from its own cache instead of crossing the network. It is also the one window nobody can
+shorten. A visitor holding a copy keeps it until it expires, publication or not, which is
+why the default is deliberately small. Set it to `0` if a publication must be visible
+immediately to everyone; navigation then costs a round trip again.
+
+The CDN window can be long because it can be purged, and `eponyme:entry:published` is the
+place to do it:
+
+```ts
+nitroApp.hooks.hook('eponyme:entry:published', async ({ name, collection }) => {
+  await purgeCdnCache(collection ? `/${collection.name}/${collection.slug}` : `/${name}`)
+})
+```
+
+**Only published content is ever cached.** Drafts, historical versions, `raw=1` reads,
+submissions, the trash, the user list and the session route all answer `no-store`. That is
+enforced by a server middleware that marks every Eponyme route uncacheable, which the few
+public ones override — so a route added later is private until someone decides otherwise,
+rather than public until someone remembers.
+
 ## Forms
 
 Use `form()` for public forms. A form owns a schema, its own routes and its anti-abuse
@@ -763,7 +806,7 @@ a trash move leaves the entry itself untouched.
 
 ## Current status
 
-Eponyme is at version `0.3.0`. It is ready for controlled projects and production pilots. A few workflows still need hardening before a broad public release:
+Eponyme is at version `0.4.0`. It is ready for controlled projects and production pilots. A few workflows still need hardening before a broad public release:
 
 - Client revision tokens for long-running concurrent edits: the current `updatedAt` check protects overlapping writes within one request, not two editors who loaded the same older revision. A deletion is not guarded by a revision either
 - Retention controls for the trash: entries stay there until someone empties it
