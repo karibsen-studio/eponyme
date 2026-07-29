@@ -30,6 +30,20 @@ describe('ssr', async () => {
     expect(html).toContain('href="/__eponyme/pages"')
   })
 
+  it('keeps the host layout out of the dashboard', async () => {
+    // The public page is wrapped by the application's default layout…
+    const publicHtml = String(await $fetch('/'))
+    expect(publicHtml).toContain('host-header')
+    expect(publicHtml).toContain('host-footer')
+
+    // …while the dashboard pages opt out of it entirely.
+    for (const path of ['/__eponyme', '/__eponyme/login', '/__eponyme/pages/homepage']) {
+      const html = String(await $fetch(path, authenticated()))
+      expect(html, path).not.toContain('host-header')
+      expect(html, path).not.toContain('host-footer')
+    }
+  })
+
   it('exposes and updates Eponyme data', async () => {
     await expect($fetch('/api/eponyme-statuses', authenticated())).resolves.toEqual({
       statuses: { 'pages/homepage': 'published' },
@@ -70,6 +84,45 @@ describe('ssr', async () => {
         unknown: ['Unknown field.'],
       },
     })
+  })
+
+  it('resolves content variables for the public API but not for the editor', async () => {
+    const year = new Date().getFullYear()
+    await $fetch('/api/eponyme-collections/articles', { method: 'POST', body: { title: 'Variables' }, ...authenticated() })
+    await $fetch('/api/eponyme/articles/variables?action=publish', {
+      method: 'PATCH',
+      body: { title: 'Variables', slug: 'variables', excerpt: 'Saison {{ season }} au {{ clubName }}, en {{ currentYear }}.' },
+      ...authenticated(),
+    })
+
+    const published = await $fetch<{ data: { excerpt: string } }>('/api/eponyme/articles/variables')
+    expect(published.data.excerpt).toBe(`Saison ${year}-${year + 1} au Test Club, en ${year}.`)
+
+    // The dashboard asks for the source text, so the variable stays editable.
+    const raw = await $fetch<{ data: { excerpt: string } }>('/api/eponyme/articles/variables?version=draft&raw=1', authenticated())
+    expect(raw.data.excerpt).toContain('{{ season }}')
+
+    // Collections go through the same interpolation.
+    const listed = await $fetch<{ entries: Array<{ data: { excerpt: string } }> }>('/api/eponyme-collections/articles')
+    expect(listed.entries[0]!.data.excerpt).toContain(`en ${year}.`)
+
+    await $fetch('/api/eponyme-collections/articles/variables', { method: 'DELETE', ...authenticated() })
+  })
+
+  it('never evaluates an expression found in content', async () => {
+    await $fetch('/api/eponyme-collections/articles', { method: 'POST', body: { title: 'Injection' }, ...authenticated() })
+    const excerpt = 'Value {{ new Date().getFullYear() }} and {{ unknownName }}.'
+    await $fetch('/api/eponyme/articles/injection?action=publish', {
+      method: 'PATCH',
+      body: { title: 'Injection', slug: 'injection', excerpt },
+      ...authenticated(),
+    })
+
+    // Expressions and unknown names are left verbatim rather than executed or blanked.
+    const published = await $fetch<{ data: { excerpt: string } }>('/api/eponyme/articles/injection')
+    expect(published.data.excerpt).toBe(excerpt)
+
+    await $fetch('/api/eponyme-collections/articles/injection', { method: 'DELETE', ...authenticated() })
   })
 
   it('renders a nested Eponyme dashboard page', async () => {
@@ -118,7 +171,7 @@ describe('ssr', async () => {
       ...authenticated(),
     })
     expect(created).toMatchObject({ slug: 'first-article', status: 'draft' })
-    await expect($fetch('/api/eponyme-collections/articles')).resolves.toEqual({ entries: [] })
+    await expect($fetch('/api/eponyme-collections/articles')).resolves.toEqual({ entries: [], total: 0 })
 
     await $fetch('/api/eponyme/articles/first-article?action=publish', {
       method: 'PATCH',
@@ -132,6 +185,43 @@ describe('ssr', async () => {
     expect(html).toContain('First article')
 
     await expect($fetch('/api/eponyme-collections/articles/first-article', { method: 'DELETE', ...authenticated() })).resolves.toEqual({ deleted: true })
+  })
+
+  it('sorts, limits and paginates a collection over HTTP', async () => {
+    for (const title of ['Sort Charlie', 'Sort Alpha', 'Sort Bravo']) {
+      const slug = title.toLowerCase().replace(/ /g, '-')
+      await $fetch('/api/eponyme-collections/articles', { method: 'POST', body: { title }, ...authenticated() })
+      await $fetch(`/api/eponyme/articles/${slug}?action=publish`, {
+        method: 'PATCH',
+        body: { title, slug, excerpt: `Excerpt for ${title}.` },
+        ...authenticated(),
+      })
+    }
+
+    const sorted = await $fetch<{ entries: Array<{ title: string }>, total: number }>(
+      '/api/eponyme-collections/articles?orderBy=title&order=asc',
+    )
+    expect(sorted.entries.map(entry => entry.title)).toEqual(['Sort Alpha', 'Sort Bravo', 'Sort Charlie'])
+
+    const firstPage = await $fetch<{ entries: Array<{ title: string }>, total: number }>(
+      '/api/eponyme-collections/articles?orderBy=title&order=asc&take=1',
+    )
+    expect(firstPage.entries.map(entry => entry.title)).toEqual(['Sort Alpha'])
+    // `total` ignores `take`, so a pager can be built from it.
+    expect(firstPage.total).toBe(sorted.total)
+
+    const secondPage = await $fetch<{ entries: Array<{ title: string }> }>(
+      '/api/eponyme-collections/articles?orderBy=title&order=asc&take=1&skip=1',
+    )
+    expect(secondPage.entries.map(entry => entry.title)).toEqual(['Sort Bravo'])
+
+    // A typo in the sort key is reported instead of silently returning any order.
+    await expect($fetch('/api/eponyme-collections/articles?orderBy=nope')).rejects.toMatchObject({ statusCode: 400 })
+
+    for (const title of ['Sort Charlie', 'Sort Alpha', 'Sort Bravo']) {
+      const slug = title.toLowerCase().replace(/ /g, '-')
+      await $fetch(`/api/eponyme-collections/articles/${slug}`, { method: 'DELETE', ...authenticated() })
+    }
   })
 
   it('previews collection entry drafts and history versions on the public route', async () => {

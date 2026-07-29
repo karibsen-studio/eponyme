@@ -5,6 +5,8 @@ import StarterKit from '@tiptap/starter-kit'
 import { EditorContent, useEditor } from '@tiptap/vue-3'
 import { computed, ref, watch } from 'vue'
 import EPFormField from '../ui/EPFormField.vue'
+import EPDropdownMenu from '../ui/EPDropdownMenu.vue'
+import { useEponymeVariables } from '../../composables/useEponymeVariables'
 
 const props = withDefaults(defineProps<{
   id: string
@@ -107,6 +109,19 @@ interface Tool {
   separated?: boolean
 }
 
+const variables = useEponymeVariables()
+// The preview shows what the variable resolves to today, so an editor can tell
+// `currentYear` from `nextYear` without leaving the page.
+const variableItems = computed(() => variables.map(variable => ({
+  label: variable.preview ? `${variable.label} — ${variable.preview}` : variable.label,
+  value: variable.name,
+})))
+
+/** Inserts the source form; the value is resolved when the page is served. */
+function insertVariable(name: string) {
+  editor.value?.chain().focus().insertContent(`{{ ${name} }}`).run()
+}
+
 const tools = computed<Tool[]>(() => {
   const instance = editor.value
   if (!instance) return []
@@ -172,6 +187,27 @@ const tools = computed<Tool[]>(() => {
             />
           </button>
         </template>
+        <EPDropdownMenu
+          v-if="variables.length"
+          :items="variableItems"
+          @select="insertVariable"
+        >
+          <template #trigger>
+            <button
+              type="button"
+              class="rich-text-tool"
+              :disabled="disabled"
+              title="Insert a variable"
+              aria-label="Insert a variable"
+            >
+              <Icon
+                name="mingcute:code-line"
+                size="18"
+                aria-hidden="true"
+              />
+            </button>
+          </template>
+        </EPDropdownMenu>
       </div>
       <EditorContent
         v-if="editor"

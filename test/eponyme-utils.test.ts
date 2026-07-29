@@ -7,6 +7,7 @@ import { collection } from '../src/config/collection'
 import { form } from '../src/config/form'
 import { field } from '../src/runtime/fields'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas, isEponymeForm, isEponymeSchema } from '../src/runtime/utils/get-eponyme-schemas'
+import { interpolateEponymeText, interpolateEponymeValue, resolveEponymeVariables, summariseEponymeVariables } from '../src/runtime/utils/variables'
 import { applyPreviewSlug, readPreviewQuery, readPreviewVersion, resolvePreviewPath } from '../src/runtime/utils/preview'
 
 describe('humanizeLabel', () => {
@@ -226,5 +227,76 @@ describe('form discovery', () => {
     expect(isEponymeSchema(config.contact)).toBe(false)
     expect(isEponymeForm(config.contact)).toBe(true)
     expect(isEponymeForm(config.articles)).toBe(false)
+  })
+})
+
+describe('content variables', () => {
+  const at = new Date('2026-07-29T10:00:00Z')
+
+  it('resolves the built-in date variables', () => {
+    const resolved = resolveEponymeVariables({}, at)
+    expect(resolved.currentYear).toBe('2026')
+    expect(resolved.nextYear).toBe('2027')
+    expect(resolved.previousYear).toBe('2025')
+    expect(resolved.currentDate).toBe('2026-07-29')
+  })
+
+  it('lets the host application add and override variables', () => {
+    const resolved = resolveEponymeVariables({
+      clubName: 'AS Chelles',
+      season: { label: 'Season', value: () => '2026-2027' },
+      currentYear: 'overridden',
+    }, at)
+    expect(resolved.clubName).toBe('AS Chelles')
+    expect(resolved.season).toBe('2026-2027')
+    expect(resolved.currentYear).toBe('overridden')
+  })
+
+  it('survives a variable that throws', () => {
+    const broken = () => {
+      throw new Error('nope')
+    }
+    const resolved = resolveEponymeVariables({ broken }, at)
+    expect(resolved.broken).toBe('')
+    // A single broken variable must not take the rest of the page with it.
+    expect(resolved.currentYear).toBe('2026')
+  })
+
+  it('replaces variables in text and tolerates spacing', () => {
+    const vars = resolveEponymeVariables({}, at)
+    expect(interpolateEponymeText('saison {{ nextYear }}', vars)).toBe('saison 2027')
+    expect(interpolateEponymeText('{{currentYear}} et {{  currentYear  }}', vars)).toBe('2026 et 2026')
+  })
+
+  it('leaves an unknown name in place instead of blanking it', () => {
+    // A typo has to be visible on the page rather than silently deleting text.
+    expect(interpolateEponymeText('a {{ nope }} b', resolveEponymeVariables({}, at))).toBe('a {{ nope }} b')
+  })
+
+  it('never evaluates an expression', () => {
+    const vars = resolveEponymeVariables({}, at)
+    const dangerous = '{{ new Date().getFullYear() }} {{ process.exit(1) }}'
+    expect(interpolateEponymeText(dangerous, vars)).toBe(dangerous)
+  })
+
+  it('walks nested objects and arrays', () => {
+    const vars = resolveEponymeVariables({}, at)
+    expect(interpolateEponymeValue({
+      title: 'Saison {{ nextYear }}',
+      count: 3,
+      enabled: true,
+      items: [{ body: '<p>{{ currentYear }}</p>' }],
+    }, vars)).toEqual({
+      title: 'Saison 2027',
+      count: 3,
+      enabled: true,
+      items: [{ body: '<p>2026</p>' }],
+    })
+  })
+
+  it('summarises variables for the editor menu', () => {
+    const summary = summariseEponymeVariables({ clubName: { label: 'Club', value: 'AS Chelles' } })
+    expect(summary.find(entry => entry.name === 'clubName')).toMatchObject({ label: 'Club', preview: 'AS Chelles' })
+    expect(summary.find(entry => entry.name === 'currentYear')?.label).toBe('Current year')
   })
 })

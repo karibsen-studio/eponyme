@@ -31,7 +31,7 @@ const previewPaths = (runtimeConfig.public.eponyme as { previewPaths?: Record<st
 const collectionNames = Object.keys(getEponymeCollections(useEponymeConfig()))
 const previewPath = computed(() => resolvePreviewPath(previewPaths, collectionNames, props.name))
 const auth = useEponymeAuth()
-const { data: eponymeData, errors: serverErrors, pending, status, publishedAt, refresh, save: persist } = useEponyme(props.name as never, { version: 'draft' })
+const { data: eponymeData, errors: serverErrors, pending, status, publishedAt, refresh, save: persist } = useEponyme(props.name as never, { version: 'draft', raw: true })
 const data = ref<Record<string, unknown>>({})
 const savedData = ref<Record<string, unknown>>({})
 // Same rules as the server, run locally while typing, keyed by field path.

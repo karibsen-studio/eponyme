@@ -259,6 +259,59 @@ describe('EponymeService', () => {
     expect(afterRestore![0]).toMatchObject({ action: 'restore', user: { username: 'Bob' } })
   })
 
+  it('sorts, limits and counts collection entries', async () => {
+    const { client } = createClient()
+    const service = new EponymeService(config, client)
+
+    for (const [title, summary] of [['Charlie', 'c'], ['alpha', 'a'], ['Bravo', 'b'], ['Delta', 'd']] as const) {
+      await service.createCollectionEntry('articles', { title, slug: title.toLowerCase(), summary })
+      await service.patch(`articles/${title.toLowerCase()}`, {}, 'publish')
+    }
+    // Left as a draft, so it must be absent from the public list and from `total`.
+    await service.createCollectionEntry('articles', { title: 'Echo', slug: 'echo', summary: 'e' })
+
+    const byTitle = await service.listCollection('articles', 'published', { orderBy: 'title', order: 'asc' })
+    // Case-insensitive ordering, so `alpha` is not pushed behind the capitalised titles.
+    expect(byTitle?.entries.map(entry => entry.title)).toEqual(['alpha', 'Bravo', 'Charlie', 'Delta'])
+    expect(byTitle?.total).toBe(4)
+
+    const descending = await service.listCollection('articles', 'published', { orderBy: 'title', order: 'desc' })
+    expect(descending?.entries.map(entry => entry.title)).toEqual(['Delta', 'Charlie', 'Bravo', 'alpha'])
+
+    // Sorting on a schema field, not just on the entry metadata.
+    const bySummary = await service.listCollection('articles', 'published', { orderBy: 'summary', order: 'asc' })
+    expect(bySummary?.entries.map(entry => entry.data.summary)).toEqual(['a', 'b', 'c', 'd'])
+
+    const limited = await service.listCollection('articles', 'published', { orderBy: 'title', order: 'asc', take: 2 })
+    expect(limited?.entries.map(entry => entry.title)).toEqual(['alpha', 'Bravo'])
+    // `total` counts every match, so it can drive a pager.
+    expect(limited?.total).toBe(4)
+
+    const page2 = await service.listCollection('articles', 'published', { orderBy: 'title', order: 'asc', take: 2, skip: 2 })
+    expect(page2?.entries.map(entry => entry.title)).toEqual(['Charlie', 'Delta'])
+
+    const drafts = await service.listCollection('articles', 'draft', { orderBy: 'title', order: 'asc' })
+    expect(drafts?.total).toBe(5)
+
+    expect(service.collectionSortKeys('articles')).toEqual(['updatedAt', 'publishedAt', 'title', 'slug', 'summary'])
+    expect(service.collectionSortKeys('unknown')).toBeUndefined()
+  })
+
+  it('pushes entries without a sort value to the end', async () => {
+    const { client } = createClient()
+    const service = new EponymeService(config, client)
+    for (const [slug, summary] of [['with', 'zzz'], ['without', '']] as const) {
+      await service.createCollectionEntry('articles', { title: slug, slug, summary })
+      await service.patch(`articles/${slug}`, {}, 'publish')
+    }
+
+    // Empty values sink in both directions, so a blank summary never leads.
+    for (const order of ['asc', 'desc'] as const) {
+      const page = await service.listCollection('articles', 'published', { orderBy: 'summary', order })
+      expect(page?.entries.map(entry => entry.slug)).toEqual(['with', 'without'])
+    }
+  })
+
   it('keeps validation failures and unknown entries intact', async () => {
     const { client } = createClient()
     const service = new EponymeService(config, client)
@@ -286,16 +339,18 @@ describe('EponymeService', () => {
     await expect(service.createCollectionEntry('articles', { title: 'Duplicate', slug: 'lete-a-paris' })).resolves.toEqual({
       errors: { slug: ['This slug is already in use.'] },
     })
-    await expect(service.listCollection('articles', 'draft')).resolves.toMatchObject([
-      { slug: 'lete-a-paris', title: 'L’été à Paris', status: 'draft' },
-    ])
+    await expect(service.listCollection('articles', 'draft')).resolves.toMatchObject({
+      entries: [{ slug: 'lete-a-paris', title: 'L’été à Paris', status: 'draft' }],
+      total: 1,
+    })
     await expect(service.get('articles/lete-a-paris')).resolves.toBeUndefined()
     await expect(service.patch('articles/lete-a-paris', {}, 'publish')).resolves.toMatchObject({ status: 'published' })
     await expect(service.get('articles/lete-a-paris')).resolves.toMatchObject({ title: 'L’été à Paris' })
     await service.patch('articles/lete-a-paris', { title: 'Private rewrite' }, 'draft')
-    await expect(service.listCollection('articles')).resolves.toMatchObject([
-      { slug: 'lete-a-paris', title: 'L’été à Paris', data: { title: 'L’été à Paris' }, status: 'published' },
-    ])
+    await expect(service.listCollection('articles')).resolves.toMatchObject({
+      entries: [{ slug: 'lete-a-paris', title: 'L’été à Paris', data: { title: 'L’été à Paris' }, status: 'published' }],
+      total: 1,
+    })
     const findMany = vi.spyOn(client.eponyme, 'findMany')
     const sitemap = await service.getSitemapEntries({
       homepage: '/',

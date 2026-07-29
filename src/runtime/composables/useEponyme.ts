@@ -17,6 +17,8 @@ type EponymeResponse<Name extends ConfigEponymeName> = {
 
 export interface UseEponymeOptions {
   version?: EponymeVersionSelector
+  /** Keep `{{ variables }}` unresolved. The dashboard editor needs the source text. */
+  raw?: boolean
 }
 
 /** Read and save a configured eponyme through the public or draft API. */
@@ -29,8 +31,8 @@ export function useEponyme<const Name extends ConfigEponymeName>(name: Name, opt
   const saving = ref(false)
   const requestFetch = useRequestFetch()
   const { data: response, pending: loading, error, refresh: load } = useAsyncData(
-    `eponyme:${name}:${version}`,
-    () => requestFetch<EponymeResponse<Name>>(`/api/eponyme/${name}`, { query: { version }, cache: 'no-store' }),
+    `eponyme:${name}:${version}${options.raw ? ':raw' : ''}`,
+    () => requestFetch<EponymeResponse<Name>>(`/api/eponyme/${name}`, { query: { version, raw: options.raw ? 1 : undefined }, cache: 'no-store' }),
     { getCachedData: () => undefined },
   )
   const data = computed(() => response.value?.data)
@@ -61,7 +63,7 @@ export function useEponyme<const Name extends ConfigEponymeName>(name: Name, opt
         const slug = parts.pop()
         const collectionName = parts.join('/')
         if (collectionName && slug) {
-          clearNuxtData(`eponyme:collection:public:${collectionName}`)
+          clearNuxtData(key => key.startsWith(`eponyme:collection:public:${collectionName}`))
           clearNuxtData(key => key.startsWith(`eponyme:collection-entry:${collectionName}:${slug}:`))
         }
       }

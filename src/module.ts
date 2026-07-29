@@ -81,6 +81,7 @@ export default defineNuxtModule<ModuleOptions>({
           'mingcute:align-arrow-right-line',
           'mingcute:link-2-line',
           'mingcute:settings-3-line',
+          'mingcute:code-line',
           'mingcute:refresh-2-line',
           'mingcute:external-link-line',
           'mingcute:paragraph-line',
@@ -110,14 +111,25 @@ export default defineNuxtModule<ModuleOptions>({
       return
     }
 
-    const prismaPath = await findPath(resolve(nuxt.options.rootDir, options.prismaClient))
-    if (!prismaPath)
-      throw new Error(`${pc.red('[Eponyme]')} Prisma client module not found: ${options.prismaClient}`)
+    // Each alias keeps the meaning Nuxt gives it. The distinction matters: in Nuxt 4
+    // `~/` is `app/`, so a server module is reached with `~~/server/…`, not `~/server/…`.
+    const prismaSpecifier = options.prismaClient
+      .replace(/^[~@]{2}\//, `${nuxt.options.rootDir}/`)
+      .replace(/^[~@]\//, `${nuxt.options.srcDir}/`)
+    const prismaPath = await findPath(resolve(nuxt.options.rootDir, prismaSpecifier))
+    if (!prismaPath) {
+      throw new Error(
+        `${pc.red('[Eponyme]')} Prisma client module not found: ${options.prismaClient}\n`
+        + `Expected a module exporting a PrismaClient as its default export, for example '~~/server/utils/prisma'.\n`
+        + `Note that '~/' points at ${nuxt.options.srcDir}, so a server module needs '~~/'.`,
+      )
+    }
 
     addImports([
       { name: 'defineEponymeConfig', from: resolver.resolve('./config/config') },
       { name: 'collection', from: resolver.resolve('./config/collection') },
       { name: 'form', from: resolver.resolve('./config/form') },
+      { name: 'defineEponymeVariables', from: resolver.resolve('./config/variables') },
       { name: 'field', from: resolver.resolve('./runtime/fields') },
       { name: 'today', from: resolver.resolve('./runtime/fields') },
     ])
@@ -142,6 +154,15 @@ export default defineNuxtModule<ModuleOptions>({
     // `currentRenderingInstance` is always null during SSR — the dashboard then
     // crashes in production builds only. Transpiling keeps one copy of Vue.
     nuxt.options.build.transpile.push('reka-ui')
+    // `slugify` and `sortablejs` are CommonJS-only. Vite pre-bundles dependencies it
+    // discovers in the host's own node_modules, but not those reached through this
+    // module, so their default export goes missing in dev unless they are declared.
+    nuxt.options.vite.optimizeDeps ??= {}
+    nuxt.options.vite.optimizeDeps.include = [
+      ...(nuxt.options.vite.optimizeDeps.include ?? []),
+      'slugify',
+      'sortablejs',
+    ]
     nuxt.options.css.push(resolver.resolve('./runtime/assets/dashboard.css'))
     nuxt.hook('vite:extendConfig', (viteConfig) => {
       const plugins = viteConfig.plugins as unknown as Array<unknown> | undefined
@@ -158,9 +179,15 @@ export default defineNuxtModule<ModuleOptions>({
     nuxt.options.alias['#eponyme/config'] = configPath
     nuxt.options.alias['#eponyme/prisma'] = prismaPath
 
+    // Optional, and aliased rather than read here: variables may be functions, which
+    // runtimeConfig cannot carry across the serialization boundary.
+    const variablesPath = await findPath(resolve(nuxt.options.rootDir, 'eponyme.variables.ts'))
+    nuxt.options.alias['#eponyme/variables'] = variablesPath ?? resolver.resolve('./runtime/utils/empty-variables')
+
     addTypeTemplate({
       filename: 'types/eponyme-config.d.ts',
-      getContents: () => `declare module '#eponyme/config' {\n  const config: typeof import(${JSON.stringify(configPath)})['default']\n  export default config\n}\n`,
+      getContents: () => `declare module '#eponyme/config' {\n  const config: typeof import(${JSON.stringify(configPath)})['default']\n  export default config\n}\n`
+        + `declare module '#eponyme/variables' {\n  const variables: typeof import(${JSON.stringify(nuxt.options.alias['#eponyme/variables'])})['default']\n  export default variables\n}\n`,
     })
 
     addServerHandler({ route: '/api/eponyme/**', handler: resolver.resolve('./runtime/server/api/eponyme/[name].get') })
@@ -186,12 +213,14 @@ export default defineNuxtModule<ModuleOptions>({
     addServerPlugin(resolver.resolve('./runtime/server/plugins/eponyme-sync'))
 
     nuxt.hook('pages:extend', (pages) => {
+      // `layout: false` is what keeps the host application's default layout — its
+      // header, footer and navigation — out of the dashboard.
       pages.push(
-        { name: 'eponyme-login', path: `${dashboardPath}/login`, file: resolver.resolve('./runtime/pages/EponymeLoginPage.vue') },
-        { name: 'eponyme-change-password', path: `${dashboardPath}/change-password`, file: resolver.resolve('./runtime/pages/EponymeChangePasswordPage.vue'), meta: { middleware: ['eponyme-auth'] } },
-        { name: 'eponyme-users', path: `${dashboardPath}/users`, file: resolver.resolve('./runtime/pages/EponymeUsersPage.vue'), meta: { middleware: ['eponyme-auth', 'eponyme-owner'] } },
-        { name: 'eponyme-index', path: dashboardPath, file: resolver.resolve('./runtime/pages/EponymeIndexPage.vue'), meta: { middleware: ['eponyme-auth'] } },
-        { name: 'eponyme-detail', path: `${dashboardPath}/:eponyme(.*)*`, file: resolver.resolve('./runtime/pages/EponymeDetailPage.vue'), meta: { middleware: ['eponyme-auth'] } },
+        { name: 'eponyme-login', path: `${dashboardPath}/login`, file: resolver.resolve('./runtime/pages/EponymeLoginPage.vue'), meta: { layout: false } },
+        { name: 'eponyme-change-password', path: `${dashboardPath}/change-password`, file: resolver.resolve('./runtime/pages/EponymeChangePasswordPage.vue'), meta: { layout: false, middleware: ['eponyme-auth'] } },
+        { name: 'eponyme-users', path: `${dashboardPath}/users`, file: resolver.resolve('./runtime/pages/EponymeUsersPage.vue'), meta: { layout: false, middleware: ['eponyme-auth', 'eponyme-owner'] } },
+        { name: 'eponyme-index', path: dashboardPath, file: resolver.resolve('./runtime/pages/EponymeIndexPage.vue'), meta: { layout: false, middleware: ['eponyme-auth'] } },
+        { name: 'eponyme-detail', path: `${dashboardPath}/:eponyme(.*)*`, file: resolver.resolve('./runtime/pages/EponymeDetailPage.vue'), meta: { layout: false, middleware: ['eponyme-auth'] } },
       )
     })
 

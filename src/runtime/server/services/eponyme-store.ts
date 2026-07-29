@@ -46,6 +46,23 @@ export interface EponymeSitemapEntry {
   lastmod?: string
 }
 
+export type EponymeSortDirection = 'asc' | 'desc'
+
+export interface EponymeCollectionQuery {
+  take?: number
+  skip?: number
+  orderBy?: string
+  order?: EponymeSortDirection
+}
+
+export interface EponymeCollectionPage<Data extends Record<string, unknown> = Record<string, unknown>> {
+  entries: EponymeCollectionEntry<Data>[]
+  /** Matching entries before `take` and `skip`, so it can drive a pager. */
+  total: number
+}
+
+export const COLLECTION_METADATA_KEYS = ['updatedAt', 'publishedAt', 'title', 'slug'] as const
+
 export type PrismaEponymeRow = { name: string, data: unknown, updatedAt?: Date | string }
 export type PrismaEponymeVersionRow = {
   id: number
@@ -231,7 +248,20 @@ export class EponymeService {
     return Object.fromEntries(entries)
   }
 
-  async listCollection(name: string, version: EponymeVersion = 'published'): Promise<EponymeCollectionEntry[] | undefined> {
+  /** Metadata keys that can be sorted on, alongside every field of the collection. */
+  collectionSortKeys(name: string): string[] | undefined {
+    const definition = this.collections[name]
+    if (!definition) return undefined
+    // A field named `title` or `slug` collides with the metadata key of the same
+    // name; both resolve to the same value, so one entry is enough.
+    return [...new Set([...COLLECTION_METADATA_KEYS, ...Object.keys(definition.fields)])]
+  }
+
+  async listCollection(
+    name: string,
+    version: EponymeVersion = 'published',
+    query: EponymeCollectionQuery = {},
+  ): Promise<EponymeCollectionPage | undefined> {
     const definition = this.collections[name]
     if (!definition) return undefined
     const rows = await this.client.eponyme.findMany({
@@ -253,7 +283,19 @@ export class EponymeService {
         updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : null,
       }
     }))
-    return version === 'draft' ? entries : entries.filter(entry => entry.publishedAt)
+
+    // Sorting and slicing happen here rather than in SQL: the publication status
+    // lives inside the JSONB envelope, so a database-side `take` would count rows
+    // that are filtered out a moment later.
+    const visible = version === 'draft' ? entries : entries.filter(entry => entry.publishedAt)
+    const sorted = query.orderBy ? sortCollectionEntries(visible, query.orderBy, query.order ?? 'desc') : visible
+    const skip = Math.max(0, Math.trunc(query.skip ?? 0) || 0)
+    const take = query.take === undefined ? undefined : Math.max(0, Math.trunc(query.take) || 0)
+
+    return {
+      entries: take === undefined ? sorted.slice(skip) : sorted.slice(skip, skip + take),
+      total: sorted.length,
+    }
   }
 
   /**
@@ -475,6 +517,44 @@ export function isPrismaError(error: unknown, code: string) {
 
 function sameData(left: unknown, right: unknown) {
   return isDeepStrictEqual(left, right)
+}
+
+function sortValue(entry: EponymeCollectionEntry, key: string): unknown {
+  if ((COLLECTION_METADATA_KEYS as readonly string[]).includes(key))
+    return entry[key as typeof COLLECTION_METADATA_KEYS[number]]
+  return entry.data[key]
+}
+
+/** True for values that carry no ordering information and belong at the end. */
+function isEmptyValue(value: unknown): boolean {
+  return value === undefined || value === null || value === ''
+}
+
+function sortCollectionEntries(
+  entries: EponymeCollectionEntry[],
+  key: string,
+  direction: EponymeSortDirection,
+): EponymeCollectionEntry[] {
+  const factor = direction === 'asc' ? 1 : -1
+  return [...entries].sort((left, right) => {
+    const a = sortValue(left, key)
+    const b = sortValue(right, key)
+
+    // Missing values sink to the bottom in both directions, so an article with no
+    // date never leads the list just because it sorts as an empty string.
+    if (isEmptyValue(a) || isEmptyValue(b)) {
+      if (isEmptyValue(a) && isEmptyValue(b)) return left.slug.localeCompare(right.slug)
+      return isEmptyValue(a) ? 1 : -1
+    }
+
+    if (typeof a === 'number' && typeof b === 'number')
+      return (a - b) * factor || left.slug.localeCompare(right.slug)
+    if (typeof a === 'boolean' && typeof b === 'boolean')
+      return (Number(a) - Number(b)) * factor || left.slug.localeCompare(right.slug)
+
+    return String(a).localeCompare(String(b), undefined, { numeric: true }) * factor
+      || left.slug.localeCompare(right.slug)
+  })
 }
 
 function withLastmod(loc: string, publishedAt: string | null): EponymeSitemapEntry {

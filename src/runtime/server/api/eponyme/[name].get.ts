@@ -1,6 +1,7 @@
 import { createError, defineEventHandler, getQuery, getRequestURL, setResponseHeader } from 'h3'
 import { useEponymeService } from '../../services/eponyme-service'
 import { requireEponymeUser } from '../../utils/auth'
+import { interpolateEponymeContent } from '../../utils/eponyme-variables'
 import type { EponymeVersionSelector } from '../../services/eponyme-store'
 
 /** `draft`, `published`, or a numeric version id taken from the history. */
@@ -22,5 +23,8 @@ export default defineEventHandler(async (event) => {
   }
   const result = name ? await useEponymeService().getResult(name, version) : undefined
   if (!result) throw createError({ statusCode: 404, statusMessage: 'Eponyme entry not found.' })
-  return requestedVersion ? result : { data: result.data }
+  // `raw=1` is what the dashboard editor asks for: it must show `{{ currentYear }}`
+  // so the variable stays editable instead of being replaced by its value.
+  const data = getQuery(event).raw ? result.data : interpolateEponymeContent(result.data)
+  return requestedVersion ? { ...result, data } : { data }
 })

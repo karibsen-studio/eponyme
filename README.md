@@ -46,7 +46,7 @@ Add it to `nuxt.config.ts`:
 export default defineNuxtConfig({
   modules: ['@karibsen/eponyme'],
   eponyme: {
-    prismaClient: '~/server/utils/prisma',
+    prismaClient: '~~/server/utils/prisma',
     dashboardPath: '/__eponyme',
     previewPaths: {
       homepage: '/',
@@ -153,7 +153,10 @@ field.string({
 
 Eponyme uses the Prisma client owned by your application. It does not create the connection or run migrations.
 
-Export an initialized client from the path configured in `nuxt.config.ts`:
+Export an initialized client from the path configured in `nuxt.config.ts`. Note the
+double tilde: `~~/` points at the project root, where `server/` lives, while `~/` points
+at the source directory (`app/` in Nuxt 4). A relative path such as
+`./server/utils/prisma` works too.
 
 ```ts
 // server/utils/prisma.ts
@@ -312,6 +315,37 @@ GET /api/eponyme-collections/articles
 
 It returns published entries by default. Pass `version=draft` from an authenticated request to read dashboard content.
 
+### Sorting and limiting
+
+Collections accept `take`, `skip`, `orderBy` and `order`:
+
+```ts
+const { entries, total } = useEponymeCollection('articles', {
+  orderBy: 'date',
+  order: 'desc',
+  take: 4,
+})
+```
+
+`orderBy` accepts the `updatedAt`, `publishedAt`, `title` and `slug` metadata as well
+as **any field of the collection**, which is what lets articles be ordered by their own
+date rather than by when they were last edited. The key is typed from the schema, so a
+misspelled field fails to compile.
+
+`total` counts every matching entry *before* `take` and `skip`, so it can drive a pager.
+Sorting runs after unpublished entries are filtered out, meaning a limit never spends a
+slot on an entry that would have been dropped. Entries with a missing or empty value sort
+last in both directions. The default order remains `updatedAt` descending.
+
+The same options work over HTTP, where the response is `{ entries, total }`:
+
+```http
+GET /api/eponyme-collections/articles?orderBy=date&order=desc&take=4
+```
+
+`take` is capped at 200, and an unknown `orderBy` answers `400` with the accepted keys
+rather than returning an arbitrary order.
+
 ## Entries
 
 `useEponyme()` is auto-imported and infers its data from `eponyme.config.ts`:
@@ -345,6 +379,40 @@ The dashboard uses explicit saves. `Ctrl+S` or `Cmd+S` stores a draft. Publish r
 
 The `errors` ref contains field errors returned with HTTP `422`. Eponyme creates missing singleton rows from configured defaults. It also reconciles stored JSONB data when fields are added or removed from the schema.
 
+## Content variables
+
+Editors can drop `{{ currentYear }}` into any text or rich-text field. Variables are
+resolved when the page is served, so a year stays current without anyone re-saving the
+content.
+
+The built-ins cover dates: `currentYear`, `nextYear`, `previousYear`, `currentMonth`,
+`currentDay`, `today` and `currentDate`.
+
+Add your own in `eponyme.variables.ts` at the project root:
+
+```ts
+export default defineEponymeVariables({
+  clubName: 'AS Chelles Athlétisme',
+  season: {
+    label: 'Season',
+    description: 'The season spanning two calendar years.',
+    value: () => `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`,
+  },
+})
+```
+
+A plain value is fixed; a function is called on every read. Declaring a name that
+matches a built-in overrides it. The rich text editor lists every variable behind a
+toolbar button, with a preview of what it currently resolves to.
+
+**Names only, never expressions.** `{{ currentYear }}` works, `{{ new Date().getFullYear() }}`
+is left as-is. Content comes from the database and is editable from the dashboard, so
+evaluating it would grant arbitrary code execution on the server. An unknown name is also
+left untouched, so a typo is visible on the page instead of silently deleting text.
+
+The dashboard reads content with `?raw=1` and therefore shows the source form, keeping
+variables editable. Public reads receive the resolved values.
+
 ## Preview
 
 Map a configured entry to its public route:
@@ -352,7 +420,7 @@ Map a configured entry to its public route:
 ```ts
 export default defineNuxtConfig({
   eponyme: {
-    prismaClient: '~/server/utils/prisma',
+    prismaClient: '~~/server/utils/prisma',
     previewPaths: {
       'homepage': '/',
       'pages/contact': '/contact',
@@ -391,7 +459,7 @@ Singleton entries use their exact `previewPaths` value. Collections use a dynami
 ```ts
 export default defineNuxtConfig({
   eponyme: {
-    prismaClient: '~/server/utils/prisma',
+    prismaClient: '~~/server/utils/prisma',
     previewPaths: {
       homepage: '/',
       articles: '/articles/:slug',

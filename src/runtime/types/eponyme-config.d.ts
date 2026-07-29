@@ -9,3 +9,10 @@ declare module '#eponyme/prisma' {
   const prisma: unknown
   export default prisma
 }
+
+declare module '#eponyme/variables' {
+  import type { EponymeVariables } from './variables'
+
+  const variables: EponymeVariables
+  export default variables
+}

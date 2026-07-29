@@ -28,7 +28,7 @@ const auth = useEponymeAuth()
 
 const { data: response, pending, refresh } = useAsyncData(
   `eponyme:collection:${props.name}`,
-  () => requestFetch<{ entries: EponymeCollectionEntry[] }>(endpoint.value, { query: { version: 'draft' } }),
+  () => requestFetch<{ entries: EponymeCollectionEntry[] }>(endpoint.value, { query: { version: 'draft', raw: 1 } }),
 )
 const entries = computed(() => response.value?.entries ?? [])
 const label = computed(() => props.definition.label || humanize(props.name.split('/').at(-1) || props.name))

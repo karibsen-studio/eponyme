@@ -1,6 +1,7 @@
 export { defineEponymeConfig } from './config/config'
 export { collection } from './config/collection'
 export { form } from './config/form'
+export { defineEponymeVariables } from './config/variables'
 export { field, today } from './runtime/fields'
 export { EPONYME_ROLES, canEditEponyme, isEponymeRole } from './runtime/types/auth'
 
@@ -73,6 +74,10 @@ export type {
   EponymeFormMode,
   EponymeFormName,
   EponymeFormDataByName,
+  EponymeVariables,
+  EponymeVariableValue,
+  EponymeVariableDefinition,
+  EponymeVariableSummary,
   EponymeSchema,
   EponymeData,
   EponymeDataByName,

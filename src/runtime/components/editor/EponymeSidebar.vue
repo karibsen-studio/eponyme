@@ -43,7 +43,7 @@ onMounted(async () => {
   await restoreNavigationScroll()
   const [statusResponse, ...collectionResponses] = await Promise.all([
     requestFetch<{ statuses: Record<string, EponymeStatus> }>('/api/eponyme-statuses'),
-    ...Object.keys(collections).map(name => requestFetch<{ entries: EponymeCollectionEntry[] }>(`/api/eponyme-collections/${name}`, { query: { version: 'draft' } })),
+    ...Object.keys(collections).map(name => requestFetch<{ entries: EponymeCollectionEntry[] }>(`/api/eponyme-collections/${name}`, { query: { version: 'draft', raw: 1 } })),
   ])
   statuses.value = { ...statusResponse.statuses }
   collectionEntries.value = Object.fromEntries(Object.keys(collections).map((name, index) => [name, collectionResponses[index]?.entries ?? []]))
