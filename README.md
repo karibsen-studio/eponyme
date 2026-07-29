@@ -21,6 +21,7 @@ Define your content in `eponyme.config.ts`. Eponyme provides defaults, validatio
 - Persistent version history with dashboard restoration
 - Draft previews for configured public routes
 - A general sitemap metadata endpoint for configured public routes
+- Content export and import between environments, guarded by a schema fingerprint
 - A generated dashboard at `/__eponyme`
 - Server sessions with `owner`, `editor`, and `viewer` roles
 - PostgreSQL and Prisma persistence using JSONB
@@ -406,6 +407,33 @@ await save(data.value, 'publish')
 The dashboard uses explicit saves. `Ctrl+S` or `Cmd+S` stores a draft. Publish replaces the public version.
 
 The `errors` ref contains field errors returned with HTTP `422`. Eponyme creates missing singleton rows from configured defaults. It also reconciles stored JSONB data when fields are added or removed from the schema.
+
+### Export and import
+
+The dashboard overview at `/__eponyme` carries **Export** and **Import**, so content
+prepared on one environment can be moved to another instead of being retyped.
+
+Export downloads a JSON file holding every singleton and every live collection entry
+with its complete state — draft, published version, status and publication date — plus a
+fingerprint of the schema each entry was written against. The trash, form submissions and
+users are never part of it.
+
+Import applies that file on top of the current content: each entry it carries overwrites
+its counterpart, entries it does not mention are left untouched, and nothing is ever
+deleted. Before the first write, the fingerprints are compared with the local
+configuration; a single divergence refuses the whole file and names what diverged, so an
+import can never land half of its entries into a schema that no longer matches. The
+dashboard first runs the import as a dry run and shows what it would create, overwrite
+and skip. An entry whose slug waits in the trash is skipped rather than resurrected.
+
+Every imported entry is written to the version history, so an import stays reversible
+entry by entry from the timeline.
+
+```http
+GET  /api/eponyme-export             # editors and owners
+POST /api/eponyme-import             # owners only
+POST /api/eponyme-import?dryRun=1    # report the counts without writing
+```
 
 ## Content variables
 
