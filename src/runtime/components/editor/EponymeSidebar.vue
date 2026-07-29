@@ -3,11 +3,12 @@ import { navigateTo, useRequestFetch, useRoute, useState } from '#app'
 import { onKeyStroke } from '@vueuse/core'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { EponymeCollectionEntry, EponymeStatus } from '../../server/services/eponyme-store'
-import type { EponymeNavigationNode } from '../../types/eponyme-navigation'
 import EponymeNavigationLink from './EponymeNavigationLink.vue'
 import EponymeSidebarTree from './EponymeSidebarTree.vue'
 import { useEponymeConfig } from '../../composables/useEponymeConfig'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas } from '../../utils/get-eponyme-schemas'
+import { buildEponymeNavigationTree } from '../../utils/build-navigation-tree'
+import { filterEponymeNavigationTree } from '../../utils/filter-navigation-tree'
 import { useEponymeAuth } from '../../composables/useEponymeAuth'
 import EPAvatar from '../ui/EPAvatar.vue'
 import EPButton from '../ui/EPButton.vue'
@@ -62,6 +63,14 @@ onKeyStroke('k', (event) => {
   event.preventDefault()
   // EPInputText's root element is the input itself.
   searchInput.value?.$el?.focus()
+  // Pressing the shortcut again starts a new search rather than appending to the old one.
+  searchInput.value?.$el?.select()
+})
+
+onKeyStroke('Escape', () => {
+  if (!isFiltering.value) return
+  searchQuery.value = ''
+  searchInput.value?.$el?.blur()
 })
 
 const navigation = computed(() => {
@@ -96,46 +105,17 @@ const navigation = computed(() => {
 
   return items
 })
-const navigationTree = computed(() => {
-  const root: EponymeNavigationNode[] = []
-
-  function addPath(pathValue: string, finalKind: EponymeNavigationNode['kind'], configuredLabel?: string) {
-    const parts = pathValue.split('/')
-    let children = root
-
-    for (let index = 0; index < parts.length; index++) {
-      const part = parts[index]!
-      const path = parts.slice(0, index + 1).join('/')
-      const kind = index === parts.length - 1 ? finalKind : 'folder'
-      let node = children.find(item => item.path === path)
-      if (!node) {
-        node = { kind, path, label: index === parts.length - 1 && configuredLabel ? configuredLabel : label(part), children: [] }
-        children.push(node)
-      }
-      else if (index === parts.length - 1) {
-        node.kind = finalKind
-        if (configuredLabel) node.label = configuredLabel
-      }
-      children = node.children
-    }
-  }
-
-  for (const entry of Object.keys(getEponymeSchemas(config))) addPath(entry, 'entry')
-  for (const [name, definition] of Object.entries(collections)) {
-    addPath(name, 'collection', definition.label)
-    for (const entry of collectionEntries.value[name] ?? []) addPath(`${name}/${entry.slug}`, 'entry', entry.title)
-  }
-  for (const [name, definition] of Object.entries(forms)) addPath(name, 'form', definition.label)
-
-  return root
-})
+const navigationTree = computed(() => buildEponymeNavigationTree({
+  schemas: getEponymeSchemas(config),
+  collections,
+  forms,
+  collectionEntries: collectionEntries.value,
+}))
+const isFiltering = computed(() => searchQuery.value.trim().length > 0)
+const filteredTree = computed(() => filterEponymeNavigationTree(navigationTree.value, searchQuery.value))
 const openFolders = useState<string[]>(`eponyme:open-folders:${normalizedBasePath.value}`, () => (
   navigation.value.filter(item => item.kind === 'folder').map(item => item.path)
 ))
-
-function label(name: string) {
-  return name.replace(/[-_]/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
-}
 
 function entryPath(name: string) {
   return `${normalizedBasePath.value}/${name}`
@@ -225,14 +205,21 @@ watch(() => route.path, () => {
         Editables
       </div>
       <EponymeSidebarTree
-        :nodes="navigationTree"
+        :nodes="filteredTree"
         :base-path="normalizedBasePath"
         :current-path="route.path"
         :statuses="statuses"
         :open-folders="openFolders"
+        :force-open="isFiltering"
         :can-edit="auth.canEdit.value"
         @update:open-folders="openFolders = $event"
       />
+      <p
+        v-if="isFiltering && !filteredTree.length"
+        class="ep:m-0 ep:px-3 ep:py-2 ep:text-xs ep:text-muted-ep"
+      >
+        No match for “{{ searchQuery }}”.
+      </p>
     </nav>
     <div
       v-if="!collapsed && auth.user.value"

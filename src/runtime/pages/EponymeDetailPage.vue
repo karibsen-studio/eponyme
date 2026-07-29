@@ -42,7 +42,7 @@ if (!schemas[eponymeName.value] && !collection.value && !form.value && !collecti
 <template>
   <main class="eponyme-root ep:flex ep:min-h-screen ep:flex-col ep:bg-theme-ep ep:font-sans ep:text-text-ep ep:md:flex-row">
     <EponymeSidebar :base-path="indexPath" />
-    <div class="ep:w-full">
+    <div class="ep:w-full ep:min-w-0 ep:md:flex-1">
       <EponymeFolderPage
         v-if="isFolder"
         :base-path="indexPath"

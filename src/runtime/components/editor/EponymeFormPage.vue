@@ -10,6 +10,7 @@ import { useEponymeAuth } from '../../composables/useEponymeAuth'
 import EPBadge from '../ui/EPBadge.vue'
 import EPButton from '../ui/EPButton.vue'
 import EPDialog from '../ui/EPDialog.vue'
+import { EPONYME_DATE_LOCALE } from '../../utils/date-locale'
 
 const props = defineProps<{ name: string, definition: EponymeFormDefinitionBase }>()
 
@@ -45,7 +46,10 @@ const columns = computed<Array<ColumnDef<EponymeFormSubmission, string>>>(() => 
     {
       id: fieldName,
       header: humanizeLabel(fieldName, field.options.label),
-      cell: info => truncate(info.getValue()),
+      // Never empty: SSR emits nothing for an empty string while the client still
+      // builds a text node, which hydrates as a missing child. The dash also makes
+      // an unanswered optional field readable instead of looking like a broken cell.
+      cell: info => truncate(info.getValue()) || '—',
     },
   )),
   columnHelper.accessor(row => row.createdAt, {
@@ -88,7 +92,7 @@ function truncate(value: string, maxLength = 60) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+  return new Intl.DateTimeFormat(EPONYME_DATE_LOCALE, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 }
 
 async function clearAll() {
@@ -197,7 +201,7 @@ async function deleteSubmission(submission: EponymeFormSubmission) {
               </th>
               <th
                 scope="col"
-                class="ep:border-b ep:border-border-ep ep:p-3"
+                class="ep:relative ep:border-b ep:border-border-ep ep:p-3"
               >
                 <span class="ep:sr-only">Actions</span>
               </th>

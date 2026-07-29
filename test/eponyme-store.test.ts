@@ -18,22 +18,35 @@ function createClient(initial: Record<string, unknown> = {}) {
   ])
   // Mirrors Prisma's `@updatedAt`: a monotonic stamp per row, which the store uses as an optimistic lock.
   const stamps = new Map<string, Date>()
+  // The soft-delete column, kept beside the rows rather than inside their JSON payload.
+  const deletions = new Map<string, Date>()
   let clock = 0
   const touch = (name: string) => {
     const stamp = new Date(++clock)
     stamps.set(name, stamp)
     return stamp
   }
+  const read = (name: string) => ({
+    name,
+    data: rows.get(name)!,
+    updatedAt: stamps.get(name),
+    deletedAt: deletions.get(name) ?? null,
+  })
   const write = (name: string, data: Record<string, unknown>) => {
     rows.set(name, data)
-    return { name, data, updatedAt: touch(name) }
+    touch(name)
+    return read(name)
+  }
+  const matchesDeleted = (name: string, filter: null | { not: null } | undefined) => {
+    if (filter === undefined) return true
+    return filter === null ? !deletions.has(name) : deletions.has(name)
   }
   if (Object.keys(initial).length) write('homepage', initial)
   const client: PrismaEponymeClient = {
     eponyme: {
       async upsert({ where, create, update }) {
         const existing = rows.get(where.name)
-        if (existing && !update.data) return { name: where.name, data: existing, updatedAt: stamps.get(where.name) }
+        if (existing && !update.data) return read(where.name)
         return write(where.name, update.data ?? existing ?? create.data)
       },
       async update({ where, data }) {
@@ -43,7 +56,10 @@ function createClient(initial: Record<string, unknown> = {}) {
         const stamp = stamps.get(where.name)
         if (!rows.has(where.name)) return { count: 0 }
         if (where.updatedAt && new Date(where.updatedAt).getTime() !== stamp?.getTime()) return { count: 0 }
-        write(where.name, data.data)
+        if (!matchesDeleted(where.name, where.deletedAt)) return { count: 0 }
+        if (data.deletedAt === null) deletions.delete(where.name)
+        else if (data.deletedAt) deletions.set(where.name, data.deletedAt)
+        write(where.name, data.data ?? rows.get(where.name)!)
         return { count: 1 }
       },
       async create({ data }) {
@@ -51,19 +67,22 @@ function createClient(initial: Record<string, unknown> = {}) {
         return write(data.name, data.data)
       },
       async findUnique({ where }) {
-        const data = rows.get(where.name)
-        return data ? { name: where.name, data, updatedAt: stamps.get(where.name) } : null
+        return rows.has(where.name) ? read(where.name) : null
       },
       async findMany({ where }) {
-        return [...rows.entries()]
-          .filter(([name]) => name.startsWith(where.name.startsWith))
-          .map(([name, data]) => ({ name, data, updatedAt: stamps.get(name) }))
+        return [...rows.keys()]
+          .filter(name => name.startsWith(where.name.startsWith) && matchesDeleted(name, where.deletedAt))
+          .map(name => read(name))
       },
       async delete({ where }) {
         const data = rows.get(where.name)
         if (!data) throw Object.assign(new Error('Record to delete does not exist.'), { code: 'P2025' })
         rows.delete(where.name)
         stamps.delete(where.name)
+        deletions.delete(where.name)
+        // Mirrors `onDelete: Cascade` on EponymeVersion.entryName.
+        for (let index = versions.length - 1; index >= 0; index--)
+          if (versions[index]!.entryName === where.name) versions.splice(index, 1)
         return { name: where.name, data }
       },
     },
@@ -85,7 +104,7 @@ function createClient(initial: Record<string, unknown> = {}) {
       },
     },
   }
-  return { client, rows, versions }
+  return { client, rows, versions, deletions }
 }
 
 const config = defineEponymeConfig({
@@ -364,7 +383,62 @@ describe('EponymeService', () => {
     await expect(service.get('articles/does-not-exist', 'draft')).resolves.toBeUndefined()
     expect(rows.has('articles/does-not-exist')).toBe(false)
     await expect(service.deleteCollectionEntry('articles/lete-a-paris')).resolves.toBe(true)
+    // The row survives: deleting only moves the entry to the trash.
+    expect(rows.has('articles/lete-a-paris')).toBe(true)
+  })
+
+  it('trashes, restores and purges a collection entry', async () => {
+    const { client, rows, versions } = createClient()
+    const service = new EponymeService(config, client)
+
+    await service.createCollectionEntry('articles', { title: 'L’été à Paris' })
+    await service.patch('articles/lete-a-paris', {}, 'publish')
+    expect(versions.filter(version => version.entryName === 'articles/lete-a-paris')).toHaveLength(2)
+
+    await expect(service.deleteCollectionEntry('articles/lete-a-paris')).resolves.toBe(true)
+    // A trashed entry reads as missing everywhere a visitor or an editor could see it.
+    await expect(service.get('articles/lete-a-paris')).resolves.toBeUndefined()
+    await expect(service.get('articles/lete-a-paris', 'draft')).resolves.toBeUndefined()
+    await expect(service.listCollection('articles', 'draft')).resolves.toEqual({ entries: [], total: 0 })
+    await expect(service.getSitemapEntries({ articles: '/articles/:slug' })).resolves.toEqual([])
+    await expect(service.patch('articles/lete-a-paris', { title: 'Nope' })).resolves.toBeUndefined()
+    await expect(service.listCollectionTrash('articles')).resolves.toMatchObject({
+      entries: [{ slug: 'lete-a-paris', title: 'L’été à Paris', deletedAt: expect.any(String) }],
+      total: 1,
+    })
+    // Deleting twice is a no-op rather than a second, later deletion date.
+    await expect(service.deleteCollectionEntry('articles/lete-a-paris')).resolves.toBe(false)
+    // The slug stays reserved, with a message that says what to do about it.
+    await expect(service.createCollectionEntry('articles', { title: 'Retake', slug: 'lete-a-paris' })).resolves.toEqual({
+      errors: { slug: ['An entry with this slug is in the trash. Restore it or delete it permanently first.'] },
+    })
+    // Purging is refused while the entry is live, and only ever runs from the trash.
+    await expect(service.purgeCollectionEntry('articles/does-not-exist')).resolves.toBe(false)
+
+    await expect(service.restoreCollectionEntry('articles/lete-a-paris')).resolves.toBe(true)
+    await expect(service.restoreCollectionEntry('articles/lete-a-paris')).resolves.toBe(false)
+    await expect(service.get('articles/lete-a-paris')).resolves.toMatchObject({ title: 'L’été à Paris' })
+    await expect(service.listCollectionTrash('articles')).resolves.toEqual({ entries: [], total: 0 })
+    // History survived the round trip.
+    await expect(service.history('articles/lete-a-paris')).resolves.toHaveLength(2)
+    await expect(service.purgeCollectionEntry('articles/lete-a-paris')).resolves.toBe(false)
+
+    await service.deleteCollectionEntry('articles/lete-a-paris')
+    await expect(service.purgeCollectionEntry('articles/lete-a-paris')).resolves.toBe(true)
     expect(rows.has('articles/lete-a-paris')).toBe(false)
+    expect(versions.filter(version => version.entryName === 'articles/lete-a-paris')).toHaveLength(0)
+    // The slug is free again.
+    await expect(service.createCollectionEntry('articles', { title: 'Retake', slug: 'lete-a-paris' })).resolves.toMatchObject({ slug: 'lete-a-paris' })
+  })
+
+  it('refuses to trash anything that is not a collection entry', async () => {
+    const { client } = createClient({ title: 'Welcome' })
+    const service = new EponymeService(config, client)
+
+    await expect(service.deleteCollectionEntry('homepage')).resolves.toBe(false)
+    await expect(service.restoreCollectionEntry('homepage')).resolves.toBe(false)
+    await expect(service.purgeCollectionEntry('homepage')).resolves.toBe(false)
+    await expect(service.listCollectionTrash('nope')).resolves.toBeUndefined()
   })
 
   it('creates and validates sections and multi-field arrays', () => {

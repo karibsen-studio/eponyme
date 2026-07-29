@@ -3,6 +3,8 @@ import type { EponymeConfig, EponymeFormDefinitionBase } from '../../types'
 import { getEponymeForms } from '../../utils/get-eponyme-schemas'
 import { validateEponymeData, type ValidationErrors } from '../../utils/validate-eponyme-data'
 
+/** Kept here rather than imported, so the store stays free of H3 imports. */
+
 type DateValue = Date | string
 
 export interface EponymeFormSubmission {
@@ -78,7 +80,8 @@ export class EponymeFormService {
       return { errors: { _form: ['Body must be an object.'] } }
 
     const input = payload as Record<string, unknown>
-    // The honeypot is transport, not content: it must never reach validation.
+    // The honeypot is transport, not content: it must not reach validation, which
+    // only knows about declared fields.
     const { [definition.honeypot || '']: _honeypot, ...rest } = input
     const unknownKeys = Object.keys(rest).filter(key => !(key in definition.fields))
     if (unknownKeys.length)

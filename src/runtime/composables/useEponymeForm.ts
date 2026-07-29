@@ -102,7 +102,10 @@ export function useEponymeForm<const Name extends ConfigFormName>(
           console.warn(`[Eponyme] Form "${name}" is managed, so its onSubmit handler is ignored.`)
         // The wildcard route is not in Nitro's generated route map, so its method
         // cannot be inferred from the literal path.
-        await requestFetch(`/api/eponyme-forms/${name}` as string, { method: 'POST', body: values.value })
+        await requestFetch(`/api/eponyme-forms/${name}` as string, {
+          method: 'POST',
+          body: values.value,
+        })
       }
       submitted.value = true
       return true

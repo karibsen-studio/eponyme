@@ -1,6 +1,8 @@
 import { createError, defineEventHandler, getRequestURL } from 'h3'
 import { useEponymeService } from '../../services/eponyme-service'
 import { assertEponymeMutationOrigin, requireEponymeUser } from '../../utils/auth'
+import { callEponymeHook } from '../../utils/eponyme-hooks'
+import { splitEponymeCollectionEntry } from '../../utils/eponyme-entry'
 
 export default defineEventHandler(async (event) => {
   assertEponymeMutationOrigin(event)
@@ -11,9 +13,21 @@ export default defineEventHandler(async (event) => {
   const [, name, rawVersionId] = match
   const versionId = Number(rawVersionId)
   if (!Number.isSafeInteger(versionId)) throw createError({ statusCode: 404, statusMessage: 'Eponyme version not found.' })
-  const result = await useEponymeService().restore(name!, versionId, user.id)
+  const service = useEponymeService()
+  const result = await service.restore(name!, versionId, user.id)
   if (!result) throw createError({ statusCode: 404, statusMessage: 'Eponyme version not found.' })
-  if ('conflict' in result && result.conflict)
+  if ('conflict' in result)
     throw createError({ statusCode: 409, message: 'This entry was changed by someone else. Reload the page to get the latest version.' })
+
+  await callEponymeHook('eponyme:entry:restored', {
+    name: name!,
+    collection: splitEponymeCollectionEntry(service, name!),
+    action: 'restore',
+    status: result.status,
+    publishedAt: result.publishedAt,
+    data: result.data,
+    userId: user.id,
+  })
+
   return result
 })

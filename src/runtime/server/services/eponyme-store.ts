@@ -39,6 +39,8 @@ export interface EponymeCollectionEntry<Data extends Record<string, unknown> = R
   status: EponymeStatus
   publishedAt: string | null
   updatedAt: string | null
+  /** Only set for entries read from the trash. */
+  deletedAt?: string | null
 }
 
 export interface EponymeSitemapEntry {
@@ -63,7 +65,9 @@ export interface EponymeCollectionPage<Data extends Record<string, unknown> = Re
 
 export const COLLECTION_METADATA_KEYS = ['updatedAt', 'publishedAt', 'title', 'slug'] as const
 
-export type PrismaEponymeRow = { name: string, data: unknown, updatedAt?: Date | string }
+export type PrismaEponymeRow = { name: string, data: unknown, updatedAt?: Date | string, deletedAt?: Date | string | null }
+/** `null` keeps the live rows, `{ not: null }` the trashed ones. */
+export type PrismaDeletedAtFilter = null | { not: null }
 export type PrismaEponymeVersionRow = {
   id: number
   entryName: string
@@ -79,11 +83,14 @@ export type PrismaEponymeClient = {
     upsert(args: { where: { name: string }, create: { name: string, data: Record<string, unknown> }, update: { data?: Record<string, unknown> } }): Promise<PrismaEponymeRow>
     update(args: { where: { name: string }, data: { data: Record<string, unknown> } }): Promise<PrismaEponymeRow>
     /** Used as a compare-and-swap: the `updatedAt` guard makes concurrent writes fail instead of overwriting. */
-    updateMany(args: { where: { name: string, updatedAt?: Date | string }, data: { data: Record<string, unknown> } }): Promise<{ count: number }>
+    updateMany(args: {
+      where: { name: string, updatedAt?: Date | string, deletedAt?: PrismaDeletedAtFilter }
+      data: { data?: Record<string, unknown>, deletedAt?: Date | null }
+    }): Promise<{ count: number }>
     create(args: { data: { name: string, data: Record<string, unknown> } }): Promise<PrismaEponymeRow>
     findUnique(args: { where: { name: string } }): Promise<PrismaEponymeRow | null>
     findMany(args: {
-      where: { name: { startsWith: string } }
+      where: { name: { startsWith: string }, deletedAt?: PrismaDeletedAtFilter }
       orderBy: Array<{ updatedAt: 'desc' } | { name: 'asc' }>
     }): Promise<PrismaEponymeRow[]>
     delete(args: { where: { name: string } }): Promise<PrismaEponymeRow>
@@ -183,7 +190,9 @@ export class EponymeService {
     const row = this.getCollectionEntry(name)
       ? await this.client.eponyme.findUnique({ where: { name } })
       : await this.client.eponyme.upsert({ where: { name }, create: { name, data: defaults as unknown as Record<string, unknown> }, update: {} })
-    if (!row) return undefined
+    // A trashed entry reads as missing everywhere: this is the single gate every
+    // reader goes through, so nothing has to remember to filter it out.
+    if (!row || row.deletedAt) return undefined
     const state = this.normalizeState(schema, row.data)
     if (sameData(state, row.data)) return { state, updatedAt: row.updatedAt }
     const healed = await this.client.eponyme.update({ where: { name }, data: { data: state as unknown as Record<string, unknown> } })
@@ -265,7 +274,7 @@ export class EponymeService {
     const definition = this.collections[name]
     if (!definition) return undefined
     const rows = await this.client.eponyme.findMany({
-      where: { name: { startsWith: `${name}/` } },
+      where: { name: { startsWith: `${name}/` }, deletedAt: null },
       orderBy: [
         { updatedAt: 'desc' },
         { name: 'asc' },
@@ -316,7 +325,7 @@ export class EponymeService {
         throw new Error(`[Eponyme] previewPaths.${name} must include ":slug" to generate collection sitemap URLs.`)
 
       const rows = await this.client.eponyme.findMany({
-        where: { name: { startsWith: `${name}/` } },
+        where: { name: { startsWith: `${name}/` }, deletedAt: null },
         orderBy: [
           { updatedAt: 'desc' },
           { name: 'asc' },
@@ -352,8 +361,8 @@ export class EponymeService {
     const slug = normalizeSlug(String(input[definition.slugField] || input[definition.titleField] || ''))
     if (!slug) return { errors: { [definition.slugField]: ['A slug or title is required.'] } }
     const entryName = `${name}/${slug}`
-    if (await this.client.eponyme.findUnique({ where: { name: entryName } }))
-      return { errors: { [definition.slugField]: ['This slug is already in use.'] } }
+    const taken = await this.slugTakenError(definition, entryName)
+    if (taken) return taken
 
     const defaults = createDefaultEponymeData(definition.fields) as Record<string, unknown>
     const data = { ...defaults, ...input, [definition.slugField]: slug }
@@ -374,24 +383,96 @@ export class EponymeService {
     }
     catch (error) {
       // Another request created the same slug between our check and this insert.
-      if (isPrismaError(error, 'P2002')) return { errors: { [definition.slugField]: ['This slug is already in use.'] } }
+      if (isPrismaError(error, 'P2002')) return await this.slugTakenError(definition, entryName) ?? { errors: { [definition.slugField]: ['This slug is already in use.'] } }
       throw error
     }
     await this.client.eponymeVersion.create({ data: { entryName, data: state as unknown as Record<string, unknown>, action: 'draft', status: 'draft', userId: actorId ?? null } })
     return { slug, data, status: 'draft', publishedAt: null }
   }
 
+  /**
+   * A trashed entry keeps its row, so it keeps its slug: reusing one has to be
+   * refused with an error the editor can act on rather than the generic message.
+   */
+  private async slugTakenError(
+    definition: EponymeCollectionDefinitionBase,
+    entryName: string,
+  ): Promise<{ errors: ValidationErrors } | undefined> {
+    const row = await this.client.eponyme.findUnique({ where: { name: entryName } })
+    if (!row) return undefined
+    return {
+      errors: {
+        [definition.slugField]: [row.deletedAt
+          ? 'An entry with this slug is in the trash. Restore it or delete it permanently first.'
+          : 'This slug is already in use.'],
+      },
+    }
+  }
+
+  /** Moves an entry to the trash. Its history is kept, so it stays restorable. */
   async deleteCollectionEntry(name: string): Promise<boolean> {
     if (!this.getCollectionEntry(name)) return false
+    // Guarding on `deletedAt: null` makes a second delete a no-op rather than
+    // moving the deletion date forward.
+    const { count } = await this.client.eponyme.updateMany({
+      where: { name, deletedAt: null },
+      data: { deletedAt: new Date() },
+    })
+    return count > 0
+  }
+
+  async restoreCollectionEntry(name: string): Promise<boolean> {
+    if (!this.getCollectionEntry(name)) return false
+    const { count } = await this.client.eponyme.updateMany({
+      where: { name, deletedAt: { not: null } },
+      data: { deletedAt: null },
+    })
+    return count > 0
+  }
+
+  /** Definitive: `onDelete: Cascade` takes the entry's whole history with it. */
+  async purgeCollectionEntry(name: string): Promise<boolean> {
+    if (!this.getCollectionEntry(name)) return false
+    const row = await this.client.eponyme.findUnique({ where: { name } })
+    if (!row?.deletedAt) return false
     try {
       await this.client.eponyme.delete({ where: { name } })
     }
     catch (error) {
-      // Already gone, or deleted by a concurrent request.
+      // Already gone, or purged by a concurrent request.
       if (isPrismaError(error, 'P2025')) return false
       throw error
     }
     return true
+  }
+
+  /** Trashed entries of a collection, most recently updated first. */
+  async listCollectionTrash(name: string): Promise<EponymeCollectionPage | undefined> {
+    const definition = this.collections[name]
+    if (!definition) return undefined
+    const rows = await this.client.eponyme.findMany({
+      where: { name: { startsWith: `${name}/` }, deletedAt: { not: null } },
+      orderBy: [
+        { updatedAt: 'desc' },
+        { name: 'asc' },
+      ],
+    })
+    const entries = rows.flatMap((row) => {
+      const slug = row.name.slice(name.length + 1)
+      if (!slug || slug.includes('/')) return []
+      // `getResult` reads a trashed entry as missing, so the state is read here directly.
+      const state = this.normalizeState(definition.fields, row.data)
+      return [{
+        slug,
+        title: String(state.__eponyme.draft[definition.titleField] || slug),
+        data: state.__eponyme.draft,
+        status: state.__eponyme.status,
+        publishedAt: state.__eponyme.publishedAt,
+        updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : null,
+        deletedAt: row.deletedAt ? new Date(row.deletedAt).toISOString() : null,
+      }]
+    })
+    return { entries, total: entries.length }
   }
 
   async patch(

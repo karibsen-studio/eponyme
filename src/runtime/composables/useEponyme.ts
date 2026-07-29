@@ -6,6 +6,7 @@ import type eponymeConfig from '#eponyme/config'
 import type { EponymeDataByName, EponymeName } from '../types'
 import type { EponymeAction, EponymeStatus, EponymeVersionSelector } from '../server/services/eponyme-store'
 import { readPreviewQuery, readPreviewVersion } from '../utils/preview'
+import { cacheDuringHydrationOnly } from '../utils/hydration-cache'
 import type { ValidationErrors } from '../utils/validate-eponyme-data'
 
 type ConfigEponymeName = EponymeName<typeof eponymeConfig>
@@ -30,10 +31,13 @@ export function useEponyme<const Name extends ConfigEponymeName>(name: Name, opt
   const errors = ref<ValidationErrors>({})
   const saving = ref(false)
   const requestFetch = useRequestFetch()
+  // Built once: publishing clears sibling keys by prefix and has to be able to
+  // recognise this exact one, `:raw` suffix included.
+  const cacheKey = `eponyme:${name}:${version}${options.raw ? ':raw' : ''}`
   const { data: response, pending: loading, error, refresh: load } = useAsyncData(
-    `eponyme:${name}:${version}${options.raw ? ':raw' : ''}`,
+    cacheKey,
     () => requestFetch<EponymeResponse<Name>>(`/api/eponyme/${name}`, { query: { version, raw: options.raw ? 1 : undefined }, cache: 'no-store' }),
-    { getCachedData: () => undefined },
+    { getCachedData: cacheDuringHydrationOnly },
   )
   const data = computed(() => response.value?.data)
   const status = computed(() => response.value?.status ?? 'published')
@@ -58,7 +62,7 @@ export function useEponyme<const Name extends ConfigEponymeName>(name: Name, opt
       response.value = next as typeof response.value
       if (action === 'publish') {
         // Keys are versioned, so match by prefix to drop every cached version.
-        clearNuxtData(key => key.startsWith(`eponyme:${name}:`) && key !== `eponyme:${name}:${version}`)
+        clearNuxtData(key => key.startsWith(`eponyme:${name}:`) && key !== cacheKey)
         const parts = String(name).split('/')
         const slug = parts.pop()
         const collectionName = parts.join('/')

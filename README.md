@@ -90,6 +90,7 @@ export default defineEponymeConfig({
         href: '/contact',
         type: 'internal',
         openInNewTab: false,
+        download: false,
       },
     }),
     published: field.boolean({
@@ -172,12 +173,14 @@ Add the required models to your Prisma schema:
 
 ```prisma
 model Eponyme {
-  name      String   @id
-  data      Json     @db.JsonB
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  name      String    @id
+  data      Json      @db.JsonB
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
   versions  EponymeVersion[]
 
+  @@index([deletedAt])
   @@map("eponyme_entries")
 }
 
@@ -241,6 +244,9 @@ model EponymeFormSubmission {
 ```
 
 Run the migration with the workflow used by your application.
+
+Upgrading from 0.1.1 requires one migration: `Eponyme.deletedAt`, which backs the trash.
+Deleting a collection entry no longer destroys it.
 
 The playground includes the same models in `playground/prisma/schema.prisma`. Copy `playground/.env.example` to `playground/.env`, set `DATABASE_URL`, then run:
 
@@ -346,6 +352,27 @@ GET /api/eponyme-collections/articles?orderBy=date&order=desc&take=4
 
 `take` is capped at 200, and an unknown `orderBy` answers `400` with the accepted keys
 rather than returning an arbitrary order.
+
+### Trash
+
+Deleting a collection entry moves it to a trash rather than destroying it. The entry
+disappears from the dashboard, from the public API and from the sitemap, but its content
+and its whole version history are kept, so it can be brought back.
+
+The collection page lists the trash behind a **Trash** button and offers **Restore** and
+**Delete for good**. Restoring is available to editors and owners; deleting for good is
+reserved to owners, since it is the only irreversible content operation — the entry's
+history goes with it.
+
+```http
+GET    /api/eponyme-trash/articles                 # trashed entries of a collection
+PATCH  /api/eponyme-trash/articles/my-article      # restore
+DELETE /api/eponyme-trash/articles/my-article      # delete for good, owner only
+```
+
+A trashed entry keeps its row, so it keeps its slug. Creating an entry with that slug is
+refused with a message pointing at the trash rather than silently overwriting what is
+waiting there. Restore the entry or delete it for good to free its slug.
 
 ## Entries
 
@@ -613,15 +640,73 @@ Two protections apply to the public submission route:
 - a **body size limit**, 64 KB by default, configurable with `maxBodyBytes`. An oversized
   body is refused with `413` before it is parsed.
 
-Rate limiting, CAPTCHA support and file uploads are not implemented yet.
+A captcha is not part of the module. A public form is a normal POST route, so adding
+Turnstile, hCaptcha or anything else is done in the host application: render the widget
+on the page, send its token, and verify it in your own handler before calling
+`validateEponymeForm()`.
+
+Rate limiting and file uploads are not implemented yet.
+
+## Hooks
+
+Eponyme emits Nitro hooks around every content write and form submission. Listen to
+them from a server plugin:
+
+```ts
+// server/plugins/eponyme.ts
+export default defineNitroPlugin((nitroApp) => {
+  nitroApp.hooks.hook('eponyme:entry:published', async ({ name, collection, data }) => {
+    await purgeCdnCache(collection ? `/${collection.name}/${collection.slug}` : `/${name}`)
+  })
+
+  nitroApp.hooks.hook('eponyme:form:submitted', async ({ form, data, id }) => {
+    if (form === 'contact') await sendEmail(data)
+  })
+})
+```
+
+| Hook | When |
+|---|---|
+| `eponyme:entry:beforeSave` | Before a draft save or a publication |
+| `eponyme:entry:saved` | After a draft save |
+| `eponyme:entry:published` | After a publication |
+| `eponyme:entry:restored` | After a history version was restored |
+| `eponyme:entry:trashed` | After a collection entry was moved to the trash |
+| `eponyme:entry:untrashed` | After a collection entry was taken back out of the trash |
+| `eponyme:entry:purged` | After a collection entry and its history were deleted for good |
+| `eponyme:form:beforeSubmit` | Before a managed submission is stored |
+| `eponyme:form:submitted` | After a managed submission was stored |
+
+The `before` hooks can **reject or amend** the operation. Throwing rejects it with a
+`422` carrying your message, which is the way to enforce a rule the schema cannot
+express. Mutating `context.data` changes what gets written:
+
+```ts
+nitroApp.hooks.hook('eponyme:entry:beforeSave', ({ data, collection }) => {
+  if (collection?.name === 'articles' && !data.excerpt) throw new Error('An excerpt is required.')
+  data.updatedBy = 'automation'
+})
+```
+
+`eponyme:form:beforeSubmit` runs **after** validation, so a listener never sees a
+payload the schema would have rejected.
+
+The other hooks are notifications: the write already happened, so a listener that
+throws is logged and swallowed. A failing webhook must not report a successful save as
+an error the editor cannot act on.
+
+Entries belonging to a collection carry `collection: { name, slug }`, so a listener can
+branch without re-parsing the entry name. The three trash hooks only ever concern
+collection entries, so their `collection` is always present; they carry no content, since
+a trash move leaves the entry itself untouched.
 
 ## Current status
 
 Eponyme is at version `0.1.1`. It is ready for controlled projects and production pilots. A few workflows still need hardening before a broad public release:
 
-- Client revision tokens for long-running concurrent edits: the current `updatedAt` check protects overlapping writes within one request, not two editors who loaded the same older revision
-- Recoverable deletion: deleting an entry removes it and its history for good
-- Rate limiting, CAPTCHA support and file uploads for public forms
+- Client revision tokens for long-running concurrent edits: the current `updatedAt` check protects overlapping writes within one request, not two editors who loaded the same older revision. A deletion is not guarded by a revision either
+- Retention controls for the trash: entries stay there until someone empties it
+- Rate limiting and file uploads for public forms
 - Filtering, export and retention controls for stored submissions
 - Pagination or a sitemap index beyond 50,000 URLs
 

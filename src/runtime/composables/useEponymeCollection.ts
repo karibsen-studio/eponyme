@@ -6,6 +6,7 @@ import type eponymeConfig from '#eponyme/config'
 import type { EponymeCollectionDataByName, EponymeCollectionName } from '../types'
 import type { EponymeCollectionEntry, EponymeSortDirection, EponymeStatus, EponymeVersionSelector } from '../server/services/eponyme-store'
 import { readPreviewQuery, readPreviewVersion } from '../utils/preview'
+import { cacheDuringHydrationOnly } from '../utils/hydration-cache'
 
 type ConfigCollectionName = EponymeCollectionName<typeof eponymeConfig>
 
@@ -60,7 +61,7 @@ export function useEponymeCollection<const Name extends ConfigCollectionName>(
     // same collection would share one cache entry.
     `eponyme:collection:public:${name}:${options.take ?? ''}:${options.skip ?? ''}:${options.orderBy ?? ''}:${options.order ?? ''}`,
     () => requestFetch<{ entries: EponymeCollectionEntry<Data>[], total: number }>(`/api/eponyme-collections/${name}`, { query, cache: 'no-store' }),
-    { getCachedData: () => undefined },
+    { getCachedData: cacheDuringHydrationOnly },
   )
   const entries = computed(() => result.data.value?.entries ?? [])
   if (import.meta.client) useEventListener(window, 'focus', () => void result.refresh())
@@ -89,7 +90,7 @@ export function useEponymeCollectionEntry<const Name extends ConfigCollectionNam
   const result = useAsyncData(
     `eponyme:collection-entry:${name}:${slug}:${version}`,
     () => requestFetch<Response>(`/api/eponyme/${name}/${encodeURIComponent(slug)}`, { query: { version }, cache: 'no-store' }),
-    { getCachedData: () => undefined },
+    { getCachedData: cacheDuringHydrationOnly },
   )
   if (import.meta.client) useEventListener(window, 'focus', () => void result.refresh())
 

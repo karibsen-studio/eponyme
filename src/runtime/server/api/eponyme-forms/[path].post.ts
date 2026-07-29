@@ -1,6 +1,7 @@
 import { createError, defineEventHandler, getRequestHeader, readRawBody, setResponseHeader, setResponseStatus } from 'h3'
 import { useEponymeFormService } from '../../services/eponyme-form-service'
 import { readEponymeFormRoute } from '../../utils/form-route'
+import { callEponymeBlockingHook, callEponymeHook } from '../../utils/eponyme-hooks'
 
 /**
  * The only unauthenticated write route in the module. Order matters: reject an
@@ -39,12 +40,28 @@ export default defineEventHandler(async (event) => {
     return { submitted: true }
   }
 
-  const result = await service.submit(route.name, payload)
+  // Validated first, so a listener never sees a payload the schema would reject.
+  const validated = service.validate(route.name, payload)
+  if (validated && 'errors' in validated) {
+    setResponseStatus(event, 422)
+    return { errors: validated.errors }
+  }
+
+  const beforeSubmit = { form: route.name, data: validated?.data ?? {} }
+  await callEponymeBlockingHook('eponyme:form:beforeSubmit', beforeSubmit)
+
+  const result = await service.submit(route.name, beforeSubmit.data)
   if (!result) throw createError({ statusCode: 404, statusMessage: 'Eponyme form not found.' })
   if ('errors' in result) {
     setResponseStatus(event, 422)
     return { errors: result.errors }
   }
+
+  await callEponymeHook('eponyme:form:submitted', {
+    form: route.name,
+    data: result.submission.data,
+    id: result.submission.id,
+  })
 
   setResponseStatus(event, 201)
   return { submitted: true, id: result.submission.id }

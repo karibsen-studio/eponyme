@@ -7,15 +7,13 @@ import { splitEponymeCollectionEntry } from '../../utils/eponyme-entry'
 export default defineEventHandler(async (event) => {
   assertEponymeMutationOrigin(event)
   const user = await requireEponymeUser(event, { roles: ['editor', 'owner'] })
-  const name = decodeURIComponent(getRequestURL(event).pathname.replace(/^\/api\/eponyme-collections\//, ''))
+  const name = decodeURIComponent(getRequestURL(event).pathname.replace(/^\/api\/eponyme-trash\//, ''))
   const service = useEponymeService()
   const collection = name ? splitEponymeCollectionEntry(service, name) : undefined
-  // The entry moves to the trash: its content and its history are kept, and
-  // `/api/eponyme-trash` can bring it back.
-  if (!collection || !(await service.deleteCollectionEntry(name)))
-    throw createError({ statusCode: 404, statusMessage: 'Eponyme collection entry not found.' })
+  if (!collection || !(await service.restoreCollectionEntry(name)))
+    throw createError({ statusCode: 404, statusMessage: 'Eponyme trashed entry not found.' })
 
-  await callEponymeHook('eponyme:entry:trashed', { name, collection, userId: user.id })
+  await callEponymeHook('eponyme:entry:untrashed', { name, collection, userId: user.id })
 
-  return { deleted: true }
+  return { restored: true }
 })
