@@ -3,7 +3,7 @@ import { defineEponymeConfig } from '../src/config/config'
 import { collection } from '../src/config/collection'
 import { field } from '../src/runtime/fields'
 import { today } from '../src/runtime/fields/date'
-import { EponymeService, type PrismaEponymeClient } from '../src/runtime/server/services/eponyme-store'
+import { EponymeService, schemaFingerprint, type EponymeExportFile, type PrismaEponymeClient } from '../src/runtime/server/services/eponyme-store'
 import { createDefaultEponymeData } from '../src/runtime/utils/create-default-eponyme-data'
 import { validateEponymeData } from '../src/runtime/utils/validate-eponyme-data'
 import { normalizeSlug } from '../src/runtime/utils/normalize-slug'
@@ -18,22 +18,35 @@ function createClient(initial: Record<string, unknown> = {}) {
   ])
   // Mirrors Prisma's `@updatedAt`: a monotonic stamp per row, which the store uses as an optimistic lock.
   const stamps = new Map<string, Date>()
+  // The soft-delete column, kept beside the rows rather than inside their JSON payload.
+  const deletions = new Map<string, Date>()
   let clock = 0
   const touch = (name: string) => {
     const stamp = new Date(++clock)
     stamps.set(name, stamp)
     return stamp
   }
+  const read = (name: string) => ({
+    name,
+    data: rows.get(name)!,
+    updatedAt: stamps.get(name),
+    deletedAt: deletions.get(name) ?? null,
+  })
   const write = (name: string, data: Record<string, unknown>) => {
     rows.set(name, data)
-    return { name, data, updatedAt: touch(name) }
+    touch(name)
+    return read(name)
+  }
+  const matchesDeleted = (name: string, filter: null | { not: null } | undefined) => {
+    if (filter === undefined) return true
+    return filter === null ? !deletions.has(name) : deletions.has(name)
   }
   if (Object.keys(initial).length) write('homepage', initial)
   const client: PrismaEponymeClient = {
     eponyme: {
       async upsert({ where, create, update }) {
         const existing = rows.get(where.name)
-        if (existing && !update.data) return { name: where.name, data: existing, updatedAt: stamps.get(where.name) }
+        if (existing && !update.data) return read(where.name)
         return write(where.name, update.data ?? existing ?? create.data)
       },
       async update({ where, data }) {
@@ -43,7 +56,10 @@ function createClient(initial: Record<string, unknown> = {}) {
         const stamp = stamps.get(where.name)
         if (!rows.has(where.name)) return { count: 0 }
         if (where.updatedAt && new Date(where.updatedAt).getTime() !== stamp?.getTime()) return { count: 0 }
-        write(where.name, data.data)
+        if (!matchesDeleted(where.name, where.deletedAt)) return { count: 0 }
+        if (data.deletedAt === null) deletions.delete(where.name)
+        else if (data.deletedAt) deletions.set(where.name, data.deletedAt)
+        write(where.name, data.data ?? rows.get(where.name)!)
         return { count: 1 }
       },
       async create({ data }) {
@@ -51,19 +67,22 @@ function createClient(initial: Record<string, unknown> = {}) {
         return write(data.name, data.data)
       },
       async findUnique({ where }) {
-        const data = rows.get(where.name)
-        return data ? { name: where.name, data, updatedAt: stamps.get(where.name) } : null
+        return rows.has(where.name) ? read(where.name) : null
       },
       async findMany({ where }) {
-        return [...rows.entries()]
-          .filter(([name]) => name.startsWith(where.name.startsWith))
-          .map(([name, data]) => ({ name, data, updatedAt: stamps.get(name) }))
+        return [...rows.keys()]
+          .filter(name => name.startsWith(where.name.startsWith) && matchesDeleted(name, where.deletedAt))
+          .map(name => read(name))
       },
       async delete({ where }) {
         const data = rows.get(where.name)
         if (!data) throw Object.assign(new Error('Record to delete does not exist.'), { code: 'P2025' })
         rows.delete(where.name)
         stamps.delete(where.name)
+        deletions.delete(where.name)
+        // Mirrors `onDelete: Cascade` on EponymeVersion.entryName.
+        for (let index = versions.length - 1; index >= 0; index--)
+          if (versions[index]!.entryName === where.name) versions.splice(index, 1)
         return { name: where.name, data }
       },
     },
@@ -85,7 +104,35 @@ function createClient(initial: Record<string, unknown> = {}) {
       },
     },
   }
-  return { client, rows, versions }
+  // Counts the queries a call actually sends, so a regression back to N+1 or to
+  // writing during a read fails the suite instead of only being slower.
+  const counts: Record<string, number> = {}
+  const countingClient = Object.fromEntries(Object.entries(client).map(([model, methods]) => [
+    model,
+    Object.fromEntries(Object.entries(methods).map(([method, fn]) => [
+      method,
+      (...args: unknown[]) => {
+        const key = `${model}.${method}`
+        counts[key] = (counts[key] ?? 0) + 1
+        counts.total = (counts.total ?? 0) + 1
+        return (fn as (...a: unknown[]) => unknown)(...args)
+      },
+    ])),
+  ])) as PrismaEponymeClient
+
+  return {
+    client: countingClient,
+    rows,
+    versions,
+    deletions,
+    counts,
+    resetCounts: () => {
+      for (const key of Object.keys(counts)) counts[key] = 0
+    },
+    /** Queries that mutate a row. A public read must send none of these. */
+    writeCount: () => (counts['eponyme.upsert'] ?? 0) + (counts['eponyme.update'] ?? 0)
+      + (counts['eponyme.updateMany'] ?? 0) + (counts['eponyme.create'] ?? 0) + (counts['eponyme.delete'] ?? 0),
+  }
 }
 
 const config = defineEponymeConfig({
@@ -351,11 +398,16 @@ describe('EponymeService', () => {
       entries: [{ slug: 'lete-a-paris', title: 'L’été à Paris', data: { title: 'L’été à Paris' }, status: 'published' }],
       total: 1,
     })
+    // Read on a cold service, so this still asserts one query per collection rather
+    // than one per entry. On the live service the rows are already cached by the
+    // listing above, and the sitemap reuses them without querying at all.
     const findMany = vi.spyOn(client.eponyme, 'findMany')
-    const sitemap = await service.getSitemapEntries({
+    const sitemap = await new EponymeService(config, client).getSitemapEntries({
       homepage: '/',
       articles: '/articles/:slug',
     })
+    expect(findMany).toHaveBeenCalledTimes(1)
+    await expect(service.getSitemapEntries({ articles: '/articles/:slug' })).resolves.toHaveLength(1)
     expect(findMany).toHaveBeenCalledTimes(1)
     expect(sitemap).toEqual([
       { loc: '/' },
@@ -364,7 +416,62 @@ describe('EponymeService', () => {
     await expect(service.get('articles/does-not-exist', 'draft')).resolves.toBeUndefined()
     expect(rows.has('articles/does-not-exist')).toBe(false)
     await expect(service.deleteCollectionEntry('articles/lete-a-paris')).resolves.toBe(true)
+    // The row survives: deleting only moves the entry to the trash.
+    expect(rows.has('articles/lete-a-paris')).toBe(true)
+  })
+
+  it('trashes, restores and purges a collection entry', async () => {
+    const { client, rows, versions } = createClient()
+    const service = new EponymeService(config, client)
+
+    await service.createCollectionEntry('articles', { title: 'L’été à Paris' })
+    await service.patch('articles/lete-a-paris', {}, 'publish')
+    expect(versions.filter(version => version.entryName === 'articles/lete-a-paris')).toHaveLength(2)
+
+    await expect(service.deleteCollectionEntry('articles/lete-a-paris')).resolves.toBe(true)
+    // A trashed entry reads as missing everywhere a visitor or an editor could see it.
+    await expect(service.get('articles/lete-a-paris')).resolves.toBeUndefined()
+    await expect(service.get('articles/lete-a-paris', 'draft')).resolves.toBeUndefined()
+    await expect(service.listCollection('articles', 'draft')).resolves.toEqual({ entries: [], total: 0 })
+    await expect(service.getSitemapEntries({ articles: '/articles/:slug' })).resolves.toEqual([])
+    await expect(service.patch('articles/lete-a-paris', { title: 'Nope' })).resolves.toBeUndefined()
+    await expect(service.listCollectionTrash('articles')).resolves.toMatchObject({
+      entries: [{ slug: 'lete-a-paris', title: 'L’été à Paris', deletedAt: expect.any(String) }],
+      total: 1,
+    })
+    // Deleting twice is a no-op rather than a second, later deletion date.
+    await expect(service.deleteCollectionEntry('articles/lete-a-paris')).resolves.toBe(false)
+    // The slug stays reserved, with a message that says what to do about it.
+    await expect(service.createCollectionEntry('articles', { title: 'Retake', slug: 'lete-a-paris' })).resolves.toEqual({
+      errors: { slug: ['An entry with this slug is in the trash. Restore it or delete it permanently first.'] },
+    })
+    // Purging is refused while the entry is live, and only ever runs from the trash.
+    await expect(service.purgeCollectionEntry('articles/does-not-exist')).resolves.toBe(false)
+
+    await expect(service.restoreCollectionEntry('articles/lete-a-paris')).resolves.toBe(true)
+    await expect(service.restoreCollectionEntry('articles/lete-a-paris')).resolves.toBe(false)
+    await expect(service.get('articles/lete-a-paris')).resolves.toMatchObject({ title: 'L’été à Paris' })
+    await expect(service.listCollectionTrash('articles')).resolves.toEqual({ entries: [], total: 0 })
+    // History survived the round trip.
+    await expect(service.history('articles/lete-a-paris')).resolves.toHaveLength(2)
+    await expect(service.purgeCollectionEntry('articles/lete-a-paris')).resolves.toBe(false)
+
+    await service.deleteCollectionEntry('articles/lete-a-paris')
+    await expect(service.purgeCollectionEntry('articles/lete-a-paris')).resolves.toBe(true)
     expect(rows.has('articles/lete-a-paris')).toBe(false)
+    expect(versions.filter(version => version.entryName === 'articles/lete-a-paris')).toHaveLength(0)
+    // The slug is free again.
+    await expect(service.createCollectionEntry('articles', { title: 'Retake', slug: 'lete-a-paris' })).resolves.toMatchObject({ slug: 'lete-a-paris' })
+  })
+
+  it('refuses to trash anything that is not a collection entry', async () => {
+    const { client } = createClient({ title: 'Welcome' })
+    const service = new EponymeService(config, client)
+
+    await expect(service.deleteCollectionEntry('homepage')).resolves.toBe(false)
+    await expect(service.restoreCollectionEntry('homepage')).resolves.toBe(false)
+    await expect(service.purgeCollectionEntry('homepage')).resolves.toBe(false)
+    await expect(service.listCollectionTrash('nope')).resolves.toBeUndefined()
   })
 
   it('creates and validates sections and multi-field arrays', () => {
@@ -548,5 +655,269 @@ describe('EponymeService', () => {
       slug: ['Must contain only lowercase letters, numbers and single hyphens.'],
     })
     expect(validateEponymeData(schema, { slug: 'hello-world' })).toEqual({})
+  })
+})
+
+describe('Eponyme export and import', () => {
+  async function seed() {
+    const { client, rows, versions, deletions } = createClient()
+    const service = new EponymeService(config, client)
+    await service.syncAll()
+    await service.patch('homepage', { title: 'Live homepage' })
+    await service.createCollectionEntry('articles', { title: 'Été à Paris', summary: 'Draft summary' })
+    await service.patch('articles/ete-a-paris', { summary: 'Published summary' }, 'publish')
+    await service.createCollectionEntry('articles', { title: 'Still a draft' })
+    return { service, client, rows, versions, deletions }
+  }
+
+  it('exports every singleton and live collection entry with its complete state', async () => {
+    const { service } = await seed()
+
+    const file = await service.exportContent()
+
+    expect(file.eponyme.format).toBe(1)
+    expect(Object.keys(file.eponyme.schemas).sort()).toEqual(['articles', 'homepage'])
+    expect(file.entries.map(entry => entry.name).sort()).toEqual([
+      'articles/ete-a-paris',
+      'articles/still-a-draft',
+      'homepage',
+    ])
+    const article = file.entries.find(entry => entry.name === 'articles/ete-a-paris')!
+    expect(article.collection).toBe('articles')
+    expect(article.status).toBe('published')
+    expect(article.draft.summary).toBe('Published summary')
+    // A never-published entry keeps its draft, which is the point of exporting the full state.
+    const draft = file.entries.find(entry => entry.name === 'articles/still-a-draft')!
+    expect(draft.status).toBe('draft')
+    expect(draft.publishedAt).toBeNull()
+  })
+
+  it('leaves the trash out of the export', async () => {
+    const { service } = await seed()
+    await service.deleteCollectionEntry('articles/still-a-draft')
+
+    const file = await service.exportContent()
+
+    expect(file.entries.map(entry => entry.name)).not.toContain('articles/still-a-draft')
+  })
+
+  it('applies an export onto another instance without touching what the file does not carry', async () => {
+    const { service: source } = await seed()
+    const file = await source.exportContent()
+
+    const { client, rows } = createClient()
+    const target = new EponymeService(config, client)
+    await target.syncAll()
+    await target.createCollectionEntry('articles', { title: 'Only on the target' })
+
+    const result = await target.importContent(file, { actorId: 'user-1' })
+
+    expect(result).toMatchObject({ dryRun: false, created: 2, updated: 1, skipped: [] })
+    await expect(target.get('homepage')).resolves.toMatchObject({ title: 'Live homepage' })
+    await expect(target.get('articles/ete-a-paris')).resolves.toMatchObject({ summary: 'Published summary' })
+    // Nothing is ever deleted: an entry the file never mentioned stays untouched.
+    expect(rows.has('articles/only-on-the-target')).toBe(true)
+  })
+
+  it('records one history version per imported entry, so an import stays reversible', async () => {
+    const { service: source } = await seed()
+    const file = await source.exportContent()
+    const { client } = createClient()
+    const target = new EponymeService(config, client)
+    await target.syncAll()
+
+    await target.importContent(file, { actorId: 'user-2' })
+
+    const history = await target.history('articles/ete-a-paris')
+    expect(history).toMatchObject([{ action: 'import', status: 'published', user: { username: 'Bob' } }])
+  })
+
+  it('refuses the whole import when the configured schema differs', async () => {
+    const { service: source } = await seed()
+    const file = await source.exportContent()
+    const { client, rows } = createClient()
+    const divergent = defineEponymeConfig({
+      homepage: {
+        title: field.string({ required: true, defaultValue: 'Welcome' }),
+        enabled: field.boolean({ defaultValue: true }),
+        // `tags` went from an array of strings to a plain string.
+        tags: field.string(),
+      },
+      articles: collection({
+        label: 'Articles',
+        titleField: 'title',
+        slugField: 'slug',
+        fields: {
+          title: field.string({ required: true }),
+          slug: field.slug({ required: true }),
+          summary: field.textarea(),
+        },
+      }),
+    })
+    const target = new EponymeService(divergent, client)
+    await target.syncAll()
+    const before = new Map(rows)
+
+    const result = await target.importContent(file)
+
+    expect(result).toMatchObject({ errors: expect.any(Array), schemaMismatch: ['homepage'] })
+    // Refused before the first write: nothing moved, not even the entries that matched.
+    expect([...rows.entries()]).toEqual([...before.entries()])
+  })
+
+  it('ignores relabelled fields, since only the shape of a schema matters', () => {
+    const before = { title: field.string({ label: 'Title', required: true }) }
+    const after = { title: field.string({ label: 'Headline', placeholder: 'Type here' }) }
+    expect(schemaFingerprint(after)).toBe(schemaFingerprint(before))
+    expect(schemaFingerprint({ title: field.textarea() })).not.toBe(schemaFingerprint(before))
+  })
+
+  it('reports what a dry run would do without writing anything', async () => {
+    const { service: source } = await seed()
+    const file = await source.exportContent()
+    const { client, rows, versions } = createClient()
+    const target = new EponymeService(config, client)
+    await target.syncAll()
+    const before = new Map(rows)
+
+    const result = await target.importContent(file, { dryRun: true })
+
+    expect(result).toMatchObject({ dryRun: true, created: 2, updated: 1 })
+    expect([...rows.entries()]).toEqual([...before.entries()])
+    expect(versions).toHaveLength(0)
+  })
+
+  it('skips a trashed entry and an entry whose collection is not configured', async () => {
+    const { service: source } = await seed()
+    const file = await source.exportContent()
+    const { client } = createClient()
+    const target = new EponymeService(config, client)
+    await target.syncAll()
+    await target.createCollectionEntry('articles', { title: 'Été à Paris' })
+    await target.deleteCollectionEntry('articles/ete-a-paris')
+    file.entries.push({ ...file.entries[0]!, name: 'unknown/entry', collection: 'unknown' })
+    file.eponyme.schemas.unknown = schemaFingerprint({})
+
+    const result = await target.importContent(file)
+
+    expect(result).toMatchObject({ schemaMismatch: ['unknown'] })
+
+    // Without the unknown collection, the trashed entry alone is skipped.
+    file.entries.pop()
+    delete file.eponyme.schemas.unknown
+    const applied = await target.importContent(file) as Exclude<Awaited<ReturnType<EponymeService['importContent']>>, { errors: string[] }>
+    expect(applied.skipped).toEqual([
+      { name: 'articles/ete-a-paris', reason: expect.stringContaining('trash') },
+    ])
+    expect(applied.created).toBe(1)
+    expect(applied.updated).toBe(1)
+  })
+
+  it('rejects a file that is not an Eponyme export', async () => {
+    const { client } = createClient()
+    const service = new EponymeService(config, client)
+
+    await expect(service.importContent({ entries: [] })).resolves.toMatchObject({ errors: [expect.any(String)] })
+    await expect(service.importContent(null)).resolves.toMatchObject({ errors: [expect.any(String)] })
+    const malformed = { eponyme: { format: 1, exportedAt: '', schemas: {} }, entries: [{ name: 'homepage' }] } as unknown as EponymeExportFile
+    await expect(service.importContent(malformed)).resolves.toMatchObject({ errors: [expect.any(String)] })
+  })
+})
+
+/**
+ * Rendering a public page costs one database round trip per query, so the number of
+ * queries a read sends is the number that matters, not how long the fake client takes.
+ * These assert the count directly.
+ */
+describe('EponymeService query count', () => {
+  async function seedArticles(count: number) {
+    const harness = createClient()
+    const service = new EponymeService(config, harness.client)
+    await service.syncAll()
+    for (let index = 0; index < count; index++) {
+      const slug = `article-${index}`
+      await service.createCollectionEntry('articles', { title: `Article ${index}`, slug })
+      await service.patch(`articles/${slug}`, { title: `Article ${index}` }, 'publish')
+    }
+    harness.resetCounts()
+    return { ...harness, service }
+  }
+
+  it('reads a singleton without writing', async () => {
+    const { service, counts, writeCount, resetCounts } = await seedArticles(0)
+
+    await service.getResult('homepage', 'published')
+
+    expect(writeCount()).toBe(0)
+    expect(counts.total).toBe(1)
+
+    // A second read is served from the cache rather than from the database.
+    resetCounts()
+    await service.getResult('homepage', 'published')
+    expect(counts.total ?? 0).toBe(0)
+  })
+
+  it('lists a collection with a single query, whatever its size', async () => {
+    const { service, counts } = await seedArticles(5)
+
+    const page = await service.listCollection('articles', 'published')
+
+    expect(page!.entries).toHaveLength(5)
+    expect(counts.total).toBe(1)
+    expect(counts['eponyme.findMany']).toBe(1)
+  })
+
+  it('does not re-read the same entry twice in a row', async () => {
+    const { service, counts } = await seedArticles(1)
+
+    await service.getResult('articles/article-0', 'published')
+    await service.getResult('articles/article-0', 'published')
+    await service.get('articles/article-0', 'published')
+
+    expect(counts.total).toBe(1)
+  })
+
+  it('serves fresh content after a write', async () => {
+    const { service } = await seedArticles(0)
+
+    await service.getResult('homepage', 'published')
+    await service.patch('homepage', { title: 'Updated' }, 'publish')
+
+    await expect(service.get('homepage', 'published')).resolves.toMatchObject({ title: 'Updated' })
+  })
+
+  it('serves a fresh listing after an entry is created, published, deleted and restored', async () => {
+    const { service } = await seedArticles(1)
+    const published = () => service.listCollection('articles', 'published')
+
+    // Each step primes the cache, then changes the row set behind it.
+    await expect(published()).resolves.toMatchObject({ total: 1 })
+    await service.createCollectionEntry('articles', { title: 'Fresh', slug: 'fresh' })
+    await expect(published()).resolves.toMatchObject({ total: 1 })
+
+    await service.patch('articles/fresh', {}, 'publish')
+    await expect(published()).resolves.toMatchObject({ total: 2 })
+
+    await service.deleteCollectionEntry('articles/fresh')
+    await expect(published()).resolves.toMatchObject({ total: 1 })
+
+    await service.restoreCollectionEntry('articles/fresh')
+    await expect(published()).resolves.toMatchObject({ total: 2 })
+
+    // Purging only acts on a trashed entry, so it has to go back to the trash first.
+    await service.deleteCollectionEntry('articles/fresh')
+    await service.purgeCollectionEntry('articles/fresh')
+    await expect(published()).resolves.toMatchObject({ total: 1 })
+    await expect(service.getResult('articles/fresh', 'published')).resolves.toBeUndefined()
+  })
+
+  it('never serves a draft from the cache, so the preview panel shows a save immediately', async () => {
+    const { service, counts } = await seedArticles(0)
+
+    await service.getResult('homepage', 'draft')
+    await service.getResult('homepage', 'draft')
+
+    // Two reads, two queries: draft content is dashboard-only and must stay exact.
+    expect(counts['eponyme.findUnique']).toBe(2)
   })
 })

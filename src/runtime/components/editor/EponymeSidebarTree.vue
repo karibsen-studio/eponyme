@@ -12,9 +12,11 @@ const props = withDefaults(defineProps<{
   currentPath: string
   statuses: Record<string, EponymeStatus>
   openFolders: string[]
+  /** Reveals every folder while a search is active, without touching `openFolders`. */
+  forceOpen?: boolean
   canEdit?: boolean
   depth?: number
-}>(), { canEdit: false, depth: 0 })
+}>(), { forceOpen: false, canEdit: false, depth: 0 })
 
 const emit = defineEmits<{ 'update:openFolders': [value: string[]] }>()
 
@@ -23,7 +25,9 @@ function entryPath(path: string) {
 }
 
 function isOpen(path: string) {
-  return props.openFolders.includes(path)
+  // `openFolders` is the editor's own state: a search must not rewrite it, or clearing
+  // the field would leave every folder they had collapsed wide open.
+  return props.forceOpen || props.openFolders.includes(path)
 }
 
 function setOpen(path: string, open: boolean) {
@@ -74,6 +78,7 @@ function setOpen(path: string, open: boolean) {
           :current-path="currentPath"
           :statuses="statuses"
           :open-folders="openFolders"
+          :force-open="forceOpen"
           :can-edit="canEdit"
           :depth="depth + 1"
           @update:open-folders="emit('update:openFolders', $event)"

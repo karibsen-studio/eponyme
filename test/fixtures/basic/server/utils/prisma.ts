@@ -1,4 +1,10 @@
-type EponymeRow = { name: string, data: Record<string, unknown>, updatedAt?: Date }
+type EponymeRow = { name: string, data: Record<string, unknown>, updatedAt?: Date, deletedAt?: Date | null }
+type DeletedAtFilter = null | { not: null }
+
+const matchesDeleted = (row: EponymeRow, filter: DeletedAtFilter | undefined) => {
+  if (filter === undefined) return true
+  return filter === null ? !row.deletedAt : Boolean(row.deletedAt)
+}
 
 const rows = new Map<string, EponymeRow>()
 // Mirrors Prisma's `@updatedAt`, which the store relies on as an optimistic lock.
@@ -57,11 +63,17 @@ export default {
       rows.set(where.name, row)
       return { ...row, data: { ...row.data } }
     },
-    async updateMany({ where, data }: { where: { name: string, updatedAt?: Date | string }, data: { data: Record<string, unknown> } }) {
+    async updateMany({ where, data }: { where: { name: string, updatedAt?: Date | string, deletedAt?: DeletedAtFilter }, data: { data?: Record<string, unknown>, deletedAt?: Date | null } }) {
       const current = rows.get(where.name)
       if (!current) return { count: 0 }
       if (where.updatedAt && new Date(where.updatedAt).getTime() !== current.updatedAt?.getTime()) return { count: 0 }
-      rows.set(where.name, { ...current, data: data.data, updatedAt: stamp() })
+      if (!matchesDeleted(current, where.deletedAt)) return { count: 0 }
+      rows.set(where.name, {
+        ...current,
+        data: data.data ?? current.data,
+        deletedAt: data.deletedAt === undefined ? current.deletedAt ?? null : data.deletedAt,
+        updatedAt: stamp(),
+      })
       return { count: 1 }
     },
     async create({ data }: { data: EponymeRow }) {
@@ -73,13 +85,16 @@ export default {
     async findUnique({ where }: { where: { name: string } }) {
       return rows.get(where.name) ?? null
     },
-    async findMany({ where }: { where: { name: { startsWith: string } } }) {
-      return [...rows.values()].filter(row => row.name.startsWith(where.name.startsWith))
+    async findMany({ where }: { where: { name: { startsWith: string }, deletedAt?: DeletedAtFilter } }) {
+      return [...rows.values()].filter(row => row.name.startsWith(where.name.startsWith) && matchesDeleted(row, where.deletedAt))
     },
     async delete({ where }: { where: { name: string } }) {
       const row = rows.get(where.name)
-      if (!row) throw new Error('Row not found')
+      if (!row) throw Object.assign(new Error('Row not found'), { code: 'P2025' })
       rows.delete(where.name)
+      // Mirrors `onDelete: Cascade` on EponymeVersion.entryName.
+      for (let index = versions.length - 1; index >= 0; index--)
+        if (versions[index]!.entryName === where.name) versions.splice(index, 1)
       return row
     },
   },

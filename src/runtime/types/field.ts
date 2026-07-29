@@ -79,6 +79,7 @@ export interface UrlValue {
   href: string
   type: UrlType
   openInNewTab: boolean
+  download?: boolean
 }
 
 export interface UrlFieldOptions extends DefaultFieldOptions<UrlValue> {

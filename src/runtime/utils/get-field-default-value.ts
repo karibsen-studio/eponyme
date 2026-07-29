@@ -32,7 +32,7 @@ export function getFieldDefaultValue(definition: FieldDefinition): unknown {
       ]),
     )
     case 'number': return 0
-    case 'url': return { href: '', type: 'external', openInNewTab: false }
+    case 'url': return { href: '', type: 'external', openInNewTab: false, download: false }
     case 'boolean': return false
     default: return ''
   }

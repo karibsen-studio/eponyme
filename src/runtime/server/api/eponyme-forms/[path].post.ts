@@ -2,6 +2,7 @@ import { createError, defineEventHandler, getRequestHeader, readRawBody, setResp
 import { useEponymeFormService } from '../../services/eponyme-form-service'
 import { readEponymeFormRoute } from '../../utils/form-route'
 import { CAPTCHA_TOKEN_KEY, isEponymeCaptchaConfigured, verifyEponymeCaptcha } from '../../utils/eponyme-captcha'
+import { callEponymeBlockingHook, callEponymeHook } from '../../utils/eponyme-hooks'
 
 /**
  * The only unauthenticated write route in the module. Order matters: reject an
@@ -40,6 +41,8 @@ export default defineEventHandler(async (event) => {
     return { submitted: true }
   }
 
+  // Before validation and before any hook: an unverified caller must never reach a
+  // listener, and turning a bot away first is also the cheapest possible answer.
   if (definition.captcha) {
     // A misconfiguration must not silently disable the protection the form asked for.
     if (!isEponymeCaptchaConfigured()) {
@@ -56,12 +59,28 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const result = await service.submit(route.name, payload)
+  // Validated next, so a listener never sees a payload the schema would reject.
+  const validated = service.validate(route.name, payload)
+  if (validated && 'errors' in validated) {
+    setResponseStatus(event, 422)
+    return { errors: validated.errors }
+  }
+
+  const beforeSubmit = { form: route.name, data: validated?.data ?? {} }
+  await callEponymeBlockingHook('eponyme:form:beforeSubmit', beforeSubmit)
+
+  const result = await service.submit(route.name, beforeSubmit.data)
   if (!result) throw createError({ statusCode: 404, statusMessage: 'Eponyme form not found.' })
   if ('errors' in result) {
     setResponseStatus(event, 422)
     return { errors: result.errors }
   }
+
+  await callEponymeHook('eponyme:form:submitted', {
+    form: route.name,
+    data: result.submission.data,
+    id: result.submission.id,
+  })
 
   setResponseStatus(event, 201)
   return { submitted: true, id: result.submission.id }

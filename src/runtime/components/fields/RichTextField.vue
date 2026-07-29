@@ -2,11 +2,29 @@
 import Image from '@tiptap/extension-image'
 import Placeholder from '@tiptap/extension-placeholder'
 import StarterKit from '@tiptap/starter-kit'
-import { EditorContent, useEditor } from '@tiptap/vue-3'
+import { EditorContent, Extension, useEditor } from '@tiptap/vue-3'
+import type { UrlValue } from '../../types'
 import { computed, ref, watch } from 'vue'
-import EPFormField from '../ui/EPFormField.vue'
-import EPDropdownMenu from '../ui/EPDropdownMenu.vue'
 import { useEponymeVariables } from '../../composables/useEponymeVariables'
+import EPDropdownMenu from '../ui/EPDropdownMenu.vue'
+import EPFormField from '../ui/EPFormField.vue'
+import EPLinkDialog from '../ui/EPLinkDialog.vue'
+
+const DownloadableLinkAttribute = Extension.create({
+  name: 'downloadableLinkAttribute',
+  addGlobalAttributes() {
+    return [{
+      types: ['link'],
+      attributes: {
+        download: {
+          default: null,
+          parseHTML: element => element.hasAttribute('download'),
+          renderHTML: attributes => attributes.download ? { download: '' } : {},
+        },
+      },
+    }]
+  },
+})
 
 const props = withDefaults(defineProps<{
   id: string
@@ -27,6 +45,8 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 const revision = ref(0)
+const linkDialogOpen = ref(false)
+const linkValue = ref<UrlValue>({ href: '', type: 'external', openInNewTab: false, download: false })
 const initialContent = typeof props.modelValue === 'string' ? props.modelValue : ''
 const editor = useEditor({
   content: initialContent,
@@ -41,6 +61,7 @@ const editor = useEditor({
         HTMLAttributes: { rel: 'noopener noreferrer' },
       },
     }),
+    DownloadableLinkAttribute,
     Placeholder.configure({ placeholder: props.placeholder }),
     Image.configure({ HTMLAttributes: { class: 'eponyme-rich-text-image' } }),
   ],
@@ -72,17 +93,34 @@ function isActive(name: string, attributes: Record<string, unknown> = {}) {
   return editor.value?.isActive(name, attributes) ?? false
 }
 
-function setLink() {
+function openLinkDialog() {
   const instance = editor.value
   if (!instance) return
-  const current = String(instance.getAttributes('link').href ?? '')
-  const href = window.prompt('Link URL', current || 'https://')
-  if (href === null) return
-  if (!href.trim()) {
+  const attributes = instance.getAttributes('link')
+  const href = String(attributes.href ?? '')
+  linkValue.value = {
+    href,
+    type: href.startsWith('/') || href.startsWith('#') ? 'internal' : 'external',
+    openInNewTab: attributes.target === '_blank',
+    download: attributes.download === true,
+  }
+  linkDialogOpen.value = true
+}
+
+function applyLink(value: UrlValue) {
+  const instance = editor.value
+  if (!instance) return
+  if (!value.href) {
     instance.chain().focus().extendMarkRange('link').unsetLink().run()
     return
   }
-  instance.chain().focus().extendMarkRange('link').setLink({ href: href.trim() }).run()
+  const attributes = {
+    href: value.href,
+    target: value.openInNewTab ? '_blank' : null,
+    rel: 'noopener noreferrer',
+    download: value.download ? true : null,
+  }
+  instance.chain().focus().extendMarkRange('link').setLink(attributes).run()
 }
 
 function setImage() {
@@ -133,7 +171,7 @@ const tools = computed<Tool[]>(() => {
     { icon: 'mingcute:bold-line', title: 'Bold', active: isActive('bold'), separated: true, run: () => instance.chain().focus().toggleBold().run() },
     { icon: 'mingcute:italic-line', title: 'Italic', active: isActive('italic'), run: () => instance.chain().focus().toggleItalic().run() },
     { icon: 'mingcute:strikethrough-line', title: 'Strikethrough', active: isActive('strike'), run: () => instance.chain().focus().toggleStrike().run() },
-    { icon: 'mingcute:link-line', title: 'Link', active: isActive('link'), run: setLink },
+    { icon: 'mingcute:link-line', title: 'Link', active: isActive('link'), run: openLinkDialog },
     { icon: 'mingcute:pic-line', title: 'Image', active: isActive('image'), run: setImage },
     { icon: 'mingcute:list-check-line', title: 'Bullet list', active: isActive('bulletList'), separated: true, run: () => instance.chain().focus().toggleBulletList().run() },
     { icon: 'mingcute:list-ordered-line', title: 'Numbered list', active: isActive('orderedList'), run: () => instance.chain().focus().toggleOrderedList().run() },
@@ -228,6 +266,12 @@ const tools = computed<Tool[]>(() => {
     >
       {{ characterCount }} / {{ maxLength }}
     </p>
+    <EPLinkDialog
+      :open="linkDialogOpen"
+      :model-value="linkValue"
+      @update:open="linkDialogOpen = $event"
+      @update:model-value="applyLink"
+    />
   </EPFormField>
 </template>
 

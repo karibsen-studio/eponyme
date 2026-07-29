@@ -99,6 +99,7 @@ useSeoMeta({
               :href="data.content.hero.callToActionUrl.href"
               :target="data.content.hero.callToActionUrl.openInNewTab ? '_blank' : undefined"
               :rel="data.content.hero.callToActionUrl.openInNewTab ? 'noopener noreferrer' : undefined"
+              :download="data.content.hero.callToActionUrl.download ? '' : undefined"
               class="primary-link"
             >
               {{ data.content.hero.callToActionLabel }}

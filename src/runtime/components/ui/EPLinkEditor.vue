@@ -1,11 +1,8 @@
 <script setup lang="ts">
-import type { UrlType, UrlValue } from '../../types'
+import type { UrlValue } from '../../types'
 import { computed, ref } from 'vue'
 import EPButton from './EPButton.vue'
-import EPDialog from './EPDialog.vue'
-import EPInputText from './EPInputText.vue'
-import EPRadioButton from './EPRadioButton.vue'
-import EPSwitch from './EPSwitch.vue'
+import EPLinkDialog from './EPLinkDialog.vue'
 import EPTooltip from './EPTooltip.vue'
 
 const props = defineProps<{
@@ -19,9 +16,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{ 'update:modelValue': [value: UrlValue] }>()
 const dialogOpen = ref(false)
-const draftHref = ref('')
-const draftType = ref<UrlType>('external')
-const draftOpenInNewTab = ref(false)
 
 const value = computed<UrlValue>(() => {
   if (props.modelValue && typeof props.modelValue === 'object' && !Array.isArray(props.modelValue)) {
@@ -30,42 +24,18 @@ const value = computed<UrlValue>(() => {
       href: typeof link.href === 'string' ? link.href : '',
       type: link.type === 'internal' ? 'internal' : 'external',
       openInNewTab: link.openInNewTab === true,
+      download: link.download === true,
     }
   }
-  return { href: '', type: 'external', openInNewTab: false }
+  return { href: '', type: 'external', openInNewTab: false, download: false }
 })
 
-const typeOptions = [
-  { label: 'Internal link', value: 'internal' },
-  { label: 'External link', value: 'external' },
-]
-
 function openDialog() {
-  draftHref.value = value.value.href
-  draftType.value = value.value.type
-  draftOpenInNewTab.value = value.value.openInNewTab
   dialogOpen.value = true
 }
 
 function updateDialogOpen(open: boolean) {
   dialogOpen.value = open
-}
-
-function updateType(type: string) {
-  draftType.value = type === 'internal' ? 'internal' : 'external'
-}
-
-function updateHref(href: string | number) {
-  draftHref.value = String(href)
-}
-
-function save() {
-  emit('update:modelValue', {
-    href: draftHref.value.trim(),
-    type: draftType.value,
-    openInNewTab: draftOpenInNewTab.value,
-  })
-  dialogOpen.value = false
 }
 
 function openLink() {
@@ -93,7 +63,7 @@ function openLink() {
         {{ value.href || 'No link configured' }}
       </p>
       <p class="ep:mt-0.5 ep:mb-0 ep:text-[11px] ep:text-muted-ep">
-        {{ value.type === 'internal' ? 'Internal' : 'External' }} · {{ value.openInNewTab ? 'New tab' : 'Same tab' }}
+        {{ value.type === 'internal' ? 'Internal' : 'External' }} · {{ value.download ? 'Download' : value.openInNewTab ? 'New tab' : 'Same tab' }}
       </p>
     </div>
     <EPTooltip content="Open link">
@@ -117,66 +87,11 @@ function openLink() {
     </EPTooltip>
   </div>
 
-  <EPDialog
+  <EPLinkDialog
     :open="dialogOpen"
-    title="Configure link"
-    description="Choose where the link points and how it should open."
+    :model-value="value"
+    :placeholder="placeholder"
     @update:open="updateDialogOpen"
-  >
-    <div class="ep:grid ep:gap-5">
-      <div>
-        <p class="ep:mt-0 ep:mb-2 ep:text-sm ep:font-medium ep:text-white">
-          Link type
-        </p>
-        <EPRadioButton
-          :model-value="draftType"
-          :options="typeOptions"
-          @update:model-value="updateType"
-        />
-      </div>
-
-      <label class="ep:block">
-        <span class="ep:mb-2 ep:block ep:text-sm ep:font-medium ep:text-white">Destination</span>
-        <EPInputText
-          :model-value="draftHref"
-          :type="draftType === 'external' ? 'url' : 'text'"
-          :placeholder="draftType === 'internal' ? '/contact' : (placeholder || 'https://example.com')"
-          @update:model-value="updateHref"
-        />
-        <span class="ep:mt-1.5 ep:block ep:text-xs ep:text-muted-ep">
-          {{ draftType === 'internal' ? 'Use a path beginning with / or an anchor beginning with #.' : 'Use a complete HTTP(S) address.' }}
-        </span>
-      </label>
-
-      <div class="ep:flex ep:items-center ep:justify-between ep:gap-4 ep:rounded-xl ep:bg-selected-ep/40 ep:px-4 ep:py-3">
-        <div>
-          <p class="ep:m-0 ep:text-sm ep:font-medium ep:text-white">
-            Open in new tab
-          </p>
-          <p class="ep:mt-1 ep:mb-0 ep:text-xs ep:text-muted-ep">
-            Keep the current page open when visitors follow this link.
-          </p>
-        </div>
-        <EPSwitch
-          :model-value="draftOpenInNewTab"
-          @update:model-value="draftOpenInNewTab = $event"
-        />
-      </div>
-
-      <div class="ep:flex ep:justify-end ep:gap-2">
-        <EPButton
-          variant="ghost"
-          @click="dialogOpen = false"
-        >
-          Cancel
-        </EPButton>
-        <EPButton
-          variant="primary"
-          @click="save"
-        >
-          Apply link
-        </EPButton>
-      </div>
-    </div>
-  </EPDialog>
+    @update:model-value="emit('update:modelValue', $event)"
+  />
 </template>

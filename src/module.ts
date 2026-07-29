@@ -9,7 +9,6 @@ import {
   createResolver,
   defineNuxtModule,
   findPath,
-  installModule,
   useLogger,
 } from '@nuxt/kit'
 import pc from 'picocolors'
@@ -33,6 +32,12 @@ export interface ModuleOptions {
     /** Fixed lifetime of an authenticated session. */
     sessionDurationDays?: number
   }
+  /**
+   * How long a server instance may reuse content it has already read, in seconds.
+   * A save clears what it changed on its own instance, so this only bounds how long
+   * another instance can still serve the previous content. `0` disables the cache.
+   */
+  cacheSeconds?: number
 }
 
 export default defineNuxtModule<ModuleOptions>({
@@ -49,6 +54,48 @@ export default defineNuxtModule<ModuleOptions>({
     auth: {
       sessionDurationDays: 7,
     },
+    cacheSeconds: 5,
+  },
+
+  moduleDependencies: {
+    '@nuxt/icon': {
+      overrides: {
+        serverBundle: { collections: ['mingcute'] },
+        clientBundle: {
+          icons: [
+            'mingcute:history-anticlockwise-line',
+            'mingcute:eye-2-line',
+            'mingcute:layout-leftbar-close-line',
+            'mingcute:layout-leftbar-open-line',
+            'mingcute:down-small-line',
+            'mingcute:search-line',
+            'mingcute:close-line',
+            'mingcute:arrow-right-line',
+            'mingcute:align-arrow-right-line',
+            'mingcute:link-2-line',
+            'mingcute:settings-3-line',
+            'mingcute:code-line',
+            'mingcute:refresh-2-line',
+            'mingcute:external-link-line',
+            'mingcute:paragraph-line',
+            'mingcute:heading-2-line',
+            'mingcute:heading-3-line',
+            'mingcute:bold-line',
+            'mingcute:italic-line',
+            'mingcute:strikethrough-line',
+            'mingcute:link-line',
+            'mingcute:pic-line',
+            'mingcute:list-check-line',
+            'mingcute:list-ordered-line',
+            'mingcute:quote-left-line',
+            'mingcute:back-2-line',
+            'mingcute:forward-2-line',
+            'mingcute:download-2-line',
+            'mingcute:upload-2-line',
+          ],
+        },
+      },
+    },
   },
 
   async setup(options, nuxt) {
@@ -64,42 +111,9 @@ export default defineNuxtModule<ModuleOptions>({
     nuxt.options.runtimeConfig.eponymeAuth = {
       sessionDurationDays: options.auth?.sessionDurationDays ?? 7,
     }
-
-    await installModule('@nuxt/icon', {
-      serverBundle: { collections: ['mingcute'] },
-      clientBundle: {
-        // Explicit list: an icon missing here is not bundled and renders blank in production.
-        icons: [
-          'mingcute:history-anticlockwise-line',
-          'mingcute:eye-2-line',
-          'mingcute:layout-leftbar-close-line',
-          'mingcute:layout-leftbar-open-line',
-          'mingcute:down-small-line',
-          'mingcute:search-line',
-          'mingcute:close-line',
-          'mingcute:arrow-right-line',
-          'mingcute:align-arrow-right-line',
-          'mingcute:link-2-line',
-          'mingcute:settings-3-line',
-          'mingcute:code-line',
-          'mingcute:refresh-2-line',
-          'mingcute:external-link-line',
-          'mingcute:paragraph-line',
-          'mingcute:heading-2-line',
-          'mingcute:heading-3-line',
-          'mingcute:bold-line',
-          'mingcute:italic-line',
-          'mingcute:strikethrough-line',
-          'mingcute:link-line',
-          'mingcute:pic-line',
-          'mingcute:list-check-line',
-          'mingcute:list-ordered-line',
-          'mingcute:quote-left-line',
-          'mingcute:back-2-line',
-          'mingcute:forward-2-line',
-        ],
-      },
-    }, nuxt)
+    nuxt.options.runtimeConfig.eponymeContent = {
+      cacheSeconds: options.cacheSeconds ?? 5,
+    }
 
     // `nuxt prepare` also runs on the module's own repository, where there is no host app
     // to configure — the requirements below only make sense when actually serving.
@@ -134,7 +148,6 @@ export default defineNuxtModule<ModuleOptions>({
       { name: 'today', from: resolver.resolve('./runtime/fields') },
     ])
     addImportsDir(resolver.resolve('./runtime/composables'))
-    // Lets the host app build its own sitemap route without an internal HTTP request.
     addServerImports([
       { name: 'getEponymeSitemapEntries', from: resolver.resolve('./runtime/server/utils/eponyme-sitemap') },
       // A `custom` form posts to the host application's own route, so this is what
@@ -199,11 +212,16 @@ export default defineNuxtModule<ModuleOptions>({
     addServerHandler({ route: '/api/eponyme/**', method: 'patch', handler: resolver.resolve('./runtime/server/api/eponyme/[name].patch') })
     addServerHandler({ route: '/api/eponyme-statuses', handler: resolver.resolve('./runtime/server/api/eponyme-statuses.get') })
     addServerHandler({ route: '/api/eponyme-sitemap', handler: resolver.resolve('./runtime/server/api/eponyme-sitemap.get') })
+    addServerHandler({ route: '/api/eponyme-export', handler: resolver.resolve('./runtime/server/api/eponyme-export.get') })
+    addServerHandler({ route: '/api/eponyme-import', method: 'post', handler: resolver.resolve('./runtime/server/api/eponyme-import.post') })
     addServerHandler({ route: '/api/eponyme-history/**', handler: resolver.resolve('./runtime/server/api/eponyme-history/[path].get') })
     addServerHandler({ route: '/api/eponyme-history/**', method: 'patch', handler: resolver.resolve('./runtime/server/api/eponyme-history/[path].patch') })
     addServerHandler({ route: '/api/eponyme-collections/**', handler: resolver.resolve('./runtime/server/api/eponyme-collections/[path].get') })
     addServerHandler({ route: '/api/eponyme-collections/**', method: 'post', handler: resolver.resolve('./runtime/server/api/eponyme-collections/[path].post') })
     addServerHandler({ route: '/api/eponyme-collections/**', method: 'delete', handler: resolver.resolve('./runtime/server/api/eponyme-collections/[path].delete') })
+    addServerHandler({ route: '/api/eponyme-trash/**', handler: resolver.resolve('./runtime/server/api/eponyme-trash/[path].get') })
+    addServerHandler({ route: '/api/eponyme-trash/**', method: 'patch', handler: resolver.resolve('./runtime/server/api/eponyme-trash/[path].patch') })
+    addServerHandler({ route: '/api/eponyme-trash/**', method: 'delete', handler: resolver.resolve('./runtime/server/api/eponyme-trash/[path].delete') })
     addServerHandler({ route: '/api/eponyme-forms/**', handler: resolver.resolve('./runtime/server/api/eponyme-forms/[path].get') })
     addServerHandler({ route: '/api/eponyme-forms/**', method: 'post', handler: resolver.resolve('./runtime/server/api/eponyme-forms/[path].post') })
     addServerHandler({ route: '/api/eponyme-forms/**', method: 'delete', handler: resolver.resolve('./runtime/server/api/eponyme-forms/[path].delete') })
@@ -218,8 +236,6 @@ export default defineNuxtModule<ModuleOptions>({
     addServerPlugin(resolver.resolve('./runtime/server/plugins/eponyme-sync'))
 
     nuxt.hook('pages:extend', (pages) => {
-      // `layout: false` is what keeps the host application's default layout — its
-      // header, footer and navigation — out of the dashboard.
       pages.push(
         { name: 'eponyme-login', path: `${dashboardPath}/login`, file: resolver.resolve('./runtime/pages/EponymeLoginPage.vue'), meta: { layout: false } },
         { name: 'eponyme-change-password', path: `${dashboardPath}/change-password`, file: resolver.resolve('./runtime/pages/EponymeChangePasswordPage.vue'), meta: { layout: false, middleware: ['eponyme-auth'] } },

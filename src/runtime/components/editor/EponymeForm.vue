@@ -69,17 +69,20 @@ function fieldDisabled(fieldName: string) {
   return !auth.canEdit.value || props.readonlyFields.includes(fieldName)
 }
 
+// `flush: 'sync'` is what makes the server render the real values: during SSR the
+// fetch resolves after setup, and Vue never flushes queued watchers there, so a
+// default watcher would leave the form empty in the HTML and mismatch on hydration.
 watch(eponymeData, (value) => {
   if (value) {
     const next = cloneData(value as Record<string, unknown>)
     data.value = next
     savedData.value = cloneData(next)
   }
-}, { immediate: true })
+}, { immediate: true, flush: 'sync' })
 
 watch(status, (value) => {
   entryStatuses.value = { ...entryStatuses.value, [props.name]: value }
-}, { immediate: true })
+}, { immediate: true, flush: 'sync' })
 
 function cloneData(value: Record<string, unknown>) {
   return JSON.parse(JSON.stringify(value)) as Record<string, unknown>

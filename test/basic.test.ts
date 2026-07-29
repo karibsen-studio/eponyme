@@ -1,6 +1,8 @@
 import { fileURLToPath } from 'node:url'
 import { beforeAll, describe, it, expect } from 'vitest'
 import { setup, $fetch, url } from '@nuxt/test-utils/e2e'
+import { EPONYME_DATE_LOCALE } from '../src/runtime/utils/date-locale'
+import type { EponymeExportFile } from '../src/runtime/server/services/eponyme-store'
 
 describe('ssr', async () => {
   await setup({
@@ -8,6 +10,12 @@ describe('ssr', async () => {
   })
   let authCookie = ''
   const authenticated = () => ({ headers: { cookie: authCookie } })
+  // Deleting only moves an entry to the trash, where it keeps its slug. Tests share
+  // one database and reuse slugs, so cleanup has to purge as well.
+  const removeArticle = async (slug: string) => {
+    await $fetch(`/api/eponyme-collections/articles/${slug}`, { method: 'DELETE', ...authenticated() })
+    await $fetch(`/api/eponyme-trash/articles/${slug}`, { method: 'DELETE', ...authenticated() })
+  }
 
   beforeAll(async () => {
     const response = await fetch(url('/api/eponyme-auth/login'), {
@@ -28,6 +36,9 @@ describe('ssr', async () => {
     expect(html).toContain('Content entries')
     expect(html).toContain('Homepage')
     expect(html).toContain('href="/__eponyme/pages"')
+    // Transferring content between environments is only offered from this overview.
+    expect(html).toContain('Export')
+    expect(html).toContain('Import')
   })
 
   it('keeps the host layout out of the dashboard', async () => {
@@ -106,7 +117,7 @@ describe('ssr', async () => {
     const listed = await $fetch<{ entries: Array<{ data: { excerpt: string } }> }>('/api/eponyme-collections/articles')
     expect(listed.entries[0]!.data.excerpt).toContain(`en ${year}.`)
 
-    await $fetch('/api/eponyme-collections/articles/variables', { method: 'DELETE', ...authenticated() })
+    await removeArticle('variables')
   })
 
   it('never evaluates an expression found in content', async () => {
@@ -122,7 +133,66 @@ describe('ssr', async () => {
     const published = await $fetch<{ data: { excerpt: string } }>('/api/eponyme/articles/injection')
     expect(published.data.excerpt).toBe(excerpt)
 
-    await $fetch('/api/eponyme-collections/articles/injection', { method: 'DELETE', ...authenticated() })
+    await removeArticle('injection')
+  })
+
+  it('emits hooks around saves, publications and submissions', async () => {
+    await $fetch('/api/eponyme/pages/homepage?action=draft', {
+      method: 'PATCH',
+      body: { title: 'Hooked' },
+      ...authenticated(),
+    })
+    await $fetch('/api/eponyme/pages/homepage?action=publish', {
+      method: 'PATCH',
+      body: { title: 'Hooked' },
+      ...authenticated(),
+    })
+    await $fetch('/api/eponyme-forms/contact', {
+      method: 'POST',
+      body: { name: 'Ada', email: 'ada@example.com', message: 'Hook me up.' },
+    })
+
+    const { seen } = await $fetch<{ seen: string[] }>('/_hooks')
+    // A listener throwing on `saved` must not have failed the save itself.
+    expect(seen).toContain('saved:pages/homepage')
+    expect(seen).toContain('published:pages/homepage:-')
+    expect(seen).toContain('submitted:contact:true')
+
+    // Later tests share this fixture's database, so put it back as it was.
+    await $fetch('/api/eponyme-forms/contact/submissions', { method: 'DELETE', ...authenticated() })
+    await $fetch('/api/eponyme/pages/homepage?action=publish', {
+      method: 'PATCH',
+      body: { title: 'Welcome' },
+      ...authenticated(),
+    })
+  })
+
+  it('lets a blocking hook reject or amend a write', async () => {
+    await expect($fetch('/api/eponyme/pages/homepage?action=draft', {
+      method: 'PATCH',
+      body: { title: 'reject-me' },
+      ...authenticated(),
+    })).rejects.toMatchObject({ statusCode: 422 })
+
+    await $fetch('/api/eponyme/pages/homepage?action=draft', {
+      method: 'PATCH',
+      body: { title: 'amend-me' },
+      ...authenticated(),
+    })
+    // The hook rewrote the payload before it reached the database.
+    await expect($fetch('/api/eponyme/pages/homepage?version=draft&raw=1', authenticated()))
+      .resolves.toMatchObject({ data: { title: 'amended by hook' } })
+
+    await expect($fetch('/api/eponyme-forms/contact', {
+      method: 'POST',
+      body: { name: 'Ada', email: 'blocked@example.com', message: 'Should not pass.' },
+    })).rejects.toMatchObject({ statusCode: 422 })
+
+    await $fetch('/api/eponyme/pages/homepage?action=publish', {
+      method: 'PATCH',
+      body: { title: 'Welcome' },
+      ...authenticated(),
+    })
   })
 
   it('renders a nested Eponyme dashboard page', async () => {
@@ -160,7 +230,7 @@ describe('ssr', async () => {
     // The auto-imported server utility must produce exactly the same list.
     await expect($fetch('/sitemap-util')).resolves.toEqual(await $fetch('/api/eponyme-sitemap'))
 
-    await $fetch('/api/eponyme-collections/articles/sitemap-article', { method: 'DELETE', ...authenticated() })
+    await removeArticle('sitemap-article')
     await expect($fetch<{ entries: Array<{ loc: string }> }>('/api/eponyme-sitemap').then(result => result.entries.map(entry => entry.loc))).resolves.toEqual(['/'])
   })
 
@@ -185,6 +255,45 @@ describe('ssr', async () => {
     expect(html).toContain('First article')
 
     await expect($fetch('/api/eponyme-collections/articles/first-article', { method: 'DELETE', ...authenticated() })).resolves.toEqual({ deleted: true })
+    await $fetch('/api/eponyme-trash/articles/first-article', { method: 'DELETE', ...authenticated() })
+  })
+
+  it('trashes, restores and purges a collection entry over HTTP', async () => {
+    await $fetch('/api/eponyme-collections/articles', { method: 'POST', body: { title: 'Trashed article' }, ...authenticated() })
+    await $fetch('/api/eponyme/articles/trashed-article?action=publish', {
+      method: 'PATCH',
+      body: { title: 'Trashed article', slug: 'trashed-article', excerpt: 'Soon in the trash.' },
+      ...authenticated(),
+    })
+
+    await expect($fetch('/api/eponyme-collections/articles/trashed-article', { method: 'DELETE', ...authenticated() })).resolves.toEqual({ deleted: true })
+    // Gone from every read, including the public ones.
+    await expect($fetch('/api/eponyme-collections/articles')).resolves.toEqual({ entries: [], total: 0 })
+    await expect($fetch('/api/eponyme/articles/trashed-article')).rejects.toMatchObject({ statusCode: 404 })
+    await expect($fetch<{ entries: Array<{ loc: string }> }>('/api/eponyme-sitemap').then(result => result.entries.map(entry => entry.loc))).resolves.toEqual(['/'])
+    await expect($fetch<{ entries: Array<{ slug: string }> }>('/api/eponyme-trash/articles', authenticated()))
+      .resolves.toMatchObject({ entries: [{ slug: 'trashed-article' }], total: 1 })
+    // The trash is never public.
+    await expect($fetch('/api/eponyme-trash/articles')).rejects.toMatchObject({ statusCode: 401 })
+    // And the slug it holds cannot be taken back by a new entry.
+    await expect($fetch('/api/eponyme-collections/articles', {
+      method: 'POST',
+      body: { title: 'Retake', slug: 'trashed-article' },
+      ignoreResponseError: true,
+      ...authenticated(),
+    })).resolves.toMatchObject({ errors: { slug: [expect.stringContaining('trash')] } })
+
+    await expect($fetch('/api/eponyme-trash/articles/trashed-article', { method: 'PATCH', ...authenticated() })).resolves.toEqual({ restored: true })
+    await expect($fetch('/api/eponyme-collections/articles')).resolves.toMatchObject({ entries: [{ slug: 'trashed-article' }] })
+    // Restoring kept the history the hard delete used to destroy.
+    const { history } = await $fetch<{ history: unknown[] }>('/api/eponyme-history/articles/trashed-article', authenticated())
+    expect(history.length).toBeGreaterThan(0)
+
+    await $fetch('/api/eponyme-collections/articles/trashed-article', { method: 'DELETE', ...authenticated() })
+    await expect($fetch('/api/eponyme-trash/articles/trashed-article', { method: 'DELETE', ...authenticated() })).resolves.toEqual({ purged: true })
+    await expect($fetch('/api/eponyme-trash/articles', authenticated())).resolves.toEqual({ entries: [], total: 0 })
+    // Purged for good: the slug is free again.
+    await expect($fetch('/api/eponyme-trash/articles/trashed-article', { method: 'DELETE', ...authenticated() })).rejects.toMatchObject({ statusCode: 404 })
   })
 
   it('sorts, limits and paginates a collection over HTTP', async () => {
@@ -220,7 +329,7 @@ describe('ssr', async () => {
 
     for (const title of ['Sort Charlie', 'Sort Alpha', 'Sort Bravo']) {
       const slug = title.toLowerCase().replace(/ /g, '-')
-      await $fetch(`/api/eponyme-collections/articles/${slug}`, { method: 'DELETE', ...authenticated() })
+      await removeArticle(slug)
     }
   })
 
@@ -260,7 +369,7 @@ describe('ssr', async () => {
     const historyHtml = String(await $fetch(`/articles/preview-article?${previewQuery}=${published.id}`, authenticated()))
     expect(historyHtml).toContain('First excerpt.')
 
-    await $fetch('/api/eponyme-collections/articles/preview-article', { method: 'DELETE', ...authenticated() })
+    await removeArticle('preview-article')
   })
 
   it('accepts, validates and stores managed form submissions', async () => {
@@ -386,7 +495,9 @@ describe('ssr', async () => {
     // the serialised Nuxt payload, so only the formatted form can be asserted.
     const listed = await $fetch<{ submissions: Array<{ createdAt: string }> }>('/api/eponyme-forms/contact/submissions', authenticated())
     const stored = listed.submissions[0]!.createdAt
-    expect(html).toContain(new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(stored)))
+    // The locale is pinned rather than ambient, so the server and the browser format
+    // the same timestamp identically and hydration has nothing to disagree about.
+    expect(html).toContain(new Intl.DateTimeFormat(EPONYME_DATE_LOCALE, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(stored)))
 
     // A custom form has nothing to store, so it says so instead of showing a table.
     const custom = String(await $fetch('/__eponyme/newsletter', authenticated()))
@@ -488,5 +599,73 @@ describe('ssr', async () => {
     })
     expect(forbidden.status).toBe(403)
     await expect($fetch('/api/eponyme/pages/homepage')).resolves.toMatchObject({ data: { title: 'Welcome' } })
+  })
+
+  it('exports the content and imports it back, with import reserved to owners', async () => {
+    await $fetch('/api/eponyme-collections/articles', {
+      method: 'POST',
+      body: { title: 'Export round trip', excerpt: 'Written on dev' },
+      ...authenticated(),
+    })
+
+    const file = await $fetch<EponymeExportFile>('/api/eponyme-export', authenticated())
+    expect(file.eponyme.format).toBe(1)
+    // Forms own their submissions, so they are not part of a content export.
+    expect(Object.keys(file.eponyme.schemas).sort()).toEqual(['articles', 'pages/homepage'])
+    expect(file.entries.map(entry => entry.name)).toContain('articles/export-round-trip')
+
+    // Simulate the target environment drifting, then bring it back with the file.
+    await $fetch('/api/eponyme/articles/export-round-trip', {
+      method: 'PATCH',
+      body: { excerpt: 'Overwritten in production' },
+      ...authenticated(),
+    })
+    await expect($fetch('/api/eponyme-import', {
+      method: 'POST',
+      query: { dryRun: 1 },
+      body: file,
+      ...authenticated(),
+    })).resolves.toMatchObject({ dryRun: true, created: 0, skipped: [] })
+    await expect($fetch('/api/eponyme-import', { method: 'POST', body: file, ...authenticated() }))
+      .resolves.toMatchObject({ dryRun: false, skipped: [] })
+    await expect($fetch('/api/eponyme/articles/export-round-trip', {
+      query: { version: 'draft' },
+      ...authenticated(),
+    })).resolves.toMatchObject({ data: { excerpt: 'Written on dev' } })
+
+    // A divergent schema is refused as a whole, and names what diverged.
+    const tampered = { ...file, eponyme: { ...file.eponyme, schemas: { ...file.eponyme.schemas, articles: 'not-the-same-schema' } } }
+    await expect($fetch('/api/eponyme-import', { method: 'POST', body: tampered, ...authenticated() }))
+      .rejects.toMatchObject({ statusCode: 409, data: { data: { schemaMismatch: ['articles'] } } })
+
+    // An editor may export, but overwriting the whole site stays with owners.
+    const editor = await $fetch<{ user: { id: string }, temporaryPassword: string }>('/api/eponyme-users', {
+      method: 'POST',
+      body: { username: 'ImportEditor', role: 'editor' },
+      ...authenticated(),
+    })
+    const editorLogin = await fetch(url('/api/eponyme-auth/login'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'ImportEditor', password: editor.temporaryPassword }),
+    })
+    const temporaryCookie = editorLogin.headers.get('set-cookie')?.split(';')[0] ?? ''
+    const changed = await fetch(url('/api/eponyme-auth/change-password'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'cookie': temporaryCookie },
+      body: JSON.stringify({ currentPassword: editor.temporaryPassword, newPassword: 'Editor password 123!' }),
+    })
+    const editorCookie = changed.headers.get('set-cookie')?.split(';')[0] ?? ''
+
+    await expect($fetch('/api/eponyme-export', { headers: { cookie: editorCookie } }))
+      .resolves.toMatchObject({ eponyme: { format: 1 } })
+    const refused = await fetch(url('/api/eponyme-import'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'cookie': editorCookie },
+      body: JSON.stringify(file),
+    })
+    expect(refused.status).toBe(403)
+
+    await removeArticle('export-round-trip')
   })
 })
