@@ -15,8 +15,9 @@ Define your content in `eponyme.config.ts`. Eponyme provides defaults, validatio
 - Declarative defaults and validation
 - Conditional fields, character counters, and sortable arrays
 - Private drafts with explicit publishing
-- Collections for articles, pages, and other repeatable content
+- Collections for articles, pages, and other repeatable content, with sorting, limiting and pagination
 - Public forms with typed schemas, server-side validation, and stored submissions
+- Content variables such as `{{ currentYear }}`, resolved when the page is served
 - Persistent version history with dashboard restoration
 - Draft previews for configured public routes
 - A general sitemap metadata endpoint for configured public routes
@@ -616,13 +617,13 @@ Rate limiting, CAPTCHA support and file uploads are not implemented yet.
 
 ## Current status
 
-Eponyme is at version `0.1.0`. It is ready for controlled projects and production pilots. A few workflows still need hardening before a broad public release:
+Eponyme is at version `0.1.1`. It is ready for controlled projects and production pilots. A few workflows still need hardening before a broad public release:
 
-- Dynamic preview routes for collection entries
-- Reliable preview version switching and cache invalidation
-- Client revision tokens for long-running concurrent edits
-- Recoverable deletion
-- Public form submissions
+- Client revision tokens for long-running concurrent edits: the current `updatedAt` check protects overlapping writes within one request, not two editors who loaded the same older revision
+- Recoverable deletion: deleting an entry removes it and its history for good
+- Rate limiting, CAPTCHA support and file uploads for public forms
+- Filtering, export and retention controls for stored submissions
+- Pagination or a sitemap index beyond 50,000 URLs
 
 ## Development
 
