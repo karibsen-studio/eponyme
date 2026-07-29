@@ -1,6 +1,7 @@
 import { useRequestFetch } from '#app'
 import { ref } from 'vue'
 import type { EponymeHistoryEntry } from '../server/services/eponyme-store'
+import { EPONYME_DATE_LOCALE } from '../utils/date-locale'
 
 export function useEponymeHistory(name: () => string) {
   const requestFetch = useRequestFetch()
@@ -27,5 +28,5 @@ export function useEponymeHistory(name: () => string) {
 }
 
 export function formatVersionDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+  return new Intl.DateTimeFormat(EPONYME_DATE_LOCALE, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 }

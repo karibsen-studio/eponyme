@@ -9,6 +9,8 @@ import { field } from '../src/runtime/fields'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas, isEponymeForm, isEponymeSchema } from '../src/runtime/utils/get-eponyme-schemas'
 import { interpolateEponymeText, interpolateEponymeValue, resolveEponymeVariables, summariseEponymeVariables } from '../src/runtime/utils/variables'
 import { applyPreviewSlug, readPreviewQuery, readPreviewVersion, resolvePreviewPath } from '../src/runtime/utils/preview'
+import { buildEponymeNavigationTree } from '../src/runtime/utils/build-navigation-tree'
+import { filterEponymeNavigationTree } from '../src/runtime/utils/filter-navigation-tree'
 
 describe('humanizeLabel', () => {
   it('turns a field name into a title', () => {
@@ -298,5 +300,104 @@ describe('content variables', () => {
     const summary = summariseEponymeVariables({ clubName: { label: 'Club', value: 'AS Chelles' } })
     expect(summary.find(entry => entry.name === 'clubName')).toMatchObject({ label: 'Club', preview: 'AS Chelles' })
     expect(summary.find(entry => entry.name === 'currentYear')?.label).toBe('Current year')
+  })
+})
+
+describe('navigation tree', () => {
+  const config = {
+    'pages/homepage': { title: field.string() },
+    'pages/legal/terms': { title: field.string() },
+    'articles': collection({
+      label: 'Articles',
+      titleField: 'title',
+      slugField: 'slug',
+      fields: { title: field.string({ required: true }), slug: field.slug({ required: true }) },
+    }),
+    'contact': form({ label: 'Contact form', fields: { email: field.email() } }),
+  }
+  const tree = () => buildEponymeNavigationTree({
+    schemas: getEponymeSchemas(config),
+    collections: getEponymeCollections(config),
+    forms: getEponymeForms(config),
+    collectionEntries: {
+      articles: [
+        { slug: 'lete-a-paris', title: 'L’été à Paris' },
+        { slug: 'nuxt-modules', title: 'Nuxt modules' },
+      ],
+    },
+  })
+
+  it('nests entries under the folders their names imply', () => {
+    const root = tree()
+    expect(root.map(node => `${node.kind}:${node.path}`)).toEqual([
+      'folder:pages',
+      'collection:articles',
+      'form:contact',
+    ])
+
+    const pages = root.find(node => node.path === 'pages')!
+    expect(pages.label).toBe('Pages')
+    expect(pages.children.map(node => `${node.kind}:${node.path}`)).toEqual(['entry:pages/homepage', 'folder:pages/legal'])
+    // A folder nobody declared still gets a humanized label.
+    expect(pages.children[1]!.children).toMatchObject([{ kind: 'entry', path: 'pages/legal/terms', label: 'Terms' }])
+  })
+
+  it('adds loaded collection entries as leaves, labelled with their title', () => {
+    const articles = tree().find(node => node.path === 'articles')!
+    expect(articles.label).toBe('Articles')
+    expect(articles.children).toMatchObject([
+      { kind: 'entry', path: 'articles/lete-a-paris', label: 'L’été à Paris' },
+      { kind: 'entry', path: 'articles/nuxt-modules', label: 'Nuxt modules' },
+    ])
+  })
+})
+
+describe('filterEponymeNavigationTree', () => {
+  const tree = () => buildEponymeNavigationTree({
+    schemas: { 'pages/homepage': {}, 'pages/legal/terms': {} },
+    collections: { articles: { label: 'Articles' } },
+    forms: { contact: { label: 'Contact form' } },
+    collectionEntries: {
+      articles: [
+        { slug: 'lete-a-paris', title: 'L’été à Paris' },
+        { slug: 'nuxt-modules', title: 'Nuxt modules' },
+      ],
+    },
+  })
+  const paths = (nodes: ReturnType<typeof tree>): string[] =>
+    nodes.flatMap(node => [node.path, ...paths(node.children)])
+
+  it('returns the tree untouched for an empty query', () => {
+    const root = tree()
+    expect(filterEponymeNavigationTree(root, '   ')).toBe(root)
+  })
+
+  it('keeps a match along with the folders leading to it', () => {
+    expect(paths(filterEponymeNavigationTree(tree(), 'terms'))).toEqual(['pages', 'pages/legal', 'pages/legal/terms'])
+  })
+
+  it('ignores case and accents', () => {
+    expect(paths(filterEponymeNavigationTree(tree(), 'ETE a paris'))).toEqual(['articles', 'articles/lete-a-paris'])
+  })
+
+  it('tolerates a typo', () => {
+    expect(paths(filterEponymeNavigationTree(tree(), 'homepag'))).toContain('pages/homepage')
+    expect(paths(filterEponymeNavigationTree(tree(), 'contakt'))).toContain('contact')
+  })
+
+  it('matches on the path as well as the label', () => {
+    expect(paths(filterEponymeNavigationTree(tree(), 'nuxt-modules'))).toContain('articles/nuxt-modules')
+  })
+
+  it('keeps every child of a node matched on its own label', () => {
+    expect(paths(filterEponymeNavigationTree(tree(), 'articles'))).toEqual([
+      'articles',
+      'articles/lete-a-paris',
+      'articles/nuxt-modules',
+    ])
+  })
+
+  it('returns nothing when the query matches nothing', () => {
+    expect(filterEponymeNavigationTree(tree(), 'zzzzzzzz')).toEqual([])
   })
 })

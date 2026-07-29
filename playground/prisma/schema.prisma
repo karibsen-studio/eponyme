@@ -12,8 +12,10 @@ model Eponyme {
   data      Json     @db.JsonB
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  deletedAt DateTime?
   versions  EponymeVersion[]
 
+  @@index([deletedAt])
   @@map("eponyme_entries")
 }
 

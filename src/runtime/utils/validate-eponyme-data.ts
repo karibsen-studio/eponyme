@@ -170,7 +170,12 @@ function validateFieldRules(
       return
     }
     const link = value as Record<string, unknown>
-    if (typeof link.href !== 'string' || !['internal', 'external'].includes(String(link.type)) || typeof link.openInNewTab !== 'boolean') {
+    if (
+      typeof link.href !== 'string'
+      || !['internal', 'external'].includes(String(link.type))
+      || typeof link.openInNewTab !== 'boolean'
+      || (link.download !== undefined && typeof link.download !== 'boolean')
+    ) {
       addError(errors, name, 'Must be a valid link.')
       return
     }

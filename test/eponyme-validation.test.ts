@@ -133,6 +133,8 @@ describe('validateEponymeData — per field type', () => {
     const schema = { cta: field.url({ required: true }) } satisfies EponymeSchema
     expect(validate(schema, { cta: 'https://a.co' })).toEqual({ cta: ['Must be a link.'] })
     expect(validate(schema, { cta: { href: 'a', type: 'external' } })).toEqual({ cta: ['Must be a valid link.'] })
+    expect(validate(schema, { cta: { href: '/file.pdf', type: 'internal', openInNewTab: false, download: 'yes' } }))
+      .toEqual({ cta: ['Must be a valid link.'] })
     expect(validate(schema, { cta: { href: 'example.com', type: 'external', openInNewTab: true } }))
       .toEqual({ cta: ['External links must be HTTP(S) URLs.'] })
     expect(validate(schema, { cta: { href: 'about', type: 'internal', openInNewTab: false } }))
@@ -140,6 +142,7 @@ describe('validateEponymeData — per field type', () => {
     expect(validate(schema, { cta: { href: '', type: 'internal', openInNewTab: false } }))
       .toEqual({ cta: ['This field is required.'] })
     expect(validate(schema, { cta: { href: '/about', type: 'internal', openInNewTab: false } })).toEqual({})
+    expect(validate(schema, { cta: { href: '/file.pdf', type: 'internal', openInNewTab: false, download: true } })).toEqual({})
   })
 
   it('counts rich text length on the text content, not the markup', () => {

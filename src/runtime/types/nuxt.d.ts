@@ -9,3 +9,13 @@ declare module '@nuxt/schema' {
     eponyme: ModuleOptions
   }
 }
+
+declare module 'nitropack/types' {
+  import type { EponymeHooks } from './hooks'
+
+  // Interface augmentation: the body is empty by design, the point is the supertype.
+  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
+  interface NitroRuntimeHooks extends EponymeHooks {}
+}
+
+export {}

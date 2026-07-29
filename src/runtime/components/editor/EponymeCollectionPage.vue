@@ -6,11 +6,11 @@ import type { EponymeCollectionDefinitionBase } from '../../types'
 import type { EponymeCollectionEntry } from '../../server/services/eponyme-store'
 import { normalizeSlug } from '../../utils/normalize-slug'
 import { useEponymeAuth } from '../../composables/useEponymeAuth'
-import EPBadge from '../ui/EPBadge.vue'
 import EPButton from '../ui/EPButton.vue'
 import EPDialog from '../ui/EPDialog.vue'
 import EPFormField from '../ui/EPFormField.vue'
 import EPInputText from '../ui/EPInputText.vue'
+import { EPONYME_DATE_LOCALE } from '../../utils/date-locale'
 
 const props = defineProps<{ basePath: string, name: string, definition: EponymeCollectionDefinitionBase }>()
 const route = useRoute()
@@ -24,13 +24,23 @@ const slugTouched = ref(false)
 const errors = ref<Record<string, string[]>>({})
 const collectionEntries = useState<Record<string, EponymeCollectionEntry[]>>('eponyme:collection-entries', () => ({}))
 const endpoint = computed(() => `/api/eponyme-collections/${props.name}`)
+const trashEndpoint = computed(() => `/api/eponyme-trash/${props.name}`)
 const auth = useEponymeAuth()
+const view = ref<'entries' | 'trash'>('entries')
 
 const { data: response, pending, refresh } = useAsyncData(
   `eponyme:collection:${props.name}`,
   () => requestFetch<{ entries: EponymeCollectionEntry[] }>(endpoint.value, { query: { version: 'draft', raw: 1 } }),
 )
+// Loaded alongside the list rather than on demand, so the header can show the count.
+const { data: trashResponse, refresh: refreshTrash } = useAsyncData(
+  `eponyme:collection-trash:${props.name}`,
+  () => auth.canEdit.value
+    ? requestFetch<{ entries: EponymeCollectionEntry[] }>(trashEndpoint.value)
+    : Promise.resolve({ entries: [] }),
+)
 const entries = computed(() => response.value?.entries ?? [])
+const trashEntries = computed(() => trashResponse.value?.entries ?? [])
 const label = computed(() => props.definition.label || humanize(props.name.split('/').at(-1) || props.name))
 
 watch(title, (value) => {
@@ -98,13 +108,26 @@ async function createEntry() {
 }
 
 async function deleteEntry(entry: EponymeCollectionEntry) {
-  if (!confirm(`Delete “${entry.title}”? This cannot be undone.`)) return
+  if (!confirm(`Move “${entry.title}” to the trash? Its slug stays reserved until you restore it or delete it for good.`)) return
   await requestFetch(`${endpoint.value}/${entry.slug}`, { method: 'DELETE' })
-  await refresh()
+  await Promise.all([refresh(), refreshTrash()])
+}
+
+async function restoreEntry(entry: EponymeCollectionEntry) {
+  await requestFetch(`${trashEndpoint.value}/${entry.slug}`, { method: 'PATCH' })
+  await Promise.all([refresh(), refreshTrash()])
+  if (!trashEntries.value.length) view.value = 'entries'
+}
+
+async function purgeEntry(entry: EponymeCollectionEntry) {
+  if (!confirm(`Permanently delete “${entry.title}”? Its content and its whole history are lost. This cannot be undone.`)) return
+  await requestFetch(`${trashEndpoint.value}/${entry.slug}`, { method: 'DELETE' })
+  await refreshTrash()
+  if (!trashEntries.value.length) view.value = 'entries'
 }
 
 function formatDate(value: string | null) {
-  return value ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : ''
+  return value ? new Intl.DateTimeFormat(EPONYME_DATE_LOCALE, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : ''
 }
 </script>
 
@@ -125,17 +148,65 @@ function formatDate(value: string | null) {
           {{ definition.description }}
         </p>
       </div>
-      <EPButton
-        v-if="auth.canEdit.value"
-        variant="primary"
-        @click="createOpen = true"
-      >
-        + New {{ humanize(name.split('/').at(-1) || 'entry').replace(/s$/, '') }}
-      </EPButton>
+      <div class="ep:flex ep:flex-wrap ep:items-center ep:gap-2">
+        <EPButton
+          v-if="auth.canEdit.value && trashEntries.length"
+          size="md"
+          :variant="view === 'trash' ? 'primary' : 'secondary'"
+          @click="view = view === 'trash' ? 'entries' : 'trash'"
+        >
+          Trash ({{ trashEntries.length }})
+        </EPButton>
+        <EPButton
+          v-if="auth.canEdit.value"
+          variant="primary"
+          @click="createOpen = true"
+        >
+          + New {{ humanize(name.split('/').at(-1) || 'entry').replace(/s$/, '') }}
+        </EPButton>
+      </div>
     </header>
 
+    <div
+      v-if="view === 'trash'"
+      class="ep:mt-8 ep:grid ep:gap-3"
+    >
+      <p class="ep:m-0 ep:text-sm ep:text-muted-ep">
+        Trashed entries keep their history and their slug. Restore one to bring it back.
+      </p>
+      <article
+        v-for="entry in trashEntries"
+        :key="entry.slug"
+        class="ep:flex ep:flex-wrap ep:items-center ep:justify-between ep:gap-3 ep:rounded-xl ep:bg-selected-ep/50 ep:p-4"
+      >
+        <div
+          class="ep:min-w-0 ep:flex-1"
+          :title="entry.title"
+        >
+          <span class="ep:block ep:min-w-0 ep:overflow-hidden ep:text-ellipsis ep:whitespace-nowrap ep:text-sm ep:font-semibold ep:text-white">{{ truncateTitle(entry.title) }}</span>
+          <span class="ep:mt-1 ep:block ep:text-xs ep:text-muted-ep">{{ entry.deletedAt ? `Deleted ${formatDate(entry.deletedAt)}` : 'Deleted' }}</span>
+        </div>
+        <div class="ep:flex ep:shrink-0 ep:gap-2">
+          <EPButton
+            size="sm"
+            @click="restoreEntry(entry)"
+          >
+            Restore
+          </EPButton>
+          <EPButton
+            v-if="auth.isOwner.value"
+            size="sm"
+            variant="danger"
+            @click="purgeEntry(entry)"
+          >
+            Delete for good
+          </EPButton>
+        </div>
+      </article>
+    </div>
+
     <p
-      v-if="pending"
+      v-else-if="pending"
       class="ep:mt-8 ep:text-sm ep:text-muted-ep"
     >
       Loading…
@@ -156,18 +227,14 @@ function formatDate(value: string | null) {
         >
           <span class="ep:flex ep:min-w-0 ep:items-center ep:gap-2">
             <span class="ep:min-w-0 ep:flex-1 ep:overflow-hidden ep:text-ellipsis ep:whitespace-nowrap ep:text-sm ep:font-semibold ep:text-white">{{ truncateTitle(entry.title) }}</span>
-            <EPBadge
-              class="ep:shrink-0"
-              :variant="entry.status === 'draft' ? 'warning' : 'success'"
-            >{{ entry.status }}</EPBadge>
           </span>
-          <span class="ep:mt-1 ep:block ep:text-xs ep:text-muted-ep">/{{ entry.slug }}<template v-if="entry.updatedAt"> · {{ formatDate(entry.updatedAt) }}</template></span>
+          <span class="ep:mt-1 ep:block ep:text-xs ep:text-muted-ep ep:capitalize">{{ entry.status }}<template v-if="entry.updatedAt"> · {{ formatDate(entry.updatedAt) }}</template></span>
         </NuxtLink>
         <EPButton
           v-if="auth.canEdit.value"
           size="sm"
           variant="danger"
-          class="ep:opacity-0 ep:group-hover:opacity-100 ep:focus-visible:opacity-100"
+          class="ep:shrink-0 ep:md:opacity-0 ep:md:group-hover:opacity-100 ep:md:focus-visible:opacity-100"
           @click="deleteEntry(entry)"
         >
           Delete
