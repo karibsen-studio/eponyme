@@ -3,9 +3,11 @@ import { navigateTo, useRoute, useRuntimeConfig, useSeoMeta } from '#app'
 import type { FetchError } from 'ofetch'
 import { computed, ref } from 'vue'
 import { useEponymeAuth } from '../composables/useEponymeAuth'
+import { useEponymeFavicon } from '../composables/useEponymeFavicon'
 import EPButton from '../components/ui/EPButton.vue'
 import EPFormField from '../components/ui/EPFormField.vue'
 import EPInputText from '../components/ui/EPInputText.vue'
+import logoUrl from '../assets/logo.png?url'
 
 const route = useRoute()
 const auth = useEponymeAuth()
@@ -14,6 +16,7 @@ const password = ref('')
 const error = ref('')
 const dashboardPath = computed(() => (useRuntimeConfig().public.eponyme as { dashboardPath?: string } | undefined)?.dashboardPath ?? '/__eponyme')
 
+useEponymeFavicon()
 useSeoMeta({ title: 'Sign in · Eponyme' })
 
 const existingUser = await auth.refresh()
@@ -46,10 +49,12 @@ async function navigateAfterLogin(mustChangePassword: boolean) {
 <template>
   <main class="eponyme-root ep:flex ep:min-h-screen ep:items-center ep:justify-center ep:bg-theme-ep ep:px-6 ep:py-12 ep:font-sans ep:text-text-ep">
     <section class="ep:w-full ep:max-w-sm">
-      <p class="ep:m-0 ep:text-[11px] ep:font-semibold ep:tracking-widest ep:text-muted-ep ep:uppercase">
-        Eponyme
-      </p>
-      <h1 class="ep:mt-2 ep:mb-2 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-white">
+      <img
+        :src="logoUrl"
+        alt="Eponyme"
+        class="ep:block ep:size-14"
+      >
+      <h1 class="ep:mt-4 ep:mb-2 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-white">
         Sign in
       </h1>
       <p class="ep:mt-0 ep:mb-8 ep:text-sm ep:leading-relaxed ep:text-muted-ep">

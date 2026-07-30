@@ -9,6 +9,7 @@ import EPDialog from '../components/ui/EPDialog.vue'
 import EPToast from '../components/ui/EPToast.vue'
 import { useEponymeAuth } from '../composables/useEponymeAuth'
 import { useEponymeConfig } from '../composables/useEponymeConfig'
+import { useEponymeFavicon } from '../composables/useEponymeFavicon'
 import type { EponymeExportFile, EponymeImportResult } from '../server/services/eponyme-store'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas } from '../utils/get-eponyme-schemas'
 
@@ -21,6 +22,7 @@ const collections = getEponymeCollections(config)
 const forms = getEponymeForms(config)
 const entries = { ...eponymes, ...collections, ...forms }
 
+useEponymeFavicon()
 useSeoMeta({ title: 'Eponyme' })
 
 const fileInput = ref<HTMLInputElement>()

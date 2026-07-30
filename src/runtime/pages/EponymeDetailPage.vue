@@ -9,6 +9,7 @@ import EponymeFolderPage from '../components/editor/EponymeFolderPage.vue'
 import EponymePageNavigation from '../components/editor/EponymePageNavigation.vue'
 import EponymeSidebar from '../components/editor/EponymeSidebar.vue'
 import { useEponymeConfig } from '../composables/useEponymeConfig'
+import { useEponymeFavicon } from '../composables/useEponymeFavicon'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas } from '../utils/get-eponyme-schemas'
 
 const route = useRoute()
@@ -32,6 +33,7 @@ function label(name: string) {
   return name.replace(/[-_]/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
 }
 
+useEponymeFavicon()
 useSeoMeta({
   title: () => `${label(eponymeName.value.split('/').at(-1) ?? eponymeName.value)} · Eponyme`,
 })

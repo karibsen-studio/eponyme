@@ -5,6 +5,7 @@ import { computed, ref } from 'vue'
 import type { EponymeAuthUser, EponymeManagedUserResult, EponymeRole } from '../types'
 import EponymeCopy from '../components/editor/EponymeCopy.vue'
 import EponymeSidebar from '../components/editor/EponymeSidebar.vue'
+import { useEponymeFavicon } from '../composables/useEponymeFavicon'
 import EPButton from '../components/ui/EPButton.vue'
 import EPDialog from '../components/ui/EPDialog.vue'
 import EPFormField from '../components/ui/EPFormField.vue'
@@ -14,6 +15,7 @@ import EPSwitch from '../components/ui/EPSwitch.vue'
 import EPTooltip from '../components/ui/EPTooltip.vue'
 import EPAvatar from '../components/ui/EPAvatar.vue'
 
+useEponymeFavicon()
 useSeoMeta({ title: 'Users · Eponyme' })
 
 const route = useRoute()

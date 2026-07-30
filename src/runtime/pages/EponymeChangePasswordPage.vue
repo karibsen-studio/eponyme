@@ -3,10 +3,12 @@ import { navigateTo, useRuntimeConfig, useSeoMeta } from '#app'
 import type { FetchError } from 'ofetch'
 import { computed, ref } from 'vue'
 import { useEponymeAuth } from '../composables/useEponymeAuth'
+import { useEponymeFavicon } from '../composables/useEponymeFavicon'
 import EPButton from '../components/ui/EPButton.vue'
 import EPFormField from '../components/ui/EPFormField.vue'
 import EPInputText from '../components/ui/EPInputText.vue'
 
+useEponymeFavicon()
 useSeoMeta({ title: 'Change password · Eponyme' })
 
 const auth = useEponymeAuth()
