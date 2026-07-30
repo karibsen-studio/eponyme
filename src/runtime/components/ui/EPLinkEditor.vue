@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { UrlValue } from '../../types'
 import { computed, ref } from 'vue'
+import { middleEllipsis } from '../../utils/middle-ellipsis'
 import EPButton from './EPButton.vue'
 import EPLinkDialog from './EPLinkDialog.vue'
 import EPTooltip from './EPTooltip.vue'
@@ -60,7 +61,7 @@ function openLink() {
     />
     <div class="ep:min-w-0 ep:flex-1">
       <p class="ep:m-0 ep:truncate ep:text-sm ep:text-white">
-        {{ value.href || 'No link configured' }}
+        {{ value.href ? middleEllipsis(value.href, 40) : 'No link configured' }}
       </p>
       <p class="ep:mt-0.5 ep:mb-0 ep:text-[11px] ep:text-muted-ep">
         {{ value.type === 'internal' ? 'Internal' : 'External' }} · {{ value.download ? 'Download' : value.openInNewTab ? 'New tab' : 'Same tab' }}
