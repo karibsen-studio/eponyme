@@ -1,3 +1,5 @@
+![Eponyme cover](https://raw.githubusercontent.com/karibsen-studio/eponyme/main/.github/assets/cover.png)
+
 # Eponyme
 
 [![npm version][npm-version-src]][npm-version-href]
