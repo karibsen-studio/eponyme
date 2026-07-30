@@ -1,5 +1,6 @@
 import { defineEventHandler, getRequestURL } from 'h3'
 import { setEponymePrivateCache } from '../utils/eponyme-cache'
+import { EPONYME_PREVIEW_QUERY } from '../../utils/preview'
 
 /**
  * Every Eponyme route is uncacheable until it says otherwise.
@@ -14,6 +15,15 @@ import { setEponymePrivateCache } from '../utils/eponyme-cache'
  * decides otherwise, instead of public until someone remembers.
  */
 export default defineEventHandler((event) => {
-  if (!getRequestURL(event).pathname.startsWith('/api/eponyme')) return
+  const url = getRequestURL(event)
+  // A preview goes through the host's own public route, not through an Eponyme one. The
+  // draft itself is fetched from the browser and never reaches this HTML, so this closes a
+  // narrower hole: the URL is unique per editor and per load, and nothing downstream should
+  // keep a copy of a response nobody else will ever ask for.
+  //
+  // It is a default, not a guarantee. A route the host put under `swr` or `isr` is stored by
+  // nitro whatever this says, which is exactly why unreleased content is never rendered here.
+  if (url.searchParams.has(EPONYME_PREVIEW_QUERY)) return setEponymePrivateCache(event)
+  if (!url.pathname.startsWith('/api/eponyme')) return
   setEponymePrivateCache(event)
 })

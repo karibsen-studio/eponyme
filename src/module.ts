@@ -14,6 +14,7 @@ import {
 import pc from 'picocolors'
 import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'node:path'
+import { tagPreviewPathRoutes } from './runtime/utils/cache-tags'
 
 // Re-exported so `import type { FieldDefinition } from '@karibsen/eponyme'` resolves.
 // The runtime helpers (`field`, `collection`, `defineEponymeConfig`) live at
@@ -129,6 +130,16 @@ export default defineNuxtModule<ModuleOptions>({
       cacheSeconds: options.cacheSeconds ?? 5,
       browserCacheSeconds: options.browserCacheSeconds ?? 30,
       cdnCacheSeconds: options.cdnCacheSeconds ?? 300,
+    }
+    // Announced rather than done quietly: these route rules are written into the host's own
+    // configuration, where nobody reading that file would think to look for them.
+    const tagged = tagPreviewPathRoutes(options.previewPaths ?? {}, nuxt.options.routeRules ??= {})
+    if (tagged.length) {
+      const width = Math.max(...tagged.map(({ route }) => route.length))
+      logger.info(
+        `Cache tags added to ${tagged.length} public route${tagged.length > 1 ? 's' : ''}, so publishing can purge them:\n`
+        + tagged.map(({ route, tag }) => `  ${route.padEnd(width)}  ${tag}`).join('\n'),
+      )
     }
 
     // `nuxt prepare` also runs on the module's own repository, where there is no host app

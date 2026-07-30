@@ -333,7 +333,7 @@ describe('ssr', async () => {
     }
   })
 
-  it('previews collection entry drafts and history versions on the public route', async () => {
+  it('never renders an unpublished version into the HTML of a public route', async () => {
     await $fetch('/api/eponyme-collections/articles', {
       method: 'POST',
       body: { title: 'Preview article' },
@@ -343,11 +343,6 @@ describe('ssr', async () => {
 
     // An unpublished entry stays invisible on its public route, preview or not.
     expect(String(await $fetch('/articles/preview-article'))).toContain('article-not-available')
-    expect(String(await $fetch(`/articles/preview-article?${previewQuery}=draft`))).toContain('article-not-available')
-
-    // With a session, the draft renders through the dynamic preview path.
-    const draftHtml = String(await $fetch(`/articles/preview-article?${previewQuery}=draft`, authenticated()))
-    expect(draftHtml).toContain('Preview article')
 
     await $fetch('/api/eponyme/articles/preview-article?action=publish', {
       method: 'PATCH',
@@ -360,16 +355,55 @@ describe('ssr', async () => {
       ...authenticated(),
     })
 
+    // The public route is server-rendered as usual: that HTML is safe to cache.
     expect(String(await $fetch('/articles/preview-article'))).toContain('First excerpt.')
-    expect(String(await $fetch(`/articles/preview-article?${previewQuery}=draft`, authenticated()))).toContain('Unpublished excerpt.')
-    expect(String(await $fetch(`/articles/preview-article?${previewQuery}=published`, authenticated()))).toContain('First excerpt.')
 
+    // A draft preview is not. Even with a valid session, the draft never reaches the HTML:
+    // a page route may be cached by nitro, a CDN or ISR, and a cache does not re-check the
+    // session before replaying what it stored. The panel fetches the draft from the browser.
+    const draftHtml = String(await $fetch(`/articles/preview-article?${previewQuery}=draft`, authenticated()))
+    expect(draftHtml).not.toContain('Unpublished excerpt.')
+    // The draft is still reachable, through an authenticated read that carries `no-store`.
+    await expect($fetch<{ data: { excerpt: string } }>(
+      '/api/eponyme/articles/preview-article?version=draft',
+      authenticated(),
+    )).resolves.toMatchObject({ data: { excerpt: 'Unpublished excerpt.' } })
+
+    // A historical version is unreleased material too.
     const { history } = await $fetch<{ history: Array<{ id: number, action: string }> }>('/api/eponyme-history/articles/preview-article', authenticated())
     const published = history.find(version => version.action === 'publish')!
     const historyHtml = String(await $fetch(`/articles/preview-article?${previewQuery}=${published.id}`, authenticated()))
-    expect(historyHtml).toContain('First excerpt.')
+    expect(historyHtml).not.toContain('First excerpt.')
+
+    // Previewing the published version is the one case that may be rendered: it is public.
+    expect(String(await $fetch(`/articles/preview-article?${previewQuery}=published`, authenticated()))).toContain('First excerpt.')
 
     await removeArticle('preview-article')
+  })
+
+  it('tags the public routes that render an entry, so a purge drops the HTML too', async () => {
+    // The fixture declares `previewPaths: { 'pages/homepage': '/', articles: '/articles/:slug' }`.
+    const singleton = await fetch(url('/'))
+    expect(singleton.headers.get('cache-tag')).toBe('eponyme,eponyme:pages/homepage')
+    expect(singleton.headers.get('vercel-cache-tag')).toBe('eponyme,eponyme:pages/homepage')
+
+    // A collection page cannot name a slug in a route rule, so it carries the collection tag,
+    // which is one of the tags `getEponymeCacheTags` returns for any entry of that collection.
+    const entry = await fetch(url('/articles/whatever'))
+    expect(entry.headers.get('cache-tag')).toBe('eponyme,eponyme:articles')
+
+    // The same tag the API response carries, so one purge invalidates both.
+    const api = await fetch(url('/api/eponyme-collections/articles'))
+    expect(api.headers.get('cache-tag')).toBe('eponyme,eponyme:articles')
+  })
+
+  it('keeps a preview response out of every cache', async () => {
+    const response = await fetch(url('/articles/anything?__eponyme_preview=articles%2Fanything&__eponyme_preview_version=draft'))
+    expect(response.headers.get('cache-control')).toBe('no-store')
+
+    // The same route without the preview query keeps whatever the application decided.
+    const public_ = await fetch(url('/articles/anything'))
+    expect(public_.headers.get('cache-control')).not.toBe('no-store')
   })
 
   it('accepts, validates and stores managed form submissions', async () => {

@@ -5,23 +5,8 @@ import { useRuntimeConfig } from 'nitropack/runtime'
 /** A CDN may keep serving a stale answer for this multiple of its own window while it refreshes. */
 const STALE_WHILE_REVALIDATE_FACTOR = 12
 
-/**
- * Cache tags for one entry, most specific first.
- *
- * A CDN cannot usually be purged by URL — Vercel and Cloudflare both purge by tag — and one
- * entry appears in more than one cached response: its own, and its collection's listing.
- * Tagging both is what lets publishing an article drop the article *and* the index that
- * lists it.
- *
- * A comma is the delimiter every CDN uses for this header, so it is stripped rather than
- * escaped: a tag containing one would silently become two.
- */
-export function getEponymeCacheTags(name: string, collection?: { name: string } | string): string[] {
-  const collectionName = typeof collection === 'string' ? collection : collection?.name
-  const tags = ['eponyme', `eponyme:${name}`]
-  if (collectionName) tags.push(`eponyme:${collectionName}`)
-  return [...new Set(tags)].map(tag => tag.replace(/,/g, '').slice(0, 256))
-}
+/** Re-exported so server code keeps one import for everything cache-related. */
+export { getEponymeCacheTags } from '../../utils/cache-tags'
 
 function setCacheTags(event: H3Event, tags: string[]) {
   if (!tags.length) return

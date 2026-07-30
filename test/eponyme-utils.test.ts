@@ -12,6 +12,8 @@ import { interpolateEponymeText, interpolateEponymeValue, resolveEponymeVariable
 import { applyPreviewSlug, readPreviewQuery, readPreviewVersion, resolvePreviewPath } from '../src/runtime/utils/preview'
 import { buildEponymeNavigationTree } from '../src/runtime/utils/build-navigation-tree'
 import { filterEponymeNavigationTree } from '../src/runtime/utils/filter-navigation-tree'
+import { cacheDuringHydrationOnly, cacheForPublicRead } from '../src/runtime/utils/hydration-cache'
+import { getEponymeCacheTags, tagPreviewPathRoutes } from '../src/runtime/utils/cache-tags'
 
 describe('humanizeLabel', () => {
   it('turns a field name into a title', () => {
@@ -414,5 +416,82 @@ describe('filterEponymeNavigationTree', () => {
 
   it('returns nothing when the query matches nothing', () => {
     expect(filterEponymeNavigationTree(tree(), 'zzzzzzzz')).toEqual([])
+  })
+})
+
+describe('getEponymeCacheTags', () => {
+  it('tags a singleton with itself and the global tag', () => {
+    expect(getEponymeCacheTags('pages/homepage')).toEqual(['eponyme', 'eponyme:pages/homepage'])
+  })
+
+  it('adds the collection tag so publishing an entry can drop its index', () => {
+    expect(getEponymeCacheTags('articles/my-article', 'articles')).toEqual([
+      'eponyme',
+      'eponyme:articles/my-article',
+      'eponyme:articles',
+    ])
+    expect(getEponymeCacheTags('articles/my-article', { name: 'articles' })).toContain('eponyme:articles')
+  })
+
+  it('strips commas, which would silently split one tag into two', () => {
+    expect(getEponymeCacheTags('pages/a,b')).toEqual(['eponyme', 'eponyme:pages/ab'])
+  })
+})
+
+describe('tagPreviewPathRoutes', () => {
+  it('tags a singleton route exactly and a collection route by collection', () => {
+    const rules: Record<string, { headers?: Record<string, string> }> = {}
+    tagPreviewPathRoutes({ 'pages/homepage': '/', 'articles': '/articles/:slug' }, rules)
+    expect(rules['/']!.headers).toEqual({
+      'Vercel-Cache-Tag': 'eponyme,eponyme:pages/homepage',
+      'Cache-Tag': 'eponyme,eponyme:pages/homepage',
+    })
+    // `:slug` becomes a glob, because that is what routeRules match on.
+    expect(rules['/articles/**']!.headers).toMatchObject({ 'Cache-Tag': 'eponyme,eponyme:articles' })
+  })
+
+  it('keeps the rules the application already wrote', () => {
+    const rules: Record<string, { headers?: Record<string, string>, isr?: number }> = {
+      '/articles/**': { isr: 300, headers: { 'Cache-Tag': 'mine' } },
+    }
+    tagPreviewPathRoutes({ articles: '/articles/:slug' }, rules)
+    // The caching rule survives, and a tag the host chose is not overwritten.
+    expect(rules['/articles/**']).toMatchObject({ isr: 300, headers: { 'Cache-Tag': 'mine' } })
+    // The Vercel header nobody set is still filled in.
+    expect(rules['/articles/**']!.headers!['Vercel-Cache-Tag']).toBe('eponyme,eponyme:articles')
+  })
+
+  it('ignores a preview path that is not a route', () => {
+    const rules: Record<string, { headers?: Record<string, string> }> = {}
+    expect(tagPreviewPathRoutes({ articles: 'https://example.com/:slug' }, rules)).toEqual([])
+    expect(rules).toEqual({})
+  })
+
+  it('reports what it wrote, so the module can announce it', () => {
+    expect(tagPreviewPathRoutes({ 'pages/homepage': '/', 'articles': '/articles/:slug' }, {})).toEqual([
+      { route: '/', tag: 'eponyme:pages/homepage' },
+      // The glob cannot name a slug, so the collection tag is the one it will carry.
+      { route: '/articles/**', tag: 'eponyme:articles' },
+    ])
+  })
+})
+
+describe('hydration cache', () => {
+  type FakeNuxtApp = Parameters<typeof cacheDuringHydrationOnly>[1]
+  const nuxtApp = (isHydrating: boolean, data: Record<string, unknown> = {}) =>
+    ({ isHydrating, payload: { data } }) as unknown as FakeNuxtApp
+
+  it('leaves published content to Nuxt, which may reuse a prerendered payload', () => {
+    expect(cacheForPublicRead(true)).toBeUndefined()
+  })
+
+  it('keeps unreleased content on the hydration-only policy', () => {
+    expect(cacheForPublicRead(false)).toBe(cacheDuringHydrationOnly)
+  })
+
+  it('serves the payload while hydrating and nothing afterwards', () => {
+    const key = 'eponyme:homepage:draft'
+    expect(cacheDuringHydrationOnly(key, nuxtApp(true, { [key]: { data: { title: 'Draft' } } }))).toEqual({ data: { title: 'Draft' } })
+    expect(cacheDuringHydrationOnly(key, nuxtApp(false, { [key]: { data: { title: 'Draft' } } }))).toBeUndefined()
   })
 })

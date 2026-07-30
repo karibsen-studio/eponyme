@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import EPButton from '../ui/EPButton.vue'
 import EPSelect from '../ui/EPSelect.vue'
 import { formatVersionDate, useEponymeHistory } from '../../composables/useEponymeHistory'
+import { EPONYME_PREVIEW_QUERY, EPONYME_PREVIEW_TOKEN_QUERY, EPONYME_PREVIEW_VERSION_QUERY } from '../../utils/preview'
 
 const props = defineProps<{
   name: string
@@ -36,10 +37,10 @@ const options = computed(() => [
 
 const previewUrl = computed(() => {
   const url = new URL(props.path, 'http://placeholder')
-  url.searchParams.set('__eponyme_preview', props.name)
-  url.searchParams.set('__eponyme_preview_version', selected.value)
+  url.searchParams.set(EPONYME_PREVIEW_QUERY, props.name)
+  url.searchParams.set(EPONYME_PREVIEW_VERSION_QUERY, selected.value)
   // Cache-buster: the same URL would otherwise be served from the frame's history.
-  url.searchParams.set('__eponyme_preview_token', previewToken.value)
+  url.searchParams.set(EPONYME_PREVIEW_TOKEN_QUERY, previewToken.value)
   return `${url.pathname}${url.search}`
 })
 

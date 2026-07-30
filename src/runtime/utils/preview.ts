@@ -44,6 +44,17 @@ export function resolvePreviewPath(
   return applyPreviewSlug(pattern, entry.slug)
 }
 
+/**
+ * The query parameters that turn a public route into a preview.
+ *
+ * Named here because three places have to agree on them: the panel that builds the URL,
+ * the composables that read it, and the middleware that keeps such a response out of
+ * every cache. A typo in any one of them fails silently, in the direction of leaking.
+ */
+export const EPONYME_PREVIEW_QUERY = '__eponyme_preview'
+export const EPONYME_PREVIEW_VERSION_QUERY = '__eponyme_preview_version'
+export const EPONYME_PREVIEW_TOKEN_QUERY = '__eponyme_preview_token'
+
 /** Reads `?__eponyme_preview_version=` — `draft` by default, or a numeric history id. */
 export function readPreviewVersion(raw: unknown): PreviewVersion {
   if (raw === 'published') return 'published'
@@ -53,7 +64,9 @@ export function readPreviewVersion(raw: unknown): PreviewVersion {
 
 /** Reads the preview query params, unwrapping the repeated-param array form. */
 export function readPreviewQuery(query: Record<string, unknown>): { entry: string | undefined, version: unknown } {
-  const entry = Array.isArray(query.__eponyme_preview) ? query.__eponyme_preview[0] : query.__eponyme_preview
-  const version = Array.isArray(query.__eponyme_preview_version) ? query.__eponyme_preview_version[0] : query.__eponyme_preview_version
+  const rawEntry = query[EPONYME_PREVIEW_QUERY]
+  const rawVersion = query[EPONYME_PREVIEW_VERSION_QUERY]
+  const entry = Array.isArray(rawEntry) ? rawEntry[0] : rawEntry
+  const version = Array.isArray(rawVersion) ? rawVersion[0] : rawVersion
   return { entry: entry === undefined || entry === null ? undefined : String(entry), version }
 }

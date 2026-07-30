@@ -6,7 +6,7 @@ import type eponymeConfig from '#eponyme/config'
 import type { EponymeCollectionDataByName, EponymeCollectionName } from '../types'
 import type { EponymeCollectionEntry, EponymeSortDirection, EponymeStatus, EponymeVersionSelector } from '../server/services/eponyme-store'
 import { readPreviewQuery, readPreviewVersion } from '../utils/preview'
-import { cacheDuringHydrationOnly } from '../utils/hydration-cache'
+import { cacheForPublicRead } from '../utils/hydration-cache'
 
 type ConfigCollectionName = EponymeCollectionName<typeof eponymeConfig>
 
@@ -62,7 +62,7 @@ export function useEponymeCollection<const Name extends ConfigCollectionName>(
     `eponyme:collection:public:${name}:${options.take ?? ''}:${options.skip ?? ''}:${options.orderBy ?? ''}:${options.order ?? ''}`,
     // Always the published listing, which is publicly cacheable: the browser cache may answer it.
     () => requestFetch<{ entries: EponymeCollectionEntry<Data>[], total: number }>(`/api/eponyme-collections/${name}`, { query }),
-    { getCachedData: cacheDuringHydrationOnly },
+    { getCachedData: cacheForPublicRead(true) },
   )
   const entries = computed(() => result.data.value?.entries ?? [])
   if (import.meta.client) useEventListener(window, 'focus', () => void result.refresh())
@@ -88,14 +88,18 @@ export function useEponymeCollectionEntry<const Name extends ConfigCollectionNam
   const preview = readPreviewQuery(route.query)
   const version = options.version ?? (preview.entry === `${name}/${slug}` ? readPreviewVersion(preview.version) : 'published')
   const requestFetch = useRequestFetch()
+  const isPublicContent = version === 'published'
+  // See `useEponyme`: a version taken from the preview query is fetched from the browser
+  // only, so a cached page route can never hold unreleased content.
+  const isPreviewRead = options.version === undefined && !isPublicContent
   const result = useAsyncData(
     `eponyme:collection-entry:${name}:${slug}:${version}`,
     () => requestFetch<Response>(`/api/eponyme/${name}/${encodeURIComponent(slug)}`, {
       query: { version },
       // A draft or a historical version must never be stored, whatever the server says.
-      cache: version === 'published' ? undefined : 'no-store',
+      cache: isPublicContent ? undefined : 'no-store',
     }),
-    { getCachedData: cacheDuringHydrationOnly },
+    { server: !isPreviewRead, getCachedData: cacheForPublicRead(isPublicContent) },
   )
   if (import.meta.client) useEventListener(window, 'focus', () => void result.refresh())
 

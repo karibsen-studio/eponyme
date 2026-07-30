@@ -12,3 +12,16 @@ import type { NuxtApp } from '#app'
 export function cacheDuringHydrationOnly<T>(key: string, nuxtApp: NuxtApp): T | undefined {
   return nuxtApp.isHydrating ? nuxtApp.payload.data[key] as T | undefined : undefined
 }
+
+/**
+ * `getCachedData` for one read, or `undefined` to keep Nuxt's own policy.
+ *
+ * Published content is the same for every visitor and already answers with a public
+ * `Cache-Control`, so Nuxt's default is exactly right: the SSR payload while hydrating,
+ * then `nuxtApp.static.data`, which prerendered and prefetched payloads fill. A client
+ * navigation to a prerendered route then costs no request at all. Unreleased material
+ * keeps refetching after hydration.
+ */
+export function cacheForPublicRead(isPublic: boolean) {
+  return isPublic ? undefined : cacheDuringHydrationOnly
+}
