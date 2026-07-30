@@ -42,18 +42,10 @@ describe('validateEponymeData — required and modes', () => {
 })
 
 describe('validateEponymeData — per field type', () => {
-  it('validates string format options', () => {
-    const schema = {
-      code: field.string({ regex: /^[A-Z]+$/ }),
-      contact: field.string({ email: true }),
-      link: field.string({ url: true }),
-    } satisfies EponymeSchema
-    expect(validate(schema, { code: 'abc', contact: 'nope', link: 'ftp://x' })).toEqual({
-      code: ['Has an invalid format.'],
-      contact: ['Must be a valid email address.'],
-      link: ['Must be an HTTP(S) URL.'],
-    })
-    expect(validate(schema, { code: 'ABC', contact: 'a@b.co', link: 'https://a.co' })).toEqual({})
+  it('validates a string against its regex', () => {
+    const schema = { code: field.string({ regex: /^[A-Z]+$/ }) } satisfies EponymeSchema
+    expect(validate(schema, { code: 'abc' })).toEqual({ code: ['Has an invalid format.'] })
+    expect(validate(schema, { code: 'ABC' })).toEqual({})
   })
 
   it('validates email, image, slug, color and date fields', () => {
@@ -127,6 +119,33 @@ describe('validateEponymeData — per field type', () => {
     expect(validate(schema, { tags: ['a', 'b', 'a'] })).toEqual({ tags: ['Must contain at most 2 items.'] })
     expect(validate(schema, { tags: ['c'] })).toEqual({ tags: ['Must contain only available options.'] })
     expect(validate(schema, { tags: ['a'] })).toEqual({})
+  })
+
+  it('restricts an external link to the declared protocols', () => {
+    const link = (href: string) => ({ cta: { href, type: 'external', openInNewTab: false } })
+
+    // The default stays http and https, with the message it always had.
+    const anyHttp = { cta: field.url() } satisfies EponymeSchema
+    expect(validate(anyHttp, link('http://a.co'))).toEqual({})
+    expect(validate(anyHttp, link('mailto:hi@a.co'))).toEqual({ cta: ['External links must be HTTP(S) URLs.'] })
+
+    const secure = { cta: field.url({ protocols: ['https'] }) } satisfies EponymeSchema
+    expect(validate(secure, link('https://a.co'))).toEqual({})
+    expect(validate(secure, link('http://a.co'))).toEqual({ cta: ['External links must start with https:.'] })
+
+    // `mailto:` and `tel:` carry no `//`, so the scheme is what is checked.
+    const contact = { cta: field.url({ protocols: ['mailto', 'tel'] }) } satisfies EponymeSchema
+    expect(validate(contact, link('mailto:hi@a.co'))).toEqual({})
+    expect(validate(contact, link('tel:+33611131143'))).toEqual({})
+    expect(validate(contact, link('https://a.co')))
+      .toEqual({ cta: ['External links must start with mailto: or tel:.'] })
+
+    // The scheme is read case-insensitively, and a declared `https://` is tolerated.
+    const tolerant = { cta: field.url({ protocols: ['https://'] }) } satisfies EponymeSchema
+    expect(validate(tolerant, link('HTTPS://a.co'))).toEqual({})
+
+    // Internal links are untouched by the option.
+    expect(validate(secure, { cta: { href: '/about', type: 'internal', openInNewTab: false } })).toEqual({})
   })
 
   it('validates link fields', () => {

@@ -183,7 +183,12 @@ function validateFieldRules(
     const href = link.href.trim()
     if (mode === 'publish' && options.required && !href) addError(errors, name, 'This field is required.')
     if (!href) return
-    if (link.type === 'external' && !urlPattern.test(href)) addError(errors, name, 'External links must be HTTP(S) URLs.')
+    if (link.type === 'external' && !isAllowedProtocol(href, definition.options.protocols)) {
+      const allowed = normalizeProtocols(definition.options.protocols)
+      addError(errors, name, isDefaultProtocols(definition.options.protocols)
+        ? 'External links must be HTTP(S) URLs.'
+        : `External links must start with ${allowed.map(protocol => `${protocol}:`).join(' or ')}.`)
+    }
     if (link.type === 'internal' && !href.startsWith('/') && !href.startsWith('#')) addError(errors, name, 'Internal links must start with / or #.')
     return
   }
@@ -252,8 +257,25 @@ function validateFieldRules(
   if (definition.options.maxLength !== undefined && value.length > definition.options.maxLength) addError(errors, name, `Must contain at most ${definition.options.maxLength} characters.`)
   if (definition.options.regex && !definition.options.regex.test(value)) addError(errors, name, 'Has an invalid format.')
   const [localPart, domain, ...extraParts] = normalized.split('@')
-  if ((definition.type === 'email' || definition.options.email) && normalized && (!localPart || !domain?.includes('.') || extraParts.length)) addError(errors, name, 'Must be a valid email address.')
-  if (definition.options.url && normalized && !urlPattern.test(normalized)) addError(errors, name, 'Must be an HTTP(S) URL.')
+  if (definition.type === 'email' && normalized && (!localPart || !domain?.includes('.') || extraParts.length)) addError(errors, name, 'Must be a valid email address.')
+}
+
+const DEFAULT_URL_PROTOCOLS = ['http', 'https']
+/** `mailto:` and `tel:` carry no `//`, so the scheme is read rather than the whole prefix. */
+const schemePattern = /^([a-z][a-z0-9+.-]*):/i
+
+function normalizeProtocols(protocols: readonly string[] | undefined): string[] {
+  const declared = protocols?.length ? protocols : DEFAULT_URL_PROTOCOLS
+  return declared.map(protocol => protocol.trim().toLowerCase().replace(/:.*$/, ''))
+}
+
+function isDefaultProtocols(protocols: readonly string[] | undefined): boolean {
+  return !protocols?.length
+}
+
+function isAllowedProtocol(href: string, protocols: readonly string[] | undefined): boolean {
+  const scheme = schemePattern.exec(href)?.[1]?.toLowerCase()
+  return Boolean(scheme) && normalizeProtocols(protocols).includes(scheme!)
 }
 
 function getRichTextContent(value: string) {

@@ -50,6 +50,7 @@ export default defineEponymeConfig({
                     openInNewTab: true,
                   },
                   placeholder: 'https://example.com/contact',
+                  protocols: ['https'],
                 }),
               },
             },

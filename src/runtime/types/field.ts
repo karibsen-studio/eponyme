@@ -27,8 +27,6 @@ export interface TextFieldOptions extends DefaultFieldOptions<string> {
   placeholder?: string
   trim?: boolean
   regex?: RegExp
-  email?: boolean
-  url?: boolean
 }
 
 export type StringFieldOptions = TextFieldOptions
@@ -118,8 +116,24 @@ export interface UrlValue {
   download?: boolean
 }
 
+/**
+ * Scheme of an external link, without the trailing colon. The common ones are suggested, and
+ * any other scheme is still accepted — `bitcoin`, `matrix` or an application scheme are valid
+ * choices this list has no business refusing.
+ */
+export type UrlProtocol = 'http' | 'https' | 'mailto' | 'tel' | 'sms' | 'ftp' | (string & {})
+
 export interface UrlFieldOptions extends DefaultFieldOptions<UrlValue> {
   placeholder?: string
+  /**
+   * Schemes an external link may use. `['https']` refuses plain `http`, and adding `mailto`
+   * or `tel` is what makes a contact link possible.
+   *
+   * Internal links are unaffected: they still have to start with `/` or `#`.
+   *
+   * @default ['http', 'https']
+   */
+  protocols?: UrlProtocol[]
 }
 
 export interface UrlFieldDefinition {

@@ -790,44 +790,6 @@ Two protections apply to the public submission route:
 - a **body size limit**, 64 KB by default, configurable with `maxBodyBytes`. An oversized
   body is refused with `413` before it is parsed.
 
-### Captcha
-
-Set `captcha: true` on the form, then install an adapter — Eponyme defines the contract
-but ships no provider:
-
-```bash
-pnpm add @karibsen/eponyme-captcha
-```
-
-```ts
-export default defineNuxtConfig({
-  modules: ['@karibsen/eponyme', '@karibsen/eponyme-captcha'],
-  eponymeCaptcha: { siteKey: '<your-turnstile-site-key>' },
-})
-```
-
-Render the widget and bind its token; `useEponymeForm` sends it alongside the fields and
-the server verifies it before validating anything:
-
-```vue
-<script setup lang="ts">
-const { captchaToken, requiresCaptcha, submit } = useEponymeForm('contact')
-</script>
-
-<template>
-  <NuxtTurnstile v-if="requiresCaptcha" v-model="captchaToken" />
-</template>
-```
-
-**It fails closed.** Without an adapter, a form declaring `captcha: true` answers `500`
-rather than accepting submissions unprotected. A rejected token answers `422` with a
-`_form` error; the provider's reason stays in the server log, since telling a bot which
-check it failed only helps it.
-
-Writing an adapter for another provider means supplying a `name` and an
-`async verify(token, { ip })` returning `{ success, reason? }`, then pointing the
-`#eponyme/captcha` alias at it.
-
 Rate limiting and file uploads are not implemented yet.
 
 ## Hooks
