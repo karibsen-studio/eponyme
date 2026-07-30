@@ -21,34 +21,122 @@ import { tagPreviewPathRoutes } from './runtime/utils/cache-tags'
 // `@karibsen/eponyme/config`, since the package root has to stay the Nuxt module itself.
 export type * from './eponyme'
 
+/**
+ * Options read from the `eponyme` key of `nuxt.config`.
+ *
+ * @example
+ * ```ts
+ * export default defineNuxtConfig({
+ *   modules: ['@karibsen/eponyme'],
+ *   eponyme: {
+ *     prismaClient: '~~/server/utils/prisma',
+ *     previewPaths: {
+ *       homepage: '/',
+ *       articles: '/articles/:slug',
+ *     },
+ *   },
+ * })
+ * ```
+ */
 export interface ModuleOptions {
+  /**
+   * Route the dashboard is served on. Surrounding slashes are normalised, so `__eponyme` and
+   * `/__eponyme/` are equivalent.
+   *
+   * @default "/__eponyme"
+   */
   dashboardPath?: string
-  /** Public routes used for previews and sitemap entries. Collections use a `:slug` placeholder. */
+
+  /**
+   * Public route rendering each entry, keyed by singleton name or by collection name. A
+   * collection value must contain `:slug`, which is replaced by the entry slug.
+   *
+   * @remarks
+   * An entry left out of this map has no preview, no sitemap entry, and no cache tag on the page
+   * that renders it.
+   *
+   * @default {}
+   * @example
+   * ```ts
+   * previewPaths: {
+   *   homepage: '/',
+   *   articles: '/articles/:slug',
+   * }
+   * ```
+   */
   previewPaths?: Record<string, string>
-  /** Path to a server module exporting an already initialized PrismaClient. */
+
+  /**
+   * Module specifier of a server file whose default export is an initialised `PrismaClient`.
+   * Nuxt aliases apply, and keep their usual meaning: a server file lives under `~~/`, not `~/`.
+   *
+   * @example
+   * ```ts
+   * prismaClient: '~~/server/utils/prisma'
+   * ```
+   * @see https://www.prisma.io/docs/orm/prisma-client/setup-and-configuration/introduction
+   */
   prismaClient: string
-  /** Default palette offered by every color field; a field can override it with its own `presets`. */
+
+  /**
+   * Palette offered by every color field, which a field overrides with its own `presets`.
+   *
+   * @remarks
+   * A bare string is labelled from its value. An entry that is not a valid hex colour is dropped.
+   *
+   * @default []
+   * @example
+   * ```ts
+   * colorPresets: [
+   *   { label: 'Ink', value: '#171714' },
+   *   '#ffffff',
+   * ]
+   * ```
+   */
   colorPresets?: Array<string | { label: string, value: string }>
+
   auth?: {
-    /** Fixed lifetime of an authenticated session. */
+    /**
+     * Lifetime of an authenticated session, in days, counted from sign-in and never extended by
+     * activity.
+     *
+     * @default 7
+     */
     sessionDurationDays?: number
   }
+
   /**
-   * How long a server instance may reuse content it has already read, in seconds.
-   * A save clears what it changed on its own instance, so this only bounds how long
-   * another instance can still serve the previous content. `0` disables the cache.
+   * How long a server instance may reuse content it has already read, in seconds. `0` disables it.
+   *
+   * @remarks
+   * A save only clears the instance that served it, so this bounds how long another instance can
+   * still answer with the previous content.
+   *
+   * @default 5
    */
   cacheSeconds?: number
+
   /**
-   * How long a browser may reuse published content, in seconds. This is what makes a
-   * client-side navigation instant, and it is the one window nobody can purge: a visitor
-   * who already holds a copy keeps it until it expires. Keep it short. `0` disables it.
+   * How long a browser may reuse published content, in seconds. `0` disables it.
+   *
+   * @remarks
+   * A browser cache cannot be purged: a visitor holding a copy keeps it until it expires, whatever
+   * is published meanwhile.
+   *
+   * @default 30
+   * @see https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control
    */
   browserCacheSeconds?: number
+
   /**
-   * How long a CDN may reuse published content, in seconds. A CDN can be purged — the
-   * `eponyme:entry:published` hook is the place to do it — so this can be generous.
-   * `0` disables it.
+   * How long a CDN may reuse published content, in seconds. `0` disables it.
+   *
+   * @remarks
+   * Sent as `s-maxage`, with `stale-while-revalidate` twelve times longer. Cached responses carry
+   * cache tags, so a publication can purge them from the `eponyme:entry:published` hook.
+   *
+   * @default 300
+   * @see https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control
    */
   cdnCacheSeconds?: number
 }
