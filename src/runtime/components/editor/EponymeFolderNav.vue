@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { middleEllipsis } from '../../utils/middle-ellipsis'
 
 const props = defineProps<{ basePath: string, eponyme: string }>()
 const parts = computed(() => props.eponyme.split('/'))
@@ -22,15 +23,6 @@ const visibleBreadcrumbs = computed(() => {
 
 function label(name: string) {
   return name.replace(/[-_]/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
-}
-
-function middleEllipsis(value: string, maxLength = 28) {
-  const characters = [...value]
-  if (characters.length <= maxLength) return value
-  const available = maxLength - 1
-  const startLength = Math.ceil(available / 2)
-  const endLength = Math.floor(available / 2)
-  return `${characters.slice(0, startLength).join('')}…${characters.slice(-endLength).join('')}`
 }
 
 function updateBreadcrumbMenuScroll(event: Event) {
