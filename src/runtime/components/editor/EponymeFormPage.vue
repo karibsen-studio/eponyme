@@ -184,11 +184,11 @@ async function deleteSubmission(submission: EponymeFormSubmission) {
                 v-for="header in headerGroup.headers"
                 :key="header.id"
                 scope="col"
-                class="ep:border-b ep:border-border-ep ep:p-3 ep:text-[11px] ep:font-semibold ep:tracking-widest ep:text-muted-ep ep:uppercase"
+                class="ep:border-b ep:border-border-ep ep:p-3 ep:text-[11px] ep:font-semibold ep:text-muted-ep ep:uppercase"
               >
                 <button
                   type="button"
-                  class="ep:flex ep:cursor-pointer ep:items-center ep:gap-1 ep:border-0 ep:bg-transparent ep:p-0 ep:text-inherit ep:uppercase"
+                  class="ep:flex ep:cursor-pointer ep:items-center ep:gap-1 ep:border-0 ep:bg-transparent ep:p-0 ep:text-inherit"
                   :aria-sort="header.column.getIsSorted() === 'asc' ? 'ascending' : header.column.getIsSorted() === 'desc' ? 'descending' : 'none'"
                   @click="header.column.toggleSorting()"
                 >
