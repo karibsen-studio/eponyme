@@ -1,7 +1,6 @@
 import { createError, defineEventHandler, getRequestHeader, readRawBody, setResponseHeader, setResponseStatus } from 'h3'
 import { useEponymeFormService } from '../../services/eponyme-form-service'
 import { readEponymeFormRoute } from '../../utils/form-route'
-import { CAPTCHA_TOKEN_KEY, isEponymeCaptchaConfigured, verifyEponymeCaptcha } from '../../utils/eponyme-captcha'
 import { callEponymeBlockingHook, callEponymeHook } from '../../utils/eponyme-hooks'
 
 /**
@@ -39,24 +38,6 @@ export default defineEventHandler(async (event) => {
   if (service.isHoneypotTriggered(route.name, payload)) {
     setResponseStatus(event, 201)
     return { submitted: true }
-  }
-
-  // Before validation and before any hook: an unverified caller must never reach a
-  // listener, and turning a bot away first is also the cheapest possible answer.
-  if (definition.captcha) {
-    // A misconfiguration must not silently disable the protection the form asked for.
-    if (!isEponymeCaptchaConfigured()) {
-      throw createError({
-        statusCode: 500,
-        statusMessage: `Form "${route.name}" requires a captcha but no adapter is installed. Add one, such as @karibsen/eponyme-captcha.`,
-      })
-    }
-    const token = payload && typeof payload === 'object' ? (payload as Record<string, unknown>)[CAPTCHA_TOKEN_KEY] : undefined
-    const result = await verifyEponymeCaptcha(event, token)
-    if (!result.success) {
-      setResponseStatus(event, 422)
-      return { errors: { _form: ['Captcha verification failed. Please try again.'] } }
-    }
   }
 
   // Validated next, so a listener never sees a payload the schema would reject.

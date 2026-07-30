@@ -59,8 +59,6 @@ export interface EponymeFormOptions<T extends EponymeFormSchema = EponymeFormSch
   honeypot?: string | false
   /** In bytes. */
   maxBodyBytes?: number
-  /** Requires a valid captcha token. Needs an adapter such as `@karibsen/eponyme-captcha`. */
-  captcha?: boolean
 }
 
 export interface EponymeFormDefinitionBase {
@@ -71,7 +69,6 @@ export interface EponymeFormDefinitionBase {
   submission: Required<EponymeFormSubmissionOptions>
   honeypot: string | false
   maxBodyBytes: number
-  captcha: boolean
 }
 
 export interface EponymeFormDefinition<T extends EponymeFormSchema = EponymeFormSchema> extends EponymeFormDefinitionBase {

@@ -4,7 +4,6 @@ import { getEponymeForms } from '../../utils/get-eponyme-schemas'
 import { validateEponymeData, type ValidationErrors } from '../../utils/validate-eponyme-data'
 
 /** Kept here rather than imported, so the store stays free of H3 imports. */
-const CAPTCHA_TOKEN_KEY = '_eponyme_captcha'
 
 type DateValue = Date | string
 
@@ -81,9 +80,9 @@ export class EponymeFormService {
       return { errors: { _form: ['Body must be an object.'] } }
 
     const input = payload as Record<string, unknown>
-    // The honeypot and the captcha token are transport, not content: neither may
-    // reach validation, which only knows about declared fields.
-    const { [definition.honeypot || '']: _honeypot, [CAPTCHA_TOKEN_KEY]: _captcha, ...rest } = input
+    // The honeypot is transport, not content: it must not reach validation, which only
+    // knows about declared fields.
+    const { [definition.honeypot || '']: _honeypot, ...rest } = input
     const unknownKeys = Object.keys(rest).filter(key => !(key in definition.fields))
     if (unknownKeys.length)
       return { errors: Object.fromEntries(unknownKeys.map(key => [key, ['Unknown field.']])) }

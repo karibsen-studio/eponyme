@@ -34,8 +34,6 @@ export interface UseEponymeFormOptions<Data extends Record<string, unknown>> {
   onSubmit?: (data: Data) => unknown | Promise<unknown>
 }
 
-const CAPTCHA_TOKEN_KEY = '_eponyme_captcha'
-
 export interface UseEponymeFormResult<Data extends Record<string, unknown>> {
   fields: ComputedRef<UseEponymeFormField[]>
   values: Ref<Data>
@@ -44,10 +42,6 @@ export interface UseEponymeFormResult<Data extends Record<string, unknown>> {
   submitted: Ref<boolean>
   /** Name of the trap field to render hidden, or `false` when disabled. */
   honeypot: string | false
-  /** True when the form declares `captcha: true`; render a widget and fill `captchaToken`. */
-  requiresCaptcha: boolean
-  /** Bind this to the captcha widget, for example `<NuxtTurnstile v-model="captchaToken" />`. */
-  captchaToken: Ref<string>
   submit: () => Promise<boolean>
   reset: () => void
 }
@@ -66,7 +60,6 @@ export function useEponymeForm<const Name extends ConfigFormName>(
   const serverErrors = ref<ValidationErrors>({})
   const pending = ref(false)
   const submitted = ref(false)
-  const captchaToken = ref('')
   const values = ref<Record<string, unknown>>(createDefaultEponymeData(definition.fields) as Record<string, unknown>)
   // A public form has no previously saved state, so every edited field counts as
   // touched and its message shows as soon as it becomes invalid.
@@ -88,7 +81,6 @@ export function useEponymeForm<const Name extends ConfigFormName>(
     values.value = createDefaultEponymeData(definition.fields) as Record<string, unknown>
     serverErrors.value = {}
     submitted.value = false
-    captchaToken.value = ''
     validation.reset()
   }
 
@@ -112,9 +104,7 @@ export function useEponymeForm<const Name extends ConfigFormName>(
         // cannot be inferred from the literal path.
         await requestFetch(`/api/eponyme-forms/${name}` as string, {
           method: 'POST',
-          // The token travels beside the fields, never as one of them: it is
-          // transport, and the schema only knows about declared fields.
-          body: definition.captcha ? { ...values.value, [CAPTCHA_TOKEN_KEY]: captchaToken.value } : values.value,
+          body: values.value,
         })
       }
       submitted.value = true
@@ -140,8 +130,6 @@ export function useEponymeForm<const Name extends ConfigFormName>(
     pending,
     submitted,
     honeypot: definition.honeypot,
-    requiresCaptcha: definition.captcha,
-    captchaToken,
     submit,
     reset,
   }

@@ -26,6 +26,5 @@ export function form<const T extends EponymeFormSchema>(options: EponymeFormOpti
     submission: { mode: options.submission?.mode ?? 'custom' },
     honeypot,
     maxBodyBytes: options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES,
-    captcha: options.captcha ?? false,
   }
 }
