@@ -13,6 +13,7 @@ import { useEponymeAuth } from '../../composables/useEponymeAuth'
 import EPAvatar from '../ui/EPAvatar.vue'
 import EPButton from '../ui/EPButton.vue'
 import EPInputText from '../ui/EPInputText.vue'
+import logoUrl from '../../assets/logo.png?url'
 
 const props = defineProps<{ basePath: string }>()
 const route = useRoute()
@@ -144,9 +145,13 @@ watch(() => route.path, () => {
       <NuxtLink
         v-if="!collapsed"
         :to="normalizedBasePath"
-        class="ep:flex ep:min-w-0 ep:items-center ep:gap-2 ep:px-3 ep:text-sm ep:font-bold ep:tracking-tight ep:text-white ep:no-underline"
+        class="ep:flex ep:min-w-0 ep:items-center ep:no-underline"
       >
-        Eponyme
+        <img
+          :src="logoUrl"
+          alt="Eponyme"
+          class="ep:block ep:size-8"
+        >
       </NuxtLink>
       <button
         type="button"
