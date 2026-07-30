@@ -20,6 +20,7 @@ export default defineEponymeConfig({
     fields: {
       name: field.string({ required: true, minLength: 2 }),
       email: field.email({ required: true }),
+      phone: field.phone({ defaultCountry: 'FR', countries: ['FR', 'BE'] }),
       message: field.textarea({ required: true }),
     },
     submission: { mode: 'managed' },
@@ -37,6 +38,7 @@ export default defineEponymeConfig({
       title: field.string({ required: true }),
       slug: field.slug({ required: true }),
       excerpt: field.textarea(),
+      phone: field.phone({ defaultCountry: 'FR', countries: ['FR', 'BE'] }),
     },
   }),
 })

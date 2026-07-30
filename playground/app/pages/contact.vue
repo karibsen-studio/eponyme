@@ -4,6 +4,9 @@
 // provides the fields, their values, their errors and the submit handler.
 const { fields, errors, honeypot, pending, submitted, submit, reset } = useEponymeForm('contact')
 
+/** The markup is the site's, so mapping a field type to an input type is its job too. */
+const inputTypes: Record<string, string> = { email: 'email', phone: 'tel', url: 'url', number: 'number' }
+
 useSeoMeta({ title: 'Contact · Eponyme Playground' })
 </script>
 
@@ -84,7 +87,7 @@ useSeoMeta({ title: 'Contact · Eponyme Playground' })
         <input
           v-else
           :id="`contact-${entry.name}`"
-          :type="entry.definition.type === 'email' ? 'email' : 'text'"
+          :type="inputTypes[entry.definition.type] ?? 'text'"
           :value="String(entry.value ?? '')"
           @input="entry.update(($event.target as HTMLInputElement).value)"
         >

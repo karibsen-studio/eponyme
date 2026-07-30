@@ -1,6 +1,7 @@
 import type { EponymeSchema, FieldDefinition, FieldValidator } from '../types'
 import { isArrayItemFieldDefinition } from './get-field-default-value'
 import { isFieldVisible } from './is-field-visible'
+import { normalizeEponymePhone } from './normalize-phone'
 
 /**
  * Errors are keyed by the path of the field they belong to — `title`, `hero.title`,
@@ -210,6 +211,22 @@ function validateFieldRules(
     if (normalized && !isValid) addError(errors, name, 'Must be a valid date.')
     if (definition.options.min && normalized < definition.options.min) addError(errors, name, `Must be on or after ${definition.options.min}.`)
     if (definition.options.max && normalized > definition.options.max) addError(errors, name, `Must be on or before ${definition.options.max}.`)
+    return
+  }
+
+  if (definition.type === 'phone') {
+    const phone = normalizeEponymePhone(normalized, definition.options)
+    if (normalized && phone.countryNotAllowed) {
+      const accepted = definition.options.countries?.join(', ')
+      addError(errors, name, phone.country
+        ? `Numbers from ${phone.country} are not accepted. Use a number from: ${accepted}.`
+        : `Must be a number from: ${accepted}.`)
+    }
+    else if (normalized && !phone.valid) {
+      addError(errors, name, definition.options.detectCountry === false
+        ? 'Must be a valid phone number in international format, starting with the country code.'
+        : 'Must be a valid phone number.')
+    }
     return
   }
 

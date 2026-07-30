@@ -452,6 +452,40 @@ describe('ssr', async () => {
     expect(after.total).toBe(before.total)
   })
 
+  it('stores a phone number in E.164, whatever format it was sent in', async () => {
+    // Through an entry: the national number is rewritten before it is persisted.
+    await $fetch('/api/eponyme-collections/articles', { method: 'POST', body: { title: 'Phone' }, ...authenticated() })
+    await $fetch('/api/eponyme/articles/phone?action=publish', {
+      method: 'PATCH',
+      body: { title: 'Phone', slug: 'phone', phone: '06 11 13 11 43' },
+      ...authenticated(),
+    })
+    await expect($fetch<{ data: { phone: string } }>('/api/eponyme/articles/phone'))
+      .resolves.toMatchObject({ data: { phone: '+33611131143' } })
+
+    // A number from a country the field does not accept is refused, not stored.
+    const refused = await $fetch('/api/eponyme/articles/phone', {
+      method: 'PATCH',
+      body: { phone: '+1 415 555 2671' },
+      ignoreResponseError: true,
+      ...authenticated(),
+    })
+    expect(refused).toMatchObject({ errors: { phone: [expect.stringContaining('US')] } })
+    await removeArticle('phone')
+
+    // Through a public form: the stored submission is canonical too.
+    await expect($fetch('/api/eponyme-forms/contact', {
+      method: 'POST',
+      body: { name: 'Ada', email: 'ada@example.com', phone: '06 11 13 11 43', message: 'Call me.' },
+    })).resolves.toMatchObject({ submitted: true })
+    const listed = await $fetch<{ submissions: Array<{ data: { phone: string } }> }>(
+      '/api/eponyme-forms/contact/submissions',
+      authenticated(),
+    )
+    expect(listed.submissions[0]!.data.phone).toBe('+33611131143')
+    await $fetch('/api/eponyme-forms/contact/submissions', { method: 'DELETE', ...authenticated() })
+  })
+
   it('keeps custom forms out of the managed submission route', async () => {
     // `newsletter` declares no submission mode, so it defaults to custom.
     await expect($fetch('/api/eponyme-forms/newsletter', {

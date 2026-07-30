@@ -13,6 +13,24 @@ import { buildEponymeNavigationTree } from '../src/runtime/utils/build-navigatio
 import { filterEponymeNavigationTree } from '../src/runtime/utils/filter-navigation-tree'
 import { cacheDuringHydrationOnly, cacheForPublicRead } from '../src/runtime/utils/hydration-cache'
 import { getEponymeCacheTags, tagPreviewPathRoutes } from '../src/runtime/utils/cache-tags'
+import { normalizeEponymePhone, toEponymePhoneValue } from '../src/runtime/utils/normalize-phone'
+import { normalizeEponymePhones } from '../src/runtime/utils/normalize-eponyme-phones'
+import { validateEponymeData } from '../src/runtime/utils/validate-eponyme-data'
+import { middleEllipsis } from '../src/runtime/utils/middle-ellipsis'
+
+describe('middleEllipsis', () => {
+  it('keeps short text unchanged', () => {
+    expect(middleEllipsis('https://eponyme.dev')).toBe('https://eponyme.dev')
+  })
+
+  it('preserves both ends within the requested length', () => {
+    expect(middleEllipsis('https://eponyme.dev/documentation', 20)).toBe('https://ep…mentation')
+  })
+
+  it('counts Unicode code points instead of UTF-16 code units', () => {
+    expect(middleEllipsis('ab🔥cdef', 6)).toBe('ab🔥…ef')
+  })
+})
 
 describe('humanizeLabel', () => {
   it('turns a field name into a title', () => {
@@ -478,5 +496,64 @@ describe('hydration cache', () => {
     const key = 'eponyme:homepage:draft'
     expect(cacheDuringHydrationOnly(key, nuxtApp(true, { [key]: { data: { title: 'Draft' } } }))).toEqual({ data: { title: 'Draft' } })
     expect(cacheDuringHydrationOnly(key, nuxtApp(false, { [key]: { data: { title: 'Draft' } } }))).toBeUndefined()
+  })
+})
+
+describe('field.phone()', () => {
+  const validate = (options: Parameters<typeof field.phone>[0], value: unknown) =>
+    validateEponymeData({ phone: field.phone(options) }, { phone: value }, 'publish').phone
+
+  it('normalises an international number to E.164', () => {
+    expect(normalizeEponymePhone('+33 6 11 13 11 43')).toMatchObject({ valid: true, e164: '+33611131143', country: 'FR' })
+    expect(toEponymePhoneValue(' +1 (415) 555-2671 ')).toBe('+14155552671')
+  })
+
+  it('resolves a national number against defaultCountry', () => {
+    expect(toEponymePhoneValue('06 11 13 11 43', { defaultCountry: 'FR' })).toBe('+33611131143')
+    // Without a default country there is nothing to resolve it against.
+    expect(validate({}, '06 11 13 11 43')).toEqual(['Must be a valid phone number.'])
+  })
+
+  it('requires the international form when detectCountry is false', () => {
+    expect(validate({ detectCountry: false, defaultCountry: 'FR' }, '0611131143'))
+      .toEqual(['Must be a valid phone number in international format, starting with the country code.'])
+    expect(validate({ detectCountry: false }, '+33611131143')).toBeUndefined()
+  })
+
+  it('refuses a number from a country that is not accepted', () => {
+    expect(validate({ countries: ['FR', 'BE'] }, '+14155552671'))
+      .toEqual(['Numbers from US are not accepted. Use a number from: FR, BE.'])
+    expect(validate({ countries: ['FR', 'BE'] }, '+33611131143')).toBeUndefined()
+  })
+
+  it('reports an unparsable number and leaves the value untouched', () => {
+    expect(validate({}, 'bonjour')).toEqual(['Must be a valid phone number.'])
+    expect(toEponymePhoneValue('bonjour')).toBe('bonjour')
+  })
+
+  it('treats an empty value as absent, leaving `required` to decide', () => {
+    expect(validate({}, '')).toBeUndefined()
+    expect(validate({ required: true }, '')).toEqual(['This field is required.'])
+  })
+
+  it('normalises phones nested in sections, tabs and arrays', () => {
+    const schema = {
+      contact: field.section({ fields: { phone: field.phone({ defaultCountry: 'FR' }) } }),
+      people: field.array({ of: { phone: field.phone({ defaultCountry: 'FR' }) } }),
+      meta: field.tab({ tabs: { main: { label: 'Main', fields: { phone: field.phone({ defaultCountry: 'FR' }) } } } }),
+    }
+    expect(normalizeEponymePhones(schema, {
+      contact: { phone: '0611131143' },
+      people: [{ phone: '0611131143' }],
+      meta: { main: { phone: '0611131143' } },
+    })).toEqual({
+      contact: { phone: '+33611131143' },
+      people: [{ phone: '+33611131143' }],
+      meta: { main: { phone: '+33611131143' } },
+    })
+  })
+
+  it('is available in a public form', () => {
+    expect(() => form({ fields: { phone: field.phone() } })).not.toThrow()
   })
 })

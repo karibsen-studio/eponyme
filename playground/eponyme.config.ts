@@ -115,6 +115,15 @@ export default defineEponymeConfig({
                   label: 'Newsletter contact',
                   defaultValue: 'hello@example.com',
                 }),
+                contactPhone: field.phone({
+                  label: 'Contact phone',
+                  description: 'Stored in E.164. A French or Belgian number, typed in either format.',
+                  defaultValue: '+33611131143',
+                  defaultCountry: 'FR',
+                  countries: ['FR', 'BE', 'PT'],
+                  autocomplete: 'tel',
+                  placeholder: '06 11 13 11 43',
+                }),
                 theme: field.radio({
                   label: 'Theme',
                   options: [
@@ -184,6 +193,13 @@ export default defineEponymeConfig({
     fields: {
       name: field.string({ label: 'Name', required: true, minLength: 2, maxLength: 80 }),
       email: field.email({ label: 'Email', required: true }),
+      phone: field.phone({
+        label: 'Phone',
+        description: 'Optional. Any format: it is stored in E.164.',
+        defaultCountry: 'FR',
+        autocomplete: 'tel',
+        placeholder: '06 11 13 11 43',
+      }),
       subject: field.select({
         label: 'Subject',
         required: true,

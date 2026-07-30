@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { normalizeEponymePhones } from '../../utils/normalize-eponyme-phones'
 import type { EponymeConfig, EponymeFormDefinitionBase } from '../../types'
 import { getEponymeForms } from '../../utils/get-eponyme-schemas'
 import { validateEponymeData, type ValidationErrors } from '../../utils/validate-eponyme-data'
@@ -82,11 +83,13 @@ export class EponymeFormService {
     const input = payload as Record<string, unknown>
     // The honeypot is transport, not content: it must not reach validation, which only
     // knows about declared fields.
-    const { [definition.honeypot || '']: _honeypot, ...rest } = input
-    const unknownKeys = Object.keys(rest).filter(key => !(key in definition.fields))
+    const { [definition.honeypot || '']: _honeypot, ...submitted } = input
+    const unknownKeys = Object.keys(submitted).filter(key => !(key in definition.fields))
     if (unknownKeys.length)
       return { errors: Object.fromEntries(unknownKeys.map(key => [key, ['Unknown field.']])) }
 
+    // A stored submission holds the same canonical values an entry would.
+    const rest = normalizeEponymePhones(definition.fields, submitted)
     const errors = validateEponymeData(definition.fields, rest, 'publish')
     if (Object.keys(errors).length) return { errors }
     return { data: rest }

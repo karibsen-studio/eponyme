@@ -1,7 +1,7 @@
 import type { EponymeFormDefinition, EponymeFormOptions, EponymeFormSchema } from '../runtime/types'
 
 /** Field types a visitor can meaningfully fill in on a public page. */
-const PUBLIC_FIELD_TYPES = ['string', 'textarea', 'email', 'url', 'number', 'boolean', 'select', 'radio', 'checkboxGroup'] as const
+const PUBLIC_FIELD_TYPES = ['string', 'textarea', 'email', 'phone', 'url', 'number', 'boolean', 'select', 'radio', 'checkboxGroup'] as const
 
 const DEFAULT_HONEYPOT = '_eponyme_hp'
 const DEFAULT_MAX_BODY_BYTES = 64 * 1024

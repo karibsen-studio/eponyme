@@ -13,7 +13,7 @@ Define your content in `eponyme.config.ts`. Eponyme provides defaults, validatio
 
 ## Features
 
-- Type-safe fields for text, slugs, rich text, numbers, booleans, images, links, dates, colors, sections, tabs, and arrays
+- Type-safe fields for text, slugs, rich text, numbers, booleans, images, links, phone numbers, dates, colors, sections, tabs, and arrays
 - Declarative defaults and validation
 - Conditional fields, character counters, and sortable arrays
 - Private drafts with explicit publishing
@@ -94,8 +94,16 @@ export default defineEponymeConfig({
       label: 'Contact email',
       defaultValue: 'hello@example.com',
     }),
+    contactPhone: field.phone({
+      label: 'Contact phone',
+      defaultCountry: 'FR',
+      countries: ['FR', 'BE'],
+      autocomplete: 'tel',
+    }),
     callToAction: field.url({
       label: 'Call to action',
+      // Schemes an external link may use; defaults to ['http', 'https']
+      protocols: ['https', 'mailto'],
       defaultValue: {
         href: '/contact',
         type: 'internal',
@@ -160,6 +168,39 @@ field.string({
   validate: (value, data) => value !== data.slug || 'The title must be different from the slug.',
 })
 ```
+
+### Phone numbers
+
+`field.phone()` stores its value in **E.164** — `+33611131143` — whatever format it was typed
+in. Normalisation happens on the server before the write, so the stored format is a guarantee
+rather than a convention a client could skip.
+
+```ts
+phone: field.phone({
+  label: 'Phone',
+  // ISO 3166-1 alpha-2, autocompleted from libphonenumber-js
+  countries: ['FR', 'BE'],
+  // Country a number typed without `+` belongs to
+  defaultCountry: 'FR',
+  autocomplete: 'tel',
+  placeholder: '06 11 13 11 43',
+  required: true,
+})
+```
+
+| Option | Effect |
+|---|---|
+| `countries` | Countries whose numbers are accepted. A number resolving to any other is refused, with an error naming the country it came from. Omitted, every country is accepted |
+| `defaultCountry` | Country assumed for a number written without an international prefix. Without it, only `+…` numbers can be understood |
+| `detectCountry` | `false` requires the international `+…` form, so the country is never guessed. Defaults to `true` |
+| `autocomplete` | `tel`, `tel-national` or `tel-country-code`, set on the input |
+| `defaultValue`, `required`, `placeholder`, `label`, `description` | As on every field |
+
+Validation uses the `min` metadata bundle of `libphonenumber-js`, a fraction of the size of the
+full one. It parses and formats every country, and is slightly more permissive: a few numbers
+that are impossible for their region still pass.
+
+A phone field is also allowed in a public `form()`.
 
 ## Prisma
 

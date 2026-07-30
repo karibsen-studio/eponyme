@@ -1,4 +1,6 @@
-export type EponymeFieldType = 'string' | 'slug' | 'email' | 'url' | 'textarea' | 'richText' | 'number' | 'boolean' | 'image' | 'select' | 'radio' | 'checkboxGroup' | 'date' | 'color' | 'array' | 'section' | 'tabs'
+import type { CountryCode } from 'libphonenumber-js/min'
+
+export type EponymeFieldType = 'string' | 'slug' | 'email' | 'phone' | 'url' | 'textarea' | 'richText' | 'number' | 'boolean' | 'image' | 'select' | 'radio' | 'checkboxGroup' | 'date' | 'color' | 'array' | 'section' | 'tabs'
 
 export type FieldVisibilityCondition
   = | { field: string, equals: unknown, notEquals?: never }
@@ -71,6 +73,40 @@ export type EmailFieldOptions = TextFieldOptions
 export interface EmailFieldDefinition {
   type: 'email'
   options: EmailFieldOptions
+}
+
+/**
+ * Countries a phone field accepts, as ISO 3166-1 alpha-2 codes. Re-exported so declaring a
+ * field autocompletes them without importing from `libphonenumber-js` in application code.
+ */
+export type PhoneCountry = CountryCode
+
+export interface PhoneFieldOptions extends DefaultFieldOptions<string> {
+  placeholder?: string
+  /**
+   * Countries whose numbers are accepted. A number resolving to any other country is refused.
+   * Omitted, every country is accepted.
+   */
+  countries?: PhoneCountry[]
+  /**
+   * Country a number typed without an international prefix belongs to. Without it, only
+   * `+…` numbers can be understood.
+   */
+  defaultCountry?: PhoneCountry
+  /**
+   * Whether a number may be written in national form and resolved against `defaultCountry`.
+   * `false` requires the international `+…` form, so the country is never guessed.
+   *
+   * @default true
+   */
+  detectCountry?: boolean
+  /** Value of the input's `autocomplete` attribute. */
+  autocomplete?: 'tel' | 'tel-national' | 'tel-country-code'
+}
+
+export interface PhoneFieldDefinition {
+  type: 'phone'
+  options: PhoneFieldOptions
 }
 
 export type UrlType = 'internal' | 'external'
@@ -190,6 +226,7 @@ export type ArrayItemFieldDefinition
   = | StringFieldDefinition
     | SlugFieldDefinition
     | EmailFieldDefinition
+    | PhoneFieldDefinition
     | UrlFieldDefinition
     | TextareaFieldDefinition
     | RichTextFieldDefinition

@@ -5,6 +5,7 @@ import CheckboxGroupField from './CheckboxGroupField.vue'
 import ColorField from './ColorField.vue'
 import DateField from './DateField.vue'
 import NumberField from './NumberField.vue'
+import PhoneField from './PhoneField.vue'
 import RadioField from './RadioField.vue'
 import RichTextField from './RichTextField.vue'
 import SelectField from './SelectField.vue'
@@ -59,6 +60,7 @@ const component = computed(() => {
     case 'date': return DateField
     case 'color': return ColorField
     case 'url': return UrlField
+    case 'phone': return PhoneField
     default: return TextField
   }
 })
@@ -96,6 +98,14 @@ const specificProps = computed<Record<string, unknown>>(() => {
       return { presets: field.options.presets }
     case 'url':
       return { placeholder: field.options.placeholder }
+    case 'phone':
+      return {
+        placeholder: field.options.placeholder,
+        countries: field.options.countries,
+        defaultCountry: field.options.defaultCountry,
+        detectCountry: field.options.detectCountry,
+        autocomplete: field.options.autocomplete,
+      }
     default: {
       // string, email and image all render as a text input, with their own input type.
       // `image` has no length options, hence the presence checks.

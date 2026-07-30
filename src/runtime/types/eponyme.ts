@@ -1,4 +1,4 @@
-import type { ArrayFieldDefinition, ArrayItemValue, BooleanFieldDefinition, CheckboxGroupFieldDefinition, EmailFieldDefinition, FieldDefinition, NumberFieldDefinition, RadioFieldDefinition, SectionFieldDefinition, SectionValue, SelectFieldDefinition, SlugFieldDefinition, StringFieldDefinition, TabFieldDefinition, TabsValue, TextareaFieldDefinition, UrlFieldDefinition, UrlValue } from './field'
+import type { ArrayFieldDefinition, ArrayItemValue, BooleanFieldDefinition, CheckboxGroupFieldDefinition, EmailFieldDefinition, FieldDefinition, NumberFieldDefinition, PhoneFieldDefinition, RadioFieldDefinition, SectionFieldDefinition, SectionValue, SelectFieldDefinition, SlugFieldDefinition, StringFieldDefinition, TabFieldDefinition, TabsValue, TextareaFieldDefinition, UrlFieldDefinition, UrlValue } from './field'
 
 export type EponymeSchema = Record<string, FieldDefinition>
 export interface EponymeCollectionDefinitionBase {
@@ -34,6 +34,7 @@ export type EponymeFormFieldDefinition
   = | StringFieldDefinition
     | TextareaFieldDefinition
     | EmailFieldDefinition
+    | PhoneFieldDefinition
     | UrlFieldDefinition
     | NumberFieldDefinition
     | BooleanFieldDefinition

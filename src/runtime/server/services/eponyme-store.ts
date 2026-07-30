@@ -8,6 +8,7 @@ import { getEponymeCollections, getEponymeSchemas } from '../../utils/get-eponym
 import { normalizeSlug } from '../../utils/normalize-slug'
 import { applyPreviewSlug } from '../../utils/preview'
 import { validateEponymeData, validateEponymePatch, type ValidationErrors, type ValidationMode } from '../../utils/validate-eponyme-data'
+import { normalizeEponymePhones } from '../../utils/normalize-eponyme-phones'
 
 export type EponymeAction = 'draft' | 'publish'
 export type EponymeVersion = 'draft' | 'published'
@@ -652,7 +653,7 @@ export class EponymeService {
     if (taken) return taken
 
     const defaults = createDefaultEponymeData(definition.fields) as Record<string, unknown>
-    const data = { ...defaults, ...input, [definition.slugField]: slug }
+    const data = normalizeEponymePhones(definition.fields, { ...defaults, ...input, [definition.slugField]: slug })
     const errors = validateEponymePatch(definition.fields, data, data, 'draft')
     if (Object.keys(errors).length) return { errors }
 
@@ -786,8 +787,10 @@ export class EponymeService {
         return { errors: { [collectionEntry.definition.slugField]: ['The slug cannot be changed after creation.'] } }
     }
 
-    const data = { ...state.__eponyme.draft, ...(payload as Record<string, unknown>) }
-    const patchErrors = validateEponymePatch(schema, payload, data, action)
+    // Normalised before validation, so both the errors and the stored value are computed on
+    // the canonical form rather than on whatever the client happened to send.
+    const data = normalizeEponymePhones(schema, { ...state.__eponyme.draft, ...(payload as Record<string, unknown>) })
+    const patchErrors = validateEponymePatch(schema, normalizeEponymePhones(schema, payload as Record<string, unknown>), data, action)
     const errors = action === 'publish'
       ? mergeErrors(patchErrors, validateEponymeData(schema, data, 'publish'))
       : patchErrors
