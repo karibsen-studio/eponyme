@@ -44,6 +44,13 @@ Install the module:
 pnpm add @karibsen/eponyme
 ```
 
+Eponyme brings its own components, so `@nuxt/ui` is not required. If your application does use
+it, it has to be `^4.10.0` or newer: both ship Tailwind, and an older `@nuxt/ui` resolves a
+version the dashboard was not built against. What that breaks is not predictable — broken
+dashboard styles are the visible case, but it can also fail the build or misbehave elsewhere with
+no obvious link back to the cause. The module checks the installed version and warns at build
+time.
+
 Add it to `nuxt.config.ts`:
 
 ```ts

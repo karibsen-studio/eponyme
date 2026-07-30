@@ -9,8 +9,12 @@ import {
   createResolver,
   defineNuxtModule,
   findPath,
+  getNuxtModuleVersion,
+  hasNuxtModule,
+  hasNuxtModuleCompatibility,
   useLogger,
 } from '@nuxt/kit'
+import type { Nuxt } from '@nuxt/schema'
 import pc from 'picocolors'
 import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'node:path'
@@ -141,6 +145,35 @@ export interface ModuleOptions {
   cdnCacheSeconds?: number
 }
 
+/** The oldest `@nuxt/ui` whose Tailwind the dashboard's styles compile against. */
+const MINIMUM_NUXT_UI = '4.10.0'
+
+/**
+ * `@nuxt/ui` is not a dependency — the dashboard brings its own components. But both ship
+ * Tailwind, and an older `@nuxt/ui` resolves a version this module was not built against.
+ * Said out loud at build time because the consequences are diffuse: broken dashboard styles
+ * are only the visible case, and nothing else would point back here.
+ *
+ * Deliberately not a `peerDependencies` entry. Declaring it makes pnpm install `@nuxt/ui`
+ * into this repository and rewrite around 1150 lines of the lockfile, changing resolutions
+ * for unrelated packages — a large risk of breaking something unforeseen, in exchange for an
+ * install-time warning this message already covers.
+ *
+ * A warning, not a refusal: an application that pinned its own Tailwind may well work, and
+ * this module has no business stopping a build over a version it only shares by accident.
+ */
+async function warnOnIncompatibleNuxtUi(nuxt: Nuxt, logger: ReturnType<typeof useLogger>) {
+  if (!hasNuxtModule('@nuxt/ui', nuxt)) return
+  if (await hasNuxtModuleCompatibility('@nuxt/ui', `>=${MINIMUM_NUXT_UI}`, nuxt)) return
+  const found = await getNuxtModuleVersion('@nuxt/ui', nuxt)
+  logger.warn(
+    `@nuxt/ui ${found || '(unknown version)'} is older than ${MINIMUM_NUXT_UI}, which Eponyme needs in order to share Tailwind with it.\n`
+    + `  Upgrade it with \`npm i @nuxt/ui@^${MINIMUM_NUXT_UI}\`. Keeping an older one resolves a Tailwind this module was not built\n`
+    + `  against, and what that breaks is not predictable: broken dashboard styles are the visible case, but it can also fail the\n`
+    + `  build or misbehave somewhere with no obvious link back to this warning.`,
+  )
+}
+
 export default defineNuxtModule<ModuleOptions>({
   meta: {
     name: '@karibsen/eponyme',
@@ -204,6 +237,7 @@ export default defineNuxtModule<ModuleOptions>({
   async setup(options, nuxt) {
     const logger = useLogger('eponyme')
     const resolver = createResolver(import.meta.url)
+    await warnOnIncompatibleNuxtUi(nuxt, logger)
     const dashboardPath = `/${(options.dashboardPath || '__eponyme').replace(/^\/+|\/+$/g, '')}`
     const publicRuntimeConfig = nuxt.options.runtimeConfig.public as Record<string, unknown>
     publicRuntimeConfig.eponyme = {
