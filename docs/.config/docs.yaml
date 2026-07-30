@@ -3,7 +3,7 @@ name: "Eponyme"
 shortDescription: "Give your Nuxt sites an editor"
 description: "A schema-driven CMS for Nuxt applications, built for developers and their clients."
 github: "karibsen-studio/eponyme"
-url: "https://eponyme.karibsen.fr"
+url: "https://eponyme-docs.vercel.app"
 socials:
   x: https://x.com/karibsenstudios
 themeColor: "pink"
