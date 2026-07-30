@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://unpkg.com/undocs/schema/config.json
+name: "Eponyme"
+shortDescription: "Give your Nuxt sites an editor"
+description: "A schema-driven CMS for Nuxt applications, built for developers and their clients."
+github: "karibsen-studio/eponyme"
+url: "https://eponyme.karibsen.fr"
+socials:
+  x: https://x.com/karibsenstudios
+themeColor: "pink"
+landing:
+  heroCode: "pnpm add @karibsen/eponyme"
+  contributors: true
+  features:
+    - title: "Schema-driven"
+      icon: "vscode-icons:file-type-typescript-official"
+      description: "Define your content structure directly in TypeScript with a fully typed API."
+
+    - title: "Built for Nuxt"
+      icon: "vscode-icons:file-type-nuxt"
+      description: "Integrates naturally into Nuxt applications without requiring a separate CMS platform."
+
+    - title: "Client-friendly"
+      description: "Give clients a simple dashboard to edit content without touching the code."
+
+    - title: "Developer-owned"
+      description: "Keep control of your database, Prisma client, migrations, storage and application architecture."
+
+    - title: "Draft and publish"
+      description: "Edit, preview and publish content through a clear editorial workflow."
+
+    - title: "Extensible"
+      description: "Create custom fields and connect your own storage, cache and authentication adapters."
