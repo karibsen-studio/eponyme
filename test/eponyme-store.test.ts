@@ -179,6 +179,67 @@ describe('EponymeService', () => {
     })
   })
 
+  it('fills in a field added inside a section, a tab or an array item', async () => {
+    // What the row looked like before the new fields were declared: the containers exist and
+    // are still valid, which is exactly why a top-level pass used to leave them alone.
+    const stored = {
+      __eponyme: {
+        version: 1,
+        draft: {
+          hero: { title: 'Kept' },
+          meta: { seo: { title: 'Kept too' } },
+          people: [{ name: 'Ada' }],
+        },
+        published: {
+          hero: { title: 'Kept' },
+          meta: { seo: { title: 'Kept too' } },
+          people: [{ name: 'Ada' }],
+        },
+        status: 'published',
+        publishedAt: null,
+      },
+    }
+    const { client, rows } = createClient()
+    rows.set('nested', stored as unknown as Record<string, unknown>)
+
+    const nestedConfig = defineEponymeConfig({
+      nested: {
+        hero: field.section({
+          fields: {
+            title: field.string(),
+            subtitle: field.string({ defaultValue: 'Filled in' }),
+          },
+        }),
+        meta: field.tab({
+          tabs: {
+            seo: {
+              label: 'SEO',
+              fields: {
+                title: field.string(),
+                description: field.string({ defaultValue: 'From the tab' }),
+              },
+            },
+          },
+        }),
+        people: field.array({
+          of: {
+            name: field.string(),
+            role: field.string({ defaultValue: 'Member' }),
+          },
+        }),
+      },
+    })
+
+    const service = new EponymeService(nestedConfig, client)
+    await service.syncAll()
+
+    expect(await service.get('nested', 'draft')).toEqual({
+      hero: { title: 'Kept', subtitle: 'Filled in' },
+      meta: { seo: { title: 'Kept too', description: 'From the tab' } },
+      people: [{ name: 'Ada', role: 'Member' }],
+    })
+  })
+
   it('reports a conflict instead of overwriting a concurrent edit', async () => {
     const { client } = createClient()
     const service = new EponymeService(config, client)

@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 import type { EponymeCollectionDefinitionBase, EponymeConfig, EponymeSchema } from '../../types'
+import type { FieldDefinition } from '../../types/field'
 import { createDefaultEponymeData } from '../../utils/create-default-eponyme-data'
+import { isArrayItemFieldDefinition } from '../../utils/get-field-default-value'
 import { getEponymeCollections, getEponymeSchemas } from '../../utils/get-eponyme-schemas'
 import { normalizeSlug } from '../../utils/normalize-slug'
 import { applyPreviewSlug } from '../../utils/preview'
@@ -214,16 +216,51 @@ export class EponymeService {
     await Promise.all(Object.keys(this.schemas).map(name => this.loadState(name, { heal: true })))
   }
 
+  /**
+   * Brings a stored document back in line with the schema: keys the schema no longer declares
+   * are dropped, and a key it declares but the document lacks takes its default.
+   *
+   * Recursive, because a field added inside a section, a tab or an array item is otherwise
+   * never filled in: the container it lives in already exists and is still valid, so a
+   * top-level pass keeps it untouched and the new field reads as missing forever. That was
+   * silent — `defaultValue` simply did nothing for anything but a root field.
+   */
   private reconcile(schema: EponymeSchema, value: unknown, mode: ValidationMode): Record<string, unknown> {
-    const persisted = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {}
+    const persisted = isPlainObject(value) ? value : {}
     const defaults = createDefaultEponymeData(schema) as Record<string, unknown>
     return Object.fromEntries(Object.keys(schema).map((key) => {
-      const candidate = key in persisted ? persisted[key] : defaults[key]
+      const definition = schema[key]!
+      const candidate = key in persisted
+        ? this.reconcileField(definition, persisted[key], mode)
+        : defaults[key]
       // Errors are keyed by path, so a nested failure shows up as `key.sub` — any key at all
       // means this value is unusable and must fall back to the default.
-      const errors = validateEponymeData({ [key]: schema[key]! }, { [key]: candidate }, mode)
+      const errors = validateEponymeData({ [key]: definition }, { [key]: candidate }, mode)
       return [key, Object.keys(errors).length ? defaults[key] : candidate]
     }))
+  }
+
+  /** Descends into the containers; a leaf is returned untouched for `reconcile` to judge. */
+  private reconcileField(definition: FieldDefinition, value: unknown, mode: ValidationMode): unknown {
+    if (definition.type === 'section')
+      return isPlainObject(value) ? this.reconcile(definition.options.fields, value, mode) : value
+
+    if (definition.type === 'tabs') {
+      if (!isPlainObject(value)) return value
+      return Object.fromEntries(Object.entries(definition.options.tabs).map(([tabName, tab]) => [
+        tabName,
+        this.reconcile(tab.fields, value[tabName], mode),
+      ]))
+    }
+
+    if (definition.type === 'array') {
+      const of = definition.options.of
+      // An array of leaves has nothing to fill in; only item schemas gain fields.
+      if (!Array.isArray(value) || isArrayItemFieldDefinition(of)) return value
+      return value.map(item => isPlainObject(item) ? this.reconcile(of, item, mode) : item)
+    }
+
+    return value
   }
 
   private createState(schema: EponymeSchema, value?: unknown): StoredEponymeState {
