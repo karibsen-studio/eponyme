@@ -2,7 +2,7 @@
 import { DialogClose, DialogContent, DialogDescription, DialogOverlay, DialogPortal, DialogRoot, DialogTitle, DialogTrigger } from 'reka-ui'
 import EPButton from './EPButton.vue'
 
-defineProps<{ open?: boolean, title: string, description?: string }>()
+defineProps<{ open?: boolean, title: string, description?: string, role?: 'dialog' | 'alertdialog' }>()
 const emit = defineEmits<{ 'update:open': [value: boolean] }>()
 </script>
 
@@ -19,7 +19,10 @@ const emit = defineEmits<{ 'update:open': [value: boolean] }>()
     </DialogTrigger>
     <DialogPortal>
       <DialogOverlay class="eponyme-dialog-overlay ep:fixed ep:inset-0 ep:z-50 ep:bg-black/65 ep:backdrop-blur-sm" />
-      <DialogContent class="eponyme-dialog-content eponyme-portal ep:fixed ep:top-1/2 ep:left-1/2 ep:z-50 ep:w-[min(32rem,calc(100vw-2rem))] ep:rounded-2xl ep:border-0 ep:bg-theme-ep ep:p-6 ep:font-sans ep:text-text-ep ep:outline-none">
+      <DialogContent
+        :role="role"
+        class="eponyme-dialog-content eponyme-portal ep:fixed ep:top-1/2 ep:left-1/2 ep:z-50 ep:w-[min(32rem,calc(100vw-2rem))] ep:rounded-2xl ep:border-0 ep:bg-theme-ep ep:p-6 ep:font-sans ep:text-text-ep ep:outline-none"
+      >
         <DialogTitle class="ep:text-xl ep:font-semibold ep:text-white">
           {{ title }}
         </DialogTitle>
