@@ -22,6 +22,7 @@ export function getFieldDefaultValue(definition: FieldDefinition): unknown {
   switch (definition.type) {
     case 'array': return []
     case 'checkboxGroup': return []
+    case 'tags': return []
     case 'section': return Object.fromEntries(
       Object.entries(definition.options.fields).map(([name, field]) => [name, getFieldDefaultValue(field)]),
     )

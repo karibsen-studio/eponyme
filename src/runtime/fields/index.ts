@@ -13,9 +13,10 @@ import { section } from './section'
 import { select } from './select'
 import { slug } from './slug'
 import { string } from './string'
+import { tags } from './tags'
 import { tab } from './tab'
 import { textarea } from './textarea'
 import { url } from './url'
 
-export const field = { string, slug, email, phone, url, textarea, richText, number, boolean, image, select, radio, checkboxGroup, date, color, array, section, tab }
+export const field = { string, slug, email, phone, url, textarea, richText, number, boolean, image, select, radio, checkboxGroup, tags, date, color, array, section, tab }
 export { today }

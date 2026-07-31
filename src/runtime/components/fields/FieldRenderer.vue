@@ -10,6 +10,7 @@ import RadioField from './RadioField.vue'
 import RichTextField from './RichTextField.vue'
 import SelectField from './SelectField.vue'
 import SlugField from './SlugField.vue'
+import TagsField from './TagsField.vue'
 import TextareaField from './TextareaField.vue'
 import TextField from './TextField.vue'
 import UrlField from './UrlField.vue'
@@ -61,6 +62,7 @@ const component = computed(() => {
     case 'color': return ColorField
     case 'url': return UrlField
     case 'phone': return PhoneField
+    case 'tags': return TagsField
     default: return TextField
   }
 })
@@ -81,6 +83,14 @@ const specificProps = computed<Record<string, unknown>>(() => {
     case 'radio':
     case 'checkboxGroup':
       return { options: field.options.options }
+    case 'tags':
+      return {
+        suggestions: field.options.suggestions,
+        allowCustom: field.options.allowCustom,
+        minItems: field.options.minItems,
+        maxItems: field.options.maxItems,
+        placeholder: field.options.placeholder,
+      }
     case 'select':
       return { options: field.options.options, placeholder: field.options.placeholder }
     case 'number':
