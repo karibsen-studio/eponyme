@@ -14,7 +14,8 @@ import { filterEponymeNavigationTree } from '../src/runtime/utils/filter-navigat
 import { cacheDuringHydrationOnly, cacheForPublicRead } from '../src/runtime/utils/hydration-cache'
 import { getEponymeCacheTags, tagPreviewPathRoutes } from '../src/runtime/utils/cache-tags'
 import { normalizeEponymePhone, toEponymePhoneValue } from '../src/runtime/utils/normalize-phone'
-import { normalizeEponymePhones } from '../src/runtime/utils/normalize-eponyme-phones'
+import { normalizeEponymeTags } from '../src/runtime/utils/normalize-tags'
+import { normalizeEponymeValues } from '../src/runtime/utils/normalize-eponyme-values'
 import { validateEponymeData } from '../src/runtime/utils/validate-eponyme-data'
 import { middleEllipsis } from '../src/runtime/utils/middle-ellipsis'
 
@@ -542,7 +543,7 @@ describe('field.phone()', () => {
       people: field.array({ of: { phone: field.phone({ defaultCountry: 'FR' }) } }),
       meta: field.tab({ tabs: { main: { label: 'Main', fields: { phone: field.phone({ defaultCountry: 'FR' }) } } } }),
     }
-    expect(normalizeEponymePhones(schema, {
+    expect(normalizeEponymeValues(schema, {
       contact: { phone: '0611131143' },
       people: [{ phone: '0611131143' }],
       meta: { main: { phone: '0611131143' } },
@@ -555,5 +556,41 @@ describe('field.phone()', () => {
 
   it('is available in a public form', () => {
     expect(() => form({ fields: { phone: field.phone() } })).not.toThrow()
+  })
+})
+
+describe('field.tags()', () => {
+  it('trims, drops blanks and folds duplicate spellings', () => {
+    expect(normalizeEponymeTags(['Nuxt', ' nuxt ', '', '  ', 'Vue'])).toEqual(['Nuxt', 'Vue'])
+    expect(normalizeEponymeTags('not an array')).toEqual([])
+    expect(normalizeEponymeTags([42, 'Vue', null])).toEqual(['Vue'])
+  })
+
+  it('lets a suggestion impose its spelling', () => {
+    const options = { suggestions: ['Nuxt', 'TypeScript'] } as const
+    expect(normalizeEponymeTags(['nuxt', 'typescript'], options)).toEqual(['Nuxt', 'TypeScript'])
+    // A custom tag keeps the spelling it was given.
+    expect(normalizeEponymeTags(['GraphQL'], options)).toEqual(['GraphQL'])
+  })
+
+  it('keeps the first spelling when nothing declares one', () => {
+    expect(normalizeEponymeTags(['Vue', 'VUE', 'vue'])).toEqual(['Vue'])
+  })
+
+  it('normalises tags nested in sections, tabs and arrays', () => {
+    const schema = {
+      meta: field.section({ fields: { tags: field.tags({ suggestions: ['Nuxt'] }) } }),
+      items: field.array({ of: { tags: field.tags({ suggestions: ['Nuxt'] }) } }),
+      panels: field.tab({ tabs: { main: { label: 'Main', fields: { tags: field.tags({ suggestions: ['Nuxt'] }) } } } }),
+    }
+    expect(normalizeEponymeValues(schema, {
+      meta: { tags: ['nuxt', 'nuxt'] },
+      items: [{ tags: [' NUXT '] }],
+      panels: { main: { tags: ['nuxt', 'Vue'] } },
+    })).toEqual({
+      meta: { tags: ['Nuxt'] },
+      items: [{ tags: ['Nuxt'] }],
+      panels: { main: { tags: ['Nuxt', 'Vue'] } },
+    })
   })
 })

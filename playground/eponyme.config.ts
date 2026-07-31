@@ -232,6 +232,15 @@ export default defineEponymeConfig({
         placeholder: 'Write your article…',
       }),
       publishedOn: field.date({ label: 'Publication date', defaultValue: today() }),
+      tags: field.tags({
+        label: 'Tags',
+        description: 'Suggestions, saisie libre, doublons de casse repliés.',
+        suggestions: ['Nuxt', 'Vue', 'TypeScript', 'Prisma'],
+        allowCustom: false,
+        maxItems: 4,
+        defaultValue: ['Nuxt'],
+        placeholder: 'Ajouter un tag…',
+      }),
     },
   }),
   breadcrumb_examples: {

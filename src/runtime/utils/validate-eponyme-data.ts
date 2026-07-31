@@ -2,6 +2,7 @@ import type { EponymeSchema, FieldDefinition, FieldValidator } from '../types'
 import { isArrayItemFieldDefinition } from './get-field-default-value'
 import { isFieldVisible } from './is-field-visible'
 import { normalizeEponymePhone } from './normalize-phone'
+import { normalizeEponymeTags } from './normalize-tags'
 
 /**
  * Errors are keyed by the path of the field they belong to — `title`, `hero.title`,
@@ -107,6 +108,24 @@ function validateFieldRules(
       for (const [tabField, fieldDefinition] of Object.entries(tabDefinition.fields))
         validateField(`${name}.${tabName}.${tabField}`, fieldDefinition, tabData[tabField], errors, mode, tabData)
     }
+    return
+  }
+
+  if (definition.type === 'tags') {
+    if (!Array.isArray(value)) {
+      addError(errors, name, 'Must be an array.')
+      return
+    }
+    const tags = normalizeEponymeTags(value, definition.options)
+    if (mode === 'publish' && options.required && tags.length === 0) addError(errors, name, 'This field is required.')
+    if (mode === 'publish' && definition.options.minItems !== undefined && tags.length < definition.options.minItems) addError(errors, name, `Must contain at least ${definition.options.minItems} items.`)
+    if (definition.options.maxItems !== undefined && tags.length > definition.options.maxItems) addError(errors, name, `Must contain at most ${definition.options.maxItems} items.`)
+    // Counted on the raw value: a non-string or a blank entry is a bad payload, and normalising
+    // silently drops it, so the check has to happen before the dropping is taken as truth.
+    if (value.some(item => typeof item !== 'string' || !item.trim())) addError(errors, name, 'Must contain only non-empty tags.')
+    const suggestions = definition.options.suggestions
+    if (!definition.options.allowCustom && suggestions?.length && tags.some(tag => !suggestions.includes(tag)))
+      addError(errors, name, 'Must contain only available options.')
     return
   }
 

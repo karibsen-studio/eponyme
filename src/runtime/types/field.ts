@@ -1,6 +1,6 @@
 import type { CountryCode } from 'libphonenumber-js/min'
 
-export type EponymeFieldType = 'string' | 'slug' | 'email' | 'phone' | 'url' | 'textarea' | 'richText' | 'number' | 'boolean' | 'image' | 'select' | 'radio' | 'checkboxGroup' | 'date' | 'color' | 'array' | 'section' | 'tabs'
+export type EponymeFieldType = 'string' | 'slug' | 'email' | 'phone' | 'url' | 'textarea' | 'richText' | 'number' | 'boolean' | 'image' | 'select' | 'radio' | 'checkboxGroup' | 'tags' | 'date' | 'color' | 'array' | 'section' | 'tabs'
 
 export type FieldVisibilityCondition
   = | { field: string, equals: unknown, notEquals?: never }
@@ -206,6 +206,40 @@ export interface CheckboxGroupFieldDefinition<T extends string = string> {
   options: CheckboxGroupFieldOptions<T>
 }
 
+export interface TagsFieldOptions<T extends string = string> extends DefaultFieldOptions<T[]> {
+  /** Offered while typing. With `allowCustom` off, they are also the only accepted values. */
+  suggestions?: readonly T[]
+  /**
+   * Whether a tag outside `suggestions` may be entered.
+   *
+   * @default false
+   */
+  allowCustom?: boolean
+  minItems?: number
+  maxItems?: number
+  placeholder?: string
+}
+
+/**
+ * Values a tags field may hold, read from the options as they were written: the suggestions
+ * themselves while the list is closed, any string once `allowCustom` opens it. A tag list is
+ * therefore never a mix of types.
+ *
+ * Read from the object rather than from a type parameter on purpose. A parameter carrying
+ * `allowCustom` is re-inferred as `boolean` when the config is checked against `EponymeConfig`,
+ * and a conditional on `boolean` distributes over `true | false`, collapsing the union of
+ * suggestions to plain `string`. The shape of the object survives that check — which is also
+ * how `field.select()` and `field.checkboxGroup()` keep their literals.
+ */
+export type TagsValueOf<O> = O extends { allowCustom: true }
+  ? string
+  : O extends { suggestions: readonly (infer S extends string)[] } ? S : string
+
+export interface TagsFieldDefinition<O extends TagsFieldOptions = TagsFieldOptions> {
+  type: 'tags'
+  options: O
+}
+
 export interface TodayDateDefault {
   readonly __eponymeDefault: 'today'
 }
@@ -250,6 +284,7 @@ export type ArrayItemFieldDefinition
     | SelectFieldDefinition
     | RadioFieldDefinition
     | CheckboxGroupFieldDefinition
+    | TagsFieldDefinition
     | DateFieldDefinition
     | ColorFieldDefinition
 
