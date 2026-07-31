@@ -1,6 +1,6 @@
 {
   "name": "@karibsen/eponyme",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "A lightweight, type-safe content manager for Nuxt.",
   "license": "MIT",
   "type": "module",
@@ -60,13 +60,14 @@
   },
   "dependencies": {
     "@iconify-json/mingcute": "^1.2.7",
-    "@karibsen/ui": "latest",
+    "@karibsen/ui": "^1.0.1",
     "@nuxt/icon": "^2.3.1",
     "@nuxt/kit": "^4.4.8",
     "@tailwindcss/vite": "^4.1.12",
     "@tanstack/vue-table": "^8.21.3",
     "@tiptap/extension-image": "^3.29.2",
     "@tiptap/extension-placeholder": "^3.28.0",
+    "@tiptap/pm": "^3.28.0",
     "@tiptap/starter-kit": "^3.28.0",
     "@tiptap/vue-3": "^3.28.0",
     "@vueuse/core": "^14.3.0",
