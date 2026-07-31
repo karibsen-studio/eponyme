@@ -135,9 +135,6 @@ function closePreview() {
     <section class="ep:mx-auto ep:w-full ep:max-w-3xl ep:px-6 ep:py-8 ep:md:px-10 ep:md:py-12">
       <div class="ep:flex ep:flex-wrap ep:items-start ep:justify-between ep:gap-4">
         <div>
-          <p class="ep:m-0 ep:text-[11px] ep:font-semibold ep:tracking-widest ep:text-muted-ep ep:uppercase">
-            Eponyme
-          </p>
           <h1 class="ep:mt-2 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-white">
             Content entries
           </h1>
