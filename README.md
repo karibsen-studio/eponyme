@@ -13,7 +13,7 @@ Define your content in `eponyme.config.ts`. Eponyme provides defaults, validatio
 
 ## Features
 
-- Type-safe fields for text, slugs, rich text, numbers, booleans, images, links, phone numbers, dates, colors, sections, tabs, and arrays
+- Type-safe fields for text, slugs, rich text, numbers, booleans, images, links, phone numbers, tags, dates, colors, sections, tabs, and arrays
 - Declarative defaults and validation
 - Conditional fields, character counters, and sortable arrays
 - Private drafts with explicit publishing
@@ -169,6 +169,26 @@ field.string({
 })
 ```
 
+### Tags
+
+`field.tags()` holds a short list of values, with suggestions and optional free entry:
+
+```ts
+tags: field.tags({
+  suggestions: ['Nuxt', 'Vue', 'TypeScript'],
+  allowCustom: true,
+  maxItems: 5,
+})
+```
+
+The value type follows the options: closed, it is `('Nuxt' | 'Vue' | 'TypeScript')[]`; with
+`allowCustom`, `string[]`. One array never mixes two types.
+
+The list is normalised **on the server** before the write: trimmed, blanks dropped, duplicates
+folded case-insensitively. A suggestion imposes its spelling, so typing `nuxt` beside a declared
+`Nuxt` yields `Nuxt` and a listing never splits in two. `minItems` and `maxItems` count what is
+left after that folding.
+
 ### Phone numbers
 
 `field.phone()` stores its value in **E.164** — `+33611131143` — whatever format it was typed
@@ -224,15 +244,47 @@ Add the required models to your Prisma schema:
 
 ```prisma
 model Eponyme {
-  name      String    @id
-  data      Json      @db.JsonB
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
-  versions  EponymeVersion[]
+  name        String    @id
+  draft       Json      @db.JsonB
+  published   Json      @db.JsonB
+  status      String
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  versions    EponymeVersion[]
+  index       EponymeEntryIndex[]
 
   @@index([deletedAt])
+  @@index([publishedAt])
   @@map("eponyme_entries")
+}
+
+/// Filterable values pulled out of the content columns, so a listing can look them up
+/// instead of loading and normalizing every entry of a collection to compare them.
+/// Rewritten for an entry inside the same transaction as the write that changed it.
+model EponymeEntryIndex {
+  entryName String
+  /// "draft" or "published": the two disagree, and a public listing must only see one.
+  version   String
+  key       String
+  /// Case-folded, so a lookup never has to guess which spelling was stored first.
+  value     String
+  entry     Eponyme @relation(fields: [entryName], references: [name], onDelete: Cascade)
+
+  @@id([entryName, version, key, value])
+  @@index([key, version, value])
+  @@map("eponyme_entry_index")
+}
+
+/// Remembers which filterable schema each collection was last indexed against, so the
+/// module can rebuild only what a config change actually invalidated.
+model EponymeIndexState {
+  name        String   @id
+  fingerprint String
+  updatedAt   DateTime @updatedAt
+
+  @@map("eponyme_index_state")
 }
 
 model EponymeVersion {

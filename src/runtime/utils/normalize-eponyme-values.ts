@@ -2,15 +2,20 @@ import type { ArrayItemDefinition, FieldDefinition } from '../types/field'
 import type { EponymeSchema } from '../types'
 import { isArrayItemFieldDefinition } from './get-field-default-value'
 import { toEponymePhoneValue } from './normalize-phone'
+import { normalizeEponymeTags } from './normalize-tags'
 
 /**
- * Rewrites every phone value in a payload to E.164, wherever it sits in the schema.
+ * Rewrites every value that has a canonical form — a phone in E.164, a tag list deduplicated —
+ * wherever it sits in the schema.
  *
- * Applied on the server before a write, which is what makes the stored format a guarantee
- * rather than a convention: the API accepts any JSON, so a client normalising on its own could
- * always be bypassed. Values that cannot be parsed are left as typed for validation to reject.
+ * Applied on the server before a write, which is what makes a stored format a guarantee rather
+ * than a convention: the API accepts any JSON, so a client normalising on its own could always
+ * be bypassed. A value that cannot be understood is left as sent, for validation to reject.
+ *
+ * One walk for every field type that needs one. A second walker would mean a second place to
+ * forget a container when a field type is added.
  */
-export function normalizeEponymePhones(schema: EponymeSchema, data: Record<string, unknown>): Record<string, unknown> {
+export function normalizeEponymeValues(schema: EponymeSchema, data: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = { ...data }
   for (const [name, definition] of Object.entries(schema)) {
     if (!(name in result)) continue
@@ -21,6 +26,8 @@ export function normalizeEponymePhones(schema: EponymeSchema, data: Record<strin
 
 function normalizeField(definition: FieldDefinition, value: unknown): unknown {
   if (definition.type === 'phone') return toEponymePhoneValue(value, definition.options)
+
+  if (definition.type === 'tags') return Array.isArray(value) ? normalizeEponymeTags(value, definition.options) : value
 
   if (definition.type === 'section')
     return normalizeNested(definition.options.fields, value)
@@ -48,7 +55,7 @@ function normalizeArrayItem(of: ArrayItemDefinition, item: unknown): unknown {
 
 function normalizeNested(schema: Record<string, FieldDefinition>, value: unknown): unknown {
   if (!isRecord(value)) return value
-  return normalizeEponymePhones(schema, value)
+  return normalizeEponymeValues(schema, value)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

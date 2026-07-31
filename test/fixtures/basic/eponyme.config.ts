@@ -39,6 +39,7 @@ export default defineEponymeConfig({
       slug: field.slug({ required: true }),
       excerpt: field.textarea(),
       phone: field.phone({ defaultCountry: 'FR', countries: ['FR', 'BE'] }),
+      tags: field.tags({ suggestions: ['Nuxt', 'Vue'], allowCustom: true, maxItems: 3 }),
     },
   }),
 })

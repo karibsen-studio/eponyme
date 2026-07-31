@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { normalizeEponymePhones } from '../../utils/normalize-eponyme-phones'
+import { normalizeEponymeValues } from '../../utils/normalize-eponyme-values'
 import type { EponymeConfig, EponymeFormDefinitionBase } from '../../types'
 import { getEponymeForms } from '../../utils/get-eponyme-schemas'
 import { validateEponymeData, type ValidationErrors } from '../../utils/validate-eponyme-data'
@@ -89,7 +89,7 @@ export class EponymeFormService {
       return { errors: Object.fromEntries(unknownKeys.map(key => [key, ['Unknown field.']])) }
 
     // A stored submission holds the same canonical values an entry would.
-    const rest = normalizeEponymePhones(definition.fields, submitted)
+    const rest = normalizeEponymeValues(definition.fields, submitted)
     const errors = validateEponymeData(definition.fields, rest, 'publish')
     if (Object.keys(errors).length) return { errors }
     return { data: rest }

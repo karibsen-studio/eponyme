@@ -42,6 +42,29 @@ describe('validateEponymeData — required and modes', () => {
 })
 
 describe('validateEponymeData — per field type', () => {
+  it('validates tag fields', () => {
+    const closed = { tags: field.tags({ suggestions: ['Nuxt', 'Vue'], required: true, maxItems: 2 }) } satisfies EponymeSchema
+    expect(validate(closed, { tags: 'Nuxt' })).toEqual({ tags: ['Must be an array.'] })
+    expect(validate(closed, { tags: [] })).toEqual({ tags: ['This field is required.'] })
+    expect(validate(closed, { tags: ['Nuxt', 'Vue'] })).toEqual({})
+    // Case is folded before the comparison, so a suggestion typed loosely still passes.
+    expect(validate(closed, { tags: ['nuxt'] })).toEqual({})
+    expect(validate(closed, { tags: ['GraphQL'] })).toEqual({ tags: ['Must contain only available options.'] })
+    expect(validate(closed, { tags: ['Nuxt', 'Vue', 'Nuxt'] })).toEqual({})
+
+    const open = { tags: field.tags({ suggestions: ['Nuxt'], allowCustom: true, minItems: 2 }) } satisfies EponymeSchema
+    expect(validate(open, { tags: ['GraphQL', 'Deno'] })).toEqual({})
+    expect(validate(open, { tags: ['GraphQL'] })).toEqual({ tags: ['Must contain at least 2 items.'] })
+    // A blank or non-string entry is a bad payload, not something to drop silently.
+    expect(validate(open, { tags: ['Nuxt', '  ', 'Vue'] })).toEqual({ tags: ['Must contain only non-empty tags.'] })
+    expect(validate(open, { tags: ['Nuxt', 7, 'Vue'] })).toEqual({ tags: ['Must contain only non-empty tags.'] })
+
+    const capped = { tags: field.tags({ allowCustom: true, maxItems: 1 }) } satisfies EponymeSchema
+    expect(validate(capped, { tags: ['a', 'b'] })).toEqual({ tags: ['Must contain at most 1 items.'] })
+    // Duplicates fold away first, so they do not count against the cap.
+    expect(validate(capped, { tags: ['a', 'A'] })).toEqual({})
+  })
+
   it('validates a string against its regex', () => {
     const schema = { code: field.string({ regex: /^[A-Z]+$/ }) } satisfies EponymeSchema
     expect(validate(schema, { code: 'abc' })).toEqual({ code: ['Has an invalid format.'] })

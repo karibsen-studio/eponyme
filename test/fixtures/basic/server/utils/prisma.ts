@@ -1,9 +1,40 @@
-type EponymeRow = { name: string, data: Record<string, unknown>, updatedAt?: Date, deletedAt?: Date | null }
+type EponymeColumns = { draft: Record<string, unknown>, published: Record<string, unknown>, status: string, publishedAt: Date | null }
+type EponymeRow = EponymeColumns & { name: string, updatedAt?: Date, deletedAt?: Date | null }
 type DeletedAtFilter = null | { not: null }
+type EponymeWhere = { name: { startsWith: string } | { in: string[] }, deletedAt?: DeletedAtFilter, publishedAt?: { not: null } }
+type EponymeOrderBy = Record<string, 'asc' | 'desc' | { sort: 'asc' | 'desc', nulls?: 'last' }>
 
 const matchesDeleted = (row: EponymeRow, filter: DeletedAtFilter | undefined) => {
   if (filter === undefined) return true
   return filter === null ? !row.deletedAt : Boolean(row.deletedAt)
+}
+
+const matchesWhere = (row: EponymeRow, where: EponymeWhere) => {
+  const byName = 'in' in where.name ? where.name.in.includes(row.name) : row.name.startsWith(where.name.startsWith)
+  if (!byName || !matchesDeleted(row, where.deletedAt)) return false
+  return where.publishedAt === undefined || row.publishedAt !== null
+}
+
+/** Mirrors the ordering the store sends, `nulls: 'last'` included. */
+const compareRows = (left: EponymeRow, right: EponymeRow, orderBy: EponymeOrderBy[]) => {
+  for (const clause of orderBy) {
+    const [key, raw] = Object.entries(clause)[0]!
+    const spec = typeof raw === 'string' ? { sort: raw, nulls: undefined } : raw
+    const value = (row: EponymeRow): string | null => key === 'name'
+      ? row.name
+      : key === 'updatedAt'
+        ? (row.updatedAt?.toISOString() ?? null)
+        : (row.publishedAt?.toISOString() ?? null)
+    const a = value(left)
+    const b = value(right)
+    if (a === b) continue
+    if (a === null || b === null) {
+      if (spec.nulls === 'last') return a === null ? 1 : -1
+      return a === null ? -1 : 1
+    }
+    return (a < b ? -1 : 1) * (spec.sort === 'asc' ? 1 : -1)
+  }
+  return 0
 }
 
 const rows = new Map<string, EponymeRow>()
@@ -41,42 +72,61 @@ const users = new Map<string, UserRow>([
   }],
 ])
 const sessions = new Map<string, SessionRow>()
+type IndexRow = { entryName: string, version: 'draft' | 'published', key: string, value: string }
+type StringRange = { in?: string[], contains?: string, gte?: string, lte?: string, gt?: string, lt?: string }
+// Filterable values pulled out of each entry, keyed by the table's primary key.
+const indexRows = new Map<string, IndexRow>()
+const indexKey = (row: IndexRow) => [row.entryName, row.version, row.key, row.value].join(' ')
+const matchesValue = (value: string, filter: string | StringRange) => {
+  if (typeof filter === 'string') return value === filter
+  // Every operator present is ANDed, as Prisma's string filter does.
+  if (filter.in && !filter.in.includes(value)) return false
+  if (filter.contains !== undefined && !value.includes(filter.contains)) return false
+  if (filter.gte !== undefined && value < filter.gte) return false
+  if (filter.gt !== undefined && value <= filter.gt) return false
+  if (filter.lte !== undefined && value > filter.lte) return false
+  if (filter.lt !== undefined && value >= filter.lt) return false
+  return true
+}
+// The recorded fingerprint per configured name, which decides what a boot rebuilds.
+const indexState = new Map<string, string>()
 type FormSubmissionRow = { id: string, formName: string, data: Record<string, unknown>, createdAt: Date }
 const formSubmissions = new Map<string, FormSubmissionRow>()
 
+type PrismaDouble = typeof delegates
+
 // Test double for a consumer-owned PrismaClient.
-export default {
+const delegates = {
   eponyme: {
-    async upsert({ where, create, update }: { where: { name: string }, create: EponymeRow, update: { data?: Record<string, unknown> } }) {
+    async upsert({ where, create, update }: { where: { name: string }, create: EponymeColumns & { name: string }, update: Partial<EponymeColumns> }) {
       const existing = rows.get(where.name)
-      if (existing && !update.data) return { ...existing, data: { ...existing.data } }
       const row = existing
-        ? { ...existing, data: update.data ?? existing.data, updatedAt: stamp() }
-        : { name: create.name, data: create.data, updatedAt: stamp() }
+        ? { ...existing, ...update, updatedAt: stamp() }
+        : { ...create, updatedAt: stamp() }
       rows.set(where.name, row)
-      return { ...row, data: { ...row.data } }
+      return { ...row }
     },
-    async update({ where, data }: { where: { name: string }, data: { data: Record<string, unknown> } }) {
+    async update({ where, data }: { where: { name: string }, data: EponymeColumns }) {
       const current = rows.get(where.name)
       if (!current) throw new Error('Row not found')
-      const row = { ...current, data: data.data, updatedAt: stamp() }
+      const row = { ...current, ...data, updatedAt: stamp() }
       rows.set(where.name, row)
-      return { ...row, data: { ...row.data } }
+      return { ...row }
     },
-    async updateMany({ where, data }: { where: { name: string, updatedAt?: Date | string, deletedAt?: DeletedAtFilter }, data: { data?: Record<string, unknown>, deletedAt?: Date | null } }) {
+    async updateMany({ where, data }: { where: { name: string, updatedAt?: Date | string, deletedAt?: DeletedAtFilter }, data: Partial<EponymeColumns> & { deletedAt?: Date | null } }) {
       const current = rows.get(where.name)
       if (!current) return { count: 0 }
       if (where.updatedAt && new Date(where.updatedAt).getTime() !== current.updatedAt?.getTime()) return { count: 0 }
       if (!matchesDeleted(current, where.deletedAt)) return { count: 0 }
       rows.set(where.name, {
         ...current,
-        data: data.data ?? current.data,
+        ...data,
         deletedAt: data.deletedAt === undefined ? current.deletedAt ?? null : data.deletedAt,
         updatedAt: stamp(),
       })
       return { count: 1 }
     },
-    async create({ data }: { data: EponymeRow }) {
+    async create({ data }: { data: EponymeColumns & { name: string } }) {
       if (rows.has(data.name)) throw Object.assign(new Error('Unique constraint'), { code: 'P2002' })
       const row = { ...data, updatedAt: stamp() }
       rows.set(data.name, row)
@@ -85,17 +135,70 @@ export default {
     async findUnique({ where }: { where: { name: string } }) {
       return rows.get(where.name) ?? null
     },
-    async findMany({ where }: { where: { name: { startsWith: string }, deletedAt?: DeletedAtFilter } }) {
-      return [...rows.values()].filter(row => row.name.startsWith(where.name.startsWith) && matchesDeleted(row, where.deletedAt))
+    async findMany({ where, orderBy, take, skip, select }: { where: EponymeWhere, orderBy?: EponymeOrderBy[], take?: number, skip?: number, select?: Record<string, true> }) {
+      const matched = [...rows.values()].filter(row => matchesWhere(row, where))
+      if (orderBy) matched.sort((left, right) => compareRows(left, right, orderBy))
+      const from = skip ?? 0
+      const page = take === undefined ? matched.slice(from) : matched.slice(from, from + take)
+      // Mirrors Prisma: `select` narrows the row to exactly what was asked for.
+      if (!select) return page
+      return page.map(row => Object.fromEntries(
+        Object.keys(select).map(key => [key, (row as unknown as Record<string, unknown>)[key]]),
+      ) as unknown as EponymeRow)
+    },
+    async count({ where }: { where: EponymeWhere }) {
+      return [...rows.values()].filter(row => matchesWhere(row, where)).length
     },
     async delete({ where }: { where: { name: string } }) {
       const row = rows.get(where.name)
       if (!row) throw Object.assign(new Error('Row not found'), { code: 'P2025' })
       rows.delete(where.name)
-      // Mirrors `onDelete: Cascade` on EponymeVersion.entryName.
+      // Mirrors `onDelete: Cascade` on EponymeVersion.entryName and EponymeEntryIndex.entryName.
       for (let index = versions.length - 1; index >= 0; index--)
         if (versions[index]!.entryName === where.name) versions.splice(index, 1)
+      for (const [key, indexed] of indexRows) if (indexed.entryName === where.name) indexRows.delete(key)
       return row
+    },
+  },
+  eponymeEntryIndex: {
+    async deleteMany({ where }: { where: { entryName: string | { startsWith: string } } }) {
+      let count = 0
+      for (const [key, row] of indexRows) {
+        const hit = typeof where.entryName === 'string'
+          ? row.entryName === where.entryName
+          : row.entryName.startsWith(where.entryName.startsWith)
+        if (!hit) continue
+        indexRows.delete(key)
+        count++
+      }
+      return { count }
+    },
+    async createMany({ data }: { data: IndexRow[] }) {
+      for (const row of data) indexRows.set(indexKey(row), row)
+      return { count: data.length }
+    },
+    async findMany({ where }: { where: { entryName: { startsWith: string }, version: 'draft' | 'published', key: string, value: string | StringRange } }) {
+      return [...indexRows.values()]
+        .filter(row => row.entryName.startsWith(where.entryName.startsWith)
+          && row.version === where.version
+          && row.key === where.key
+          && matchesValue(row.value, where.value))
+        .map(row => ({ entryName: row.entryName }))
+    },
+  },
+  eponymeIndexState: {
+    async findMany() {
+      return [...indexState.entries()].map(([name, fingerprint]) => ({ name, fingerprint }))
+    },
+    async upsert({ where, create, update }: { where: { name: string }, create: { name: string, fingerprint: string }, update: { fingerprint: string } }) {
+      const fingerprint = indexState.has(where.name) ? update.fingerprint : create.fingerprint
+      indexState.set(where.name, fingerprint)
+      return { name: where.name, fingerprint }
+    },
+    async deleteMany({ where }: { where: { name: { in: string[] } } }) {
+      let count = 0
+      for (const name of where.name.in) if (indexState.delete(name)) count++
+      return { count }
     },
   },
   eponymeVersion: {
@@ -206,3 +309,33 @@ export default {
     },
   },
 }
+
+/**
+ * Prisma's interactive transaction, enough of it for the store: the callback sees the same
+ * delegates, transactions run one at a time as a single connection would, and a rejected
+ * callback puts every table back where it found it.
+ */
+let queue: Promise<unknown> = Promise.resolve()
+function $transaction<T>(fn: (tx: PrismaDouble) => Promise<T>): Promise<T> {
+  const run = queue.then(async () => {
+    const snapshot = { rows: new Map(rows), versions: [...versions], index: new Map(indexRows), state: new Map(indexState), clock }
+    try {
+      return await fn(delegates)
+    }
+    catch (error) {
+      rows.clear()
+      for (const [name, row] of snapshot.rows) rows.set(name, row)
+      indexRows.clear()
+      for (const [key, row] of snapshot.index) indexRows.set(key, row)
+      indexState.clear()
+      for (const [name, fingerprint] of snapshot.state) indexState.set(name, fingerprint)
+      versions.splice(0, versions.length, ...snapshot.versions)
+      clock = snapshot.clock
+      throw error
+    }
+  })
+  queue = run.catch(() => {})
+  return run
+}
+
+export default Object.assign(delegates, { $transaction })
