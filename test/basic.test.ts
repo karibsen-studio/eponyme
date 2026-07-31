@@ -296,6 +296,43 @@ describe('ssr', async () => {
     await expect($fetch('/api/eponyme-trash/articles/trashed-article', { method: 'DELETE', ...authenticated() })).rejects.toMatchObject({ statusCode: 404 })
   })
 
+  it('filters a collection over HTTP', async () => {
+    const write = async (title: string, tags: string[]) => {
+      const slug = title.toLowerCase().replace(/ /g, '-')
+      await $fetch('/api/eponyme-collections/articles', { method: 'POST', body: { title }, ...authenticated() })
+      await $fetch(`/api/eponyme/articles/${slug}?action=publish`, {
+        method: 'PATCH',
+        body: { title, slug, tags },
+        ...authenticated(),
+      })
+      return slug
+    }
+    const slugs = [await write('Filter Nuxt', ['Nuxt']), await write('Filter Vue', ['Vue']), await write('Filter Both', ['Nuxt', 'Vue'])]
+    const titles = async (search: string) =>
+      (await $fetch<{ entries: Array<{ title: string }> }>(`/api/eponyme-collections/articles?orderBy=title&order=asc&${search}`)).entries.map(entry => entry.title)
+
+    // Case-folded, so the spelling stored first does not decide what a filter finds.
+    await expect(titles('where[tags]=NUXT')).resolves.toEqual(['Filter Both', 'Filter Nuxt'])
+    // Repeating a key means "any of".
+    await expect(titles('where[tags]=nuxt&where[tags]=vue')).resolves.toEqual(['Filter Both', 'Filter Nuxt', 'Filter Vue'])
+    await expect(titles('where[tags]=svelte')).resolves.toEqual([])
+
+    // A typo is reported rather than ignored: a filter that quietly does nothing returns
+    // the whole collection, which the caller reads as a real answer.
+    await expect($fetch('/api/eponyme-collections/articles?where[nope]=x')).rejects.toMatchObject({ statusCode: 400 })
+    // `excerpt` is free text, so it is not filterable even though it exists.
+    await expect($fetch('/api/eponyme-collections/articles?where[excerpt]=x')).rejects.toMatchObject({ statusCode: 400 })
+    await expect($fetch('/api/eponyme-collections/articles?where[tags][like]=x')).rejects.toMatchObject({ statusCode: 400 })
+
+    // `not` excludes, and reaches the entry that carries no tag at all — which has no index
+    // row to be found by, so only a subtraction returns it.
+    await expect(titles('where[tags][not]=nuxt')).resolves.toEqual(['Filter Vue'])
+    await expect(titles('where[tags][in]=vue&where[tags][not]=nuxt')).resolves.toEqual(['Filter Vue'])
+    await expect(titles('where[tags][contains]=ux')).resolves.toEqual(['Filter Both', 'Filter Nuxt'])
+
+    for (const slug of slugs) await removeArticle(slug)
+  })
+
   it('sorts, limits and paginates a collection over HTTP', async () => {
     for (const title of ['Sort Charlie', 'Sort Alpha', 'Sort Bravo']) {
       const slug = title.toLowerCase().replace(/ /g, '-')
@@ -484,6 +521,42 @@ describe('ssr', async () => {
     )
     expect(listed.submissions[0]!.data.phone).toBe('+33611131143')
     await $fetch('/api/eponyme-forms/contact/submissions', { method: 'DELETE', ...authenticated() })
+  })
+
+  it('stores a tag list normalised, whatever was sent', async () => {
+    await $fetch('/api/eponyme-collections/articles', { method: 'POST', body: { title: 'Tagged' }, ...authenticated() })
+    await $fetch('/api/eponyme/articles/tagged?action=publish', {
+      method: 'PATCH',
+      body: { title: 'Tagged', slug: 'tagged', tags: ['Nuxt', ' nuxt ', 'GraphQL'] },
+      ...authenticated(),
+    })
+    // The duplicate folds away and a suggestion imposes its spelling, on the server.
+    await expect($fetch<{ data: { tags: string[] } }>('/api/eponyme/articles/tagged'))
+      .resolves.toMatchObject({ data: { tags: ['Nuxt', 'GraphQL'] } })
+
+    // `maxItems` is counted after folding, so four entries collapsing to three are accepted.
+    await $fetch('/api/eponyme/articles/tagged?action=publish', {
+      method: 'PATCH',
+      body: { tags: ['a', 'A', 'b', 'c'] },
+      ...authenticated(),
+    })
+    await expect($fetch<{ data: { tags: string[] } }>('/api/eponyme/articles/tagged'))
+      .resolves.toMatchObject({ data: { tags: ['a', 'b', 'c'] } })
+
+    const refused = await $fetch('/api/eponyme/articles/tagged', {
+      method: 'PATCH',
+      body: { tags: ['a', 'b', 'c', 'd'] },
+      ignoreResponseError: true,
+      ...authenticated(),
+    })
+    expect(refused).toMatchObject({ errors: { tags: ['Must contain at most 3 items.'] } })
+
+    // The editor renders the field: `FieldRenderer` routes `tags` to its own component, whose
+    // input is client-only, so the server-rendered proof is the label it wraps.
+    const html = String(await $fetch('/__eponyme/articles/tagged', authenticated()))
+    expect(html).toContain('Tags')
+
+    await removeArticle('tagged')
   })
 
   it('keeps custom forms out of the managed submission route', async () => {

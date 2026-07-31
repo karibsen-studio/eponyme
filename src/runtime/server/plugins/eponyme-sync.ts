@@ -1,4 +1,4 @@
-import { defineNitroPlugin } from 'nitropack/runtime'
+import { defineNitroPlugin, useRuntimeConfig } from 'nitropack/runtime'
 import { useEponymeAuthService } from '../services/eponyme-auth-service'
 import { useEponymeService } from '../services/eponyme-service'
 
@@ -13,4 +13,22 @@ export default defineNitroPlugin(async () => {
     )
   }
   await useEponymeService().syncAll()
+
+  // After `syncAll`, never beside it: that is the one place singletons are healed, and the
+  // index is built from what is stored. Indexing first would record pre-heal values.
+  const content = useRuntimeConfig().eponymeContent as { autoReindex?: boolean } | undefined
+  if (content?.autoReindex === false) return
+  try {
+    await useEponymeService().syncIndexState()
+  }
+  catch (error) {
+    // Loud rather than silent. A stale index is a public listing that quietly returns fewer
+    // entries than it should, which nobody notices; a failed boot is noticed immediately.
+    // `eponyme.autoReindex: false` is the way out if this ever fails on every start.
+    throw new Error(
+      '[Eponyme] Index rebuild failed. Apply the EponymeEntryIndex and EponymeIndexState Prisma migrations before starting the application, '
+      + 'or set `eponyme.autoReindex: false` to start without it and run `reindexEponymeEntries()` by hand.',
+      { cause: error },
+    )
+  }
 })

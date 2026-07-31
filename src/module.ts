@@ -121,6 +121,22 @@ export interface ModuleOptions {
   cacheSeconds?: number
 
   /**
+   * Whether the filterable index is rebuilt at startup when the configuration that produced
+   * it has changed.
+   *
+   * @remarks
+   * Leave it on. Ordinary writes keep the index current, but a field that becomes filterable
+   * leaves the entries already stored without a row for it, and a filter on them then answers
+   * "none" instead of failing — a wrong listing rather than an error.
+   *
+   * Turning it off is an escape hatch: if a rebuild ever fails on every boot, this gets the
+   * application up again so `reindexEponymeEntries()` can be run by hand.
+   *
+   * @default true
+   */
+  autoReindex?: boolean
+
+  /**
    * How long a browser may reuse published content, in seconds. `0` disables it.
    *
    * @remarks
@@ -189,6 +205,7 @@ export default defineNuxtModule<ModuleOptions>({
       sessionDurationDays: 7,
     },
     cacheSeconds: 5,
+    autoReindex: true,
     browserCacheSeconds: 30,
     cdnCacheSeconds: 300,
   },
@@ -250,6 +267,7 @@ export default defineNuxtModule<ModuleOptions>({
     }
     nuxt.options.runtimeConfig.eponymeContent = {
       cacheSeconds: options.cacheSeconds ?? 5,
+      autoReindex: options.autoReindex ?? true,
       browserCacheSeconds: options.browserCacheSeconds ?? 30,
       cdnCacheSeconds: options.cdnCacheSeconds ?? 300,
     }
@@ -299,6 +317,9 @@ export default defineNuxtModule<ModuleOptions>({
     addImportsDir(resolver.resolve('./runtime/composables'))
     addServerImports([
       { name: 'getEponymeSitemapEntries', from: resolver.resolve('./runtime/server/utils/eponyme-sitemap') },
+      // The backfill for the filterable index, which a migration cannot do on its own:
+      // reading a value out of the JSONB envelope needs the configured schema.
+      { name: 'reindexEponymeEntries', from: resolver.resolve('./runtime/server/utils/eponyme-reindex') },
       // A `custom` form posts to the host application's own route, so this is what
       // keeps server-side validation as the security boundary.
       { name: 'validateEponymeForm', from: resolver.resolve('./runtime/server/utils/eponyme-form') },
