@@ -1,6 +1,8 @@
 <!-- eslint-disable vue/multi-word-component-names -->
 <script setup lang="ts">
-const { entries, pending, error, refresh } = useEponymeCollection('articles')
+const { entries, pending, error, refresh } = useEponymeCollection('articles', {
+  order: 'asc',
+})
 
 useSeoMeta({
   title: 'Articles · Eponyme Playground',
