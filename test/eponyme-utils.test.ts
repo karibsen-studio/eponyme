@@ -7,7 +7,7 @@ import { collection } from '../src/config/collection'
 import { form } from '../src/config/form'
 import { field } from '../src/runtime/fields'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas, isEponymeForm, isEponymeSchema } from '../src/runtime/utils/get-eponyme-schemas'
-import { interpolateEponymeText, interpolateEponymeValue, resolveEponymeVariables, summariseEponymeVariables } from '../src/runtime/utils/variables'
+import { findEponymeVariableRanges, interpolateEponymeText, interpolateEponymeValue, resolveEponymeVariables, summariseEponymeVariables } from '../src/runtime/utils/variables'
 import { applyPreviewSlug, readPreviewQuery, readPreviewVersion, resolvePreviewPath } from '../src/runtime/utils/preview'
 import { buildEponymeNavigationTree } from '../src/runtime/utils/build-navigation-tree'
 import { filterEponymeNavigationTree } from '../src/runtime/utils/filter-navigation-tree'
@@ -288,6 +288,15 @@ describe('content variables', () => {
     const vars = resolveEponymeVariables({}, at)
     expect(interpolateEponymeText('saison {{ nextYear }}', vars)).toBe('saison 2027')
     expect(interpolateEponymeText('{{currentYear}} et {{  currentYear  }}', vars)).toBe('2026 et 2026')
+  })
+
+  it('finds the source ranges rendered as variables in the rich-text editor', () => {
+    const text = 'Saison {{ currentYear }} / {{nextYear}}.'
+    expect(findEponymeVariableRanges(text).map(range => text.slice(range.from, range.to))).toEqual([
+      '{{ currentYear }}',
+      '{{nextYear}}',
+    ])
+    expect(findEponymeVariableRanges('{{ new Date() }}')).toEqual([])
   })
 
   it('leaves an unknown name in place instead of blanking it', () => {

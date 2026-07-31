@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import Image from '@tiptap/extension-image'
 import Placeholder from '@tiptap/extension-placeholder'
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
+import { Plugin, PluginKey } from '@tiptap/pm/state'
+import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
 import { EditorContent, Extension, useEditor } from '@tiptap/vue-3'
 import type { UrlValue } from '../../types'
 import { computed, ref, watch } from 'vue'
 import { useEponymeVariables } from '../../composables/useEponymeVariables'
+import { findEponymeVariableRanges } from '../../utils/variables'
 import EPDropdownMenu from '../ui/EPDropdownMenu.vue'
 import EPFormField from '../ui/EPFormField.vue'
 import EPLinkDialog from '../ui/EPLinkDialog.vue'
@@ -23,6 +27,43 @@ const DownloadableLinkAttribute = Extension.create({
         },
       },
     }]
+  },
+})
+
+const variableHighlightKey = new PluginKey<DecorationSet>('eponymeVariableHighlight')
+
+function createVariableDecorations(document: ProseMirrorNode) {
+  const decorations: Decoration[] = []
+  document.descendants((node, position) => {
+    if (!node.isText || !node.text) return
+    for (const range of findEponymeVariableRanges(node.text)) {
+      decorations.push(Decoration.inline(
+        position + range.from,
+        position + range.to,
+        { class: 'eponyme-rich-text-variable' },
+      ))
+    }
+  })
+  return DecorationSet.create(document, decorations)
+}
+
+const EponymeVariableHighlight = Extension.create({
+  name: 'eponymeVariableHighlight',
+  addProseMirrorPlugins() {
+    return [
+      new Plugin<DecorationSet>({
+        key: variableHighlightKey,
+        state: {
+          init: (_, state) => createVariableDecorations(state.doc),
+          apply: (transaction, decorations) => transaction.docChanged
+            ? createVariableDecorations(transaction.doc)
+            : decorations,
+        },
+        props: {
+          decorations: state => variableHighlightKey.getState(state),
+        },
+      }),
+    ]
   },
 })
 
@@ -62,6 +103,7 @@ const editor = useEditor({
       },
     }),
     DownloadableLinkAttribute,
+    EponymeVariableHighlight,
     Placeholder.configure({ placeholder: props.placeholder }),
     Image.configure({ HTMLAttributes: { class: 'eponyme-rich-text-image' } }),
   ],
@@ -367,6 +409,46 @@ const tools = computed<Tool[]>(() => {
   color: white;
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+
+.eponyme-rich-text :deep(.eponyme-rich-text-variable) {
+  color: #ff41c5;
+  font-weight: 650;
+}
+
+@supports ((background-clip: text) or (-webkit-background-clip: text)) {
+  .eponyme-rich-text :deep(.eponyme-rich-text-variable) {
+    background-image: linear-gradient(90deg, #fe7af0, #ff41c5);
+    background-position: 0% 50%;
+    background-size: 200% 100%;
+    background-clip: text;
+    color: transparent;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports ((background-clip: text) or (-webkit-background-clip: text)) {
+    .eponyme-rich-text :deep(.eponyme-rich-text-variable) {
+      animation: eponyme-variable-gradient 2.5s ease-in-out infinite alternate;
+    }
+  }
+}
+
+@keyframes eponyme-variable-gradient {
+  to {
+    background-position: 100% 50%;
+  }
+}
+
+@media (forced-colors: active) {
+  .eponyme-rich-text :deep(.eponyme-rich-text-variable) {
+    background: none;
+    color: linktext;
+    text-decoration: underline;
+    -webkit-text-fill-color: currentcolor;
+  }
 }
 
 .eponyme-rich-text :deep(.tiptap p.is-editor-empty:first-child::before) {

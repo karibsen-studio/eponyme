@@ -5,7 +5,15 @@ import type { EponymeVariableDefinition, EponymeVariableValue, EponymeVariables 
  * editable from the dashboard, so evaluating code from it would hand an editor
  * arbitrary execution on the server.
  */
-const VARIABLE_PATTERN = /\{\{\s*([A-Z_]\w*)\s*\}\}/gi
+const VARIABLE_PATTERN_SOURCE = String.raw`\{\{\s*([A-Z_]\w*)\s*\}\}`
+const VARIABLE_PATTERN = new RegExp(VARIABLE_PATTERN_SOURCE, 'gi')
+
+export function findEponymeVariableRanges(text: string): Array<{ from: number, to: number }> {
+  return [...text.matchAll(new RegExp(VARIABLE_PATTERN_SOURCE, 'gi'))].map(match => ({
+    from: match.index,
+    to: match.index + match[0].length,
+  }))
+}
 
 /** Always available, whatever the host application configures. */
 export function builtinEponymeVariables(now: Date = new Date()): Record<string, EponymeVariableDefinition> {
