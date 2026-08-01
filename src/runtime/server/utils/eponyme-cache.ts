@@ -27,9 +27,9 @@ function setCacheTags(event: H3Event, tags: string[]) {
  *   it holds is served until it expires, publication or not, which is why it stays short.
  */
 export function setEponymePublicCache(event: H3Event, tags: string[] = []) {
-  const config = useRuntimeConfig().eponymeContent as { browserCacheSeconds?: number, cdnCacheSeconds?: number } | undefined
-  const browser = Math.max(0, Math.trunc(config?.browserCacheSeconds ?? 30))
-  const cdn = Math.max(0, Math.trunc(config?.cdnCacheSeconds ?? 300))
+  const config = useRuntimeConfig().eponymeContent
+  const browser = Math.max(0, Math.trunc(config.browserCacheSeconds))
+  const cdn = Math.max(0, Math.trunc(config.cdnCacheSeconds))
   if (!browser && !cdn) {
     setResponseHeader(event, 'Cache-Control', 'no-cache')
     return

@@ -8,6 +8,7 @@ import {
   addTypeTemplate,
   createResolver,
   defineNuxtModule,
+  extendViteConfig,
   findPath,
   getNuxtModuleVersion,
   hasNuxtModule,
@@ -17,10 +18,9 @@ import {
 import type { Nuxt } from '@nuxt/schema'
 import pc from 'picocolors'
 import tailwindcss from '@tailwindcss/vite'
-import { resolve } from 'node:path'
+import { resolve } from 'pathe'
 import { tagPreviewPathRoutes } from './runtime/utils/cache-tags'
 
-// Re-exported so `import type { FieldDefinition } from '@karibsen/eponyme'` resolves.
 // The runtime helpers (`field`, `collection`, `defineEponymeConfig`) live at
 // `@karibsen/eponyme/config`, since the package root has to stay the Nuxt module itself.
 export type * from './eponyme'
@@ -161,8 +161,25 @@ export interface ModuleOptions {
   cdnCacheSeconds?: number
 }
 
-/** The oldest `@nuxt/ui` whose Tailwind the dashboard's styles compile against. */
 const MINIMUM_NUXT_UI = '4.10.0'
+
+const CLIENT_DEPENDENCIES = [
+  'slugify',
+  'sortablejs',
+  '@vueuse/core',
+  '@vueuse/integrations/useSortable',
+  '@tanstack/vue-table',
+  'fuse.js',
+  'zod',
+  'libphonenumber-js/min',
+  '@tiptap/vue-3',
+  '@tiptap/starter-kit',
+  '@tiptap/extension-image',
+  '@tiptap/extension-placeholder',
+  '@tiptap/pm/model',
+  '@tiptap/pm/state',
+  '@tiptap/pm/view',
+]
 
 /**
  * `@nuxt/ui` is not a dependency — the dashboard brings its own components. But both ship
@@ -194,6 +211,9 @@ export default defineNuxtModule<ModuleOptions>({
   meta: {
     name: '@karibsen/eponyme',
     configKey: 'eponyme',
+    compatibility: {
+      nuxt: '>=4.0.0',
+    },
   },
 
   defaults: {
@@ -275,8 +295,7 @@ export default defineNuxtModule<ModuleOptions>({
       browserCacheSeconds: options.browserCacheSeconds ?? 30,
       cdnCacheSeconds: options.cdnCacheSeconds ?? 300,
     }
-    // Announced rather than done quietly: these route rules are written into the host's own
-    // configuration, where nobody reading that file would think to look for them.
+
     const tagged = tagPreviewPathRoutes(options.previewPaths ?? {}, nuxt.options.routeRules ??= {})
     if (tagged.length) {
       const width = Math.max(...tagged.map(({ route }) => route.length))
@@ -317,22 +336,14 @@ export default defineNuxtModule<ModuleOptions>({
       { name: 'defineEponymeVariables', from: resolver.resolve('./eponyme') },
       { name: 'field', from: resolver.resolve('./runtime/fields') },
       { name: 'today', from: resolver.resolve('./runtime/fields') },
-      // What a page needs to render a `field.mediaPlayer()` value: the embed address is
-      // derived from the stored URL rather than stored next to it.
       { name: 'eponymeMediaEmbedUrl', from: resolver.resolve('./runtime/utils/media-player') },
       { name: 'eponymeMediaThumbnailUrl', from: resolver.resolve('./runtime/utils/media-player') },
     ])
     addImportsDir(resolver.resolve('./runtime/composables'))
     addServerImports([
       { name: 'getEponymeSitemapEntries', from: resolver.resolve('./runtime/server/utils/eponyme-sitemap') },
-      // The backfill for the filterable index, which a migration cannot do on its own:
-      // reading a value out of the JSONB envelope needs the configured schema.
       { name: 'reindexEponymeEntries', from: resolver.resolve('./runtime/server/utils/eponyme-reindex') },
-      // A `custom` form posts to the host application's own route, so this is what
-      // keeps server-side validation as the security boundary.
       { name: 'validateEponymeForm', from: resolver.resolve('./runtime/server/utils/eponyme-form') },
-      // The tags a CDN purge has to invalidate when an entry changes, matching exactly what
-      // the cached responses were tagged with.
       { name: 'getEponymeCacheTags', from: resolver.resolve('./runtime/server/utils/eponyme-cache') },
     ])
     addRouteMiddleware({
@@ -343,24 +354,22 @@ export default defineNuxtModule<ModuleOptions>({
       name: 'eponyme-owner',
       path: resolver.resolve('./runtime/middleware/eponyme-owner'),
     })
-    // reka-ui ships client-compiled render functions that call `renderSlot`. Left
-    // external, they resolve their own CJS copy of Vue, whose
-    // `currentRenderingInstance` is always null during SSR — the dashboard then
-    // crashes in production builds only. Transpiling keeps one copy of Vue.
     nuxt.options.build.transpile.push('reka-ui')
-    // `slugify` and `sortablejs` are CommonJS-only. Vite pre-bundles dependencies it
-    // discovers in the host's own node_modules, but not those reached through this
-    // module, so their default export goes missing in dev unless they are declared.
-    nuxt.options.vite.optimizeDeps ??= {}
-    nuxt.options.vite.optimizeDeps.include = [
-      ...(nuxt.options.vite.optimizeDeps.include ?? []),
-      'slugify',
-      'sortablejs',
-    ]
+
+    extendViteConfig((config) => {
+      config.optimizeDeps ??= {}
+      config.optimizeDeps.include ??= []
+      for (const id of CLIENT_DEPENDENCIES) {
+        const specifier = `@karibsen/eponyme > ${id}`
+        if (!config.optimizeDeps.include.includes(specifier)) {
+          config.optimizeDeps.include.push(specifier)
+        }
+      }
+    })
     nuxt.options.css.push(resolver.resolve('./runtime/assets/dashboard.css'))
-    nuxt.hook('vite:extendConfig', (viteConfig) => {
-      const plugins = viteConfig.plugins as unknown as Array<unknown> | undefined
-      plugins?.push(tailwindcss())
+    extendViteConfig((config) => {
+      config.plugins ??= []
+      config.plugins.push(tailwindcss())
     })
 
     const configPath = await findPath(resolve(nuxt.options.rootDir, 'eponyme.config.ts'))
@@ -384,8 +393,6 @@ export default defineNuxtModule<ModuleOptions>({
         + `declare module '#eponyme/variables' {\n  const variables: typeof import(${JSON.stringify(nuxt.options.alias['#eponyme/variables'])})['default']\n  export default variables\n}\n`,
     })
 
-    // Registered before the routes: it marks every Eponyme response uncacheable, and the
-    // few that may be cached override it themselves.
     addServerHandler({ middleware: true, handler: resolver.resolve('./runtime/server/middleware/eponyme-no-store') })
     addServerHandler({ route: '/api/eponyme/**', handler: resolver.resolve('./runtime/server/api/eponyme/[name].get') })
     addServerHandler({ route: '/api/eponyme/**', method: 'patch', handler: resolver.resolve('./runtime/server/api/eponyme/[name].patch') })

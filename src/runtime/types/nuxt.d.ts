@@ -8,6 +8,18 @@ declare module '@nuxt/schema' {
   interface NuxtOptions {
     eponyme: ModuleOptions
   }
+
+  interface RuntimeConfig {
+    eponymeAuth: {
+      sessionDurationDays: number
+    }
+    eponymeContent: {
+      cacheSeconds: number
+      autoReindex: boolean
+      browserCacheSeconds: number
+      cdnCacheSeconds: number
+    }
+  }
 }
 
 declare module 'nitropack/types' {
