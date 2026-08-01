@@ -8,6 +8,7 @@ import {
   addTypeTemplate,
   createResolver,
   defineNuxtModule,
+  extendViteConfig,
   findPath,
   getNuxtModuleVersion,
   hasNuxtModule,
@@ -163,6 +164,24 @@ export interface ModuleOptions {
 
 /** The oldest `@nuxt/ui` whose Tailwind the dashboard's styles compile against. */
 const MINIMUM_NUXT_UI = '4.10.0'
+
+const CLIENT_DEPENDENCIES = [
+  'slugify',
+  'sortablejs',
+  '@vueuse/core',
+  '@vueuse/integrations/useSortable',
+  '@tanstack/vue-table',
+  'fuse.js',
+  'zod',
+  'libphonenumber-js/min',
+  '@tiptap/vue-3',
+  '@tiptap/starter-kit',
+  '@tiptap/extension-image',
+  '@tiptap/extension-placeholder',
+  '@tiptap/pm/model',
+  '@tiptap/pm/state',
+  '@tiptap/pm/view',
+]
 
 /**
  * `@nuxt/ui` is not a dependency — the dashboard brings its own components. But both ship
@@ -348,15 +367,16 @@ export default defineNuxtModule<ModuleOptions>({
     // `currentRenderingInstance` is always null during SSR — the dashboard then
     // crashes in production builds only. Transpiling keeps one copy of Vue.
     nuxt.options.build.transpile.push('reka-ui')
-    // `slugify` and `sortablejs` are CommonJS-only. Vite pre-bundles dependencies it
-    // discovers in the host's own node_modules, but not those reached through this
-    // module, so their default export goes missing in dev unless they are declared.
-    nuxt.options.vite.optimizeDeps ??= {}
-    nuxt.options.vite.optimizeDeps.include = [
-      ...(nuxt.options.vite.optimizeDeps.include ?? []),
-      'slugify',
-      'sortablejs',
-    ]
+    extendViteConfig((config) => {
+      config.optimizeDeps ??= {}
+      config.optimizeDeps.include ??= []
+      for (const id of CLIENT_DEPENDENCIES) {
+        const specifier = `@karibsen/eponyme > ${id}`
+        if (!config.optimizeDeps.include.includes(specifier)) {
+          config.optimizeDeps.include.push(specifier)
+        }
+      }
+    })
     nuxt.options.css.push(resolver.resolve('./runtime/assets/dashboard.css'))
     nuxt.hook('vite:extendConfig', (viteConfig) => {
       const plugins = viteConfig.plugins as unknown as Array<unknown> | undefined
