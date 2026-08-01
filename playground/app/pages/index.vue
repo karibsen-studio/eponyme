@@ -126,6 +126,29 @@ useSeoMeta({
         </div>
       </section>
 
+      <!-- `eponymeMediaEmbedUrl` is auto-imported: the embed address is derived from the
+           stored URL, so the page never has to know each provider's format. -->
+      <section
+        v-if="data.content.hero.showreel.provider"
+        class="showreel"
+        aria-label="Showreel"
+      >
+        <video
+          v-if="data.content.hero.showreel.provider === 'url'"
+          :src="eponymeMediaEmbedUrl(data.content.hero.showreel)"
+          controls
+          preload="metadata"
+        />
+        <iframe
+          v-else
+          :src="eponymeMediaEmbedUrl(data.content.hero.showreel)"
+          :title="`${data.content.hero.title} showreel`"
+          loading="lazy"
+          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+          allowfullscreen
+        />
+      </section>
+
       <section
         v-if="data.content.projects.visibleSections.includes('highlights') && data.content.projects.highlights.length"
         class="highlights"
@@ -365,6 +388,23 @@ h1 {
 
 .image-caption strong {
   font-size: 0.85rem;
+}
+
+.showreel {
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  max-width: var(--hero-width);
+  margin: 0 auto 5rem;
+  border-radius: 1.5rem;
+  background: #000;
+}
+
+.showreel video,
+.showreel iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
 }
 
 .highlights {

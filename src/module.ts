@@ -245,6 +245,10 @@ export default defineNuxtModule<ModuleOptions>({
             'mingcute:forward-2-line',
             'mingcute:download-2-line',
             'mingcute:upload-2-line',
+            'mingcute:youtube-line',
+            'mingcute:movie-line',
+            'mingcute:film-line',
+            'mingcute:alert-line',
           ],
         },
       },
@@ -313,6 +317,10 @@ export default defineNuxtModule<ModuleOptions>({
       { name: 'defineEponymeVariables', from: resolver.resolve('./config/variables') },
       { name: 'field', from: resolver.resolve('./runtime/fields') },
       { name: 'today', from: resolver.resolve('./runtime/fields') },
+      // What a page needs to render a `field.mediaPlayer()` value: the embed address is
+      // derived from the stored URL rather than stored next to it.
+      { name: 'eponymeMediaEmbedUrl', from: resolver.resolve('./runtime/utils/media-player') },
+      { name: 'eponymeMediaThumbnailUrl', from: resolver.resolve('./runtime/utils/media-player') },
     ])
     addImportsDir(resolver.resolve('./runtime/composables'))
     addServerImports([

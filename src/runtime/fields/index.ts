@@ -5,6 +5,7 @@ import { color } from './color'
 import { date, today } from './date'
 import { email } from './email'
 import { image } from './image'
+import { mediaPlayer } from './media-player'
 import { number } from './number'
 import { phone } from './phone'
 import { radio } from './radio'
@@ -18,5 +19,5 @@ import { tab } from './tab'
 import { textarea } from './textarea'
 import { url } from './url'
 
-export const field = { string, slug, email, phone, url, textarea, richText, number, boolean, image, select, radio, checkboxGroup, tags, date, color, array, section, tab }
+export const field = { string, slug, email, phone, url, mediaPlayer, textarea, richText, number, boolean, image, select, radio, checkboxGroup, tags, date, color, array, section, tab }
 export { today }

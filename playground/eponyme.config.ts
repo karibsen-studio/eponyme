@@ -37,6 +37,15 @@ export default defineEponymeConfig({
                   defaultValue: 'https://images.unsplash.com/photo-1497366754035-f200968a6e72',
                   placeholder: 'https://example.com/hero.jpg',
                 }),
+                showreel: field.mediaPlayer({
+                  label: 'Showreel',
+                  description: 'YouTube, Vimeo ou un fichier vidéo servi directement. Le fournisseur est détecté depuis l’adresse.',
+                  defaultValue: {
+                    provider: 'youtube',
+                    url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+                    id: 'dQw4w9WgXcQ',
+                  },
+                }),
                 callToActionLabel: field.string({
                   label: 'Call to action label',
                   defaultValue: 'Start a project',
@@ -225,6 +234,12 @@ export default defineEponymeConfig({
       slug: field.slug({ label: 'Slug', required: true, maxLength: 120 }),
       excerpt: field.textarea({ label: 'Excerpt', required: true, maxLength: 220 }),
       cover: field.image({ label: 'Cover image' }),
+      video: field.mediaPlayer({
+        label: 'Video',
+        description: 'Vimeo ou un fichier vidéo. YouTube n’est pas accepté ici.',
+        providers: ['vimeo', 'url'],
+        placeholder: 'https://vimeo.com/76979871',
+      }),
       body: field.richText({
         label: 'Article body',
         description: 'Format the article with headings, lists, quotes and links.',
