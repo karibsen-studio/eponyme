@@ -43,6 +43,27 @@ useSeoMeta({
         :alt="article.title"
         class="cover"
       >
+      <!-- `eponymeMediaEmbedUrl` is auto-imported: the embed address is derived from the
+           stored URL, so the page never has to know each provider's format. -->
+      <div
+        v-if="article.video.provider"
+        class="video"
+      >
+        <video
+          v-if="article.video.provider === 'url'"
+          :src="eponymeMediaEmbedUrl(article.video)"
+          controls
+          preload="metadata"
+        />
+        <iframe
+          v-else
+          :src="eponymeMediaEmbedUrl(article.video)"
+          :title="article.title"
+          loading="lazy"
+          allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+          allowfullscreen
+        />
+      </div>
       <div
         class="body"
         v-html="article.body"
@@ -61,6 +82,8 @@ article header { padding: 5rem 0 3rem; }
 h1 { max-width: 48rem; margin: 1rem 0; font-size: clamp(3rem, 8vw, 6.5rem); line-height: .95; letter-spacing: -.07em; }
 .excerpt { max-width: 40rem; color: #66645c; font-size: 1.25rem; line-height: 1.6; }
 .cover { width: 100%; max-height: 34rem; object-fit: cover; }
+.video { margin-top: 2rem; overflow: hidden; aspect-ratio: 16 / 9; border-radius: 1rem; background: #000; }
+.video video, .video iframe { display: block; width: 100%; height: 100%; border: 0; }
 .body { padding: 3rem 0; font-family: Georgia, serif; font-size: 1.15rem; line-height: 1.9; }
 .body :deep(h2) { margin: 2.5rem 0 1rem; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 2rem; line-height: 1.2; letter-spacing: -.04em; }
 .body :deep(h3) { margin: 2rem 0 .75rem; font-family: Inter, ui-sans-serif, system-ui, sans-serif; font-size: 1.45rem; line-height: 1.3; letter-spacing: -.025em; }

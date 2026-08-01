@@ -15,6 +15,7 @@ import { cacheDuringHydrationOnly, cacheForPublicRead } from '../src/runtime/uti
 import { getEponymeCacheTags, tagPreviewPathRoutes } from '../src/runtime/utils/cache-tags'
 import { normalizeEponymePhone, toEponymePhoneValue } from '../src/runtime/utils/normalize-phone'
 import { normalizeEponymeTags } from '../src/runtime/utils/normalize-tags'
+import { eponymeMediaEmbedUrl, parseEponymeMediaUrl } from '../src/runtime/utils/media-player'
 import { normalizeEponymeValues } from '../src/runtime/utils/normalize-eponyme-values'
 import { validateEponymeData } from '../src/runtime/utils/validate-eponyme-data'
 import { middleEllipsis } from '../src/runtime/utils/middle-ellipsis'
@@ -601,5 +602,76 @@ describe('field.tags()', () => {
       items: [{ tags: ['Nuxt'] }],
       panels: { main: { tags: ['Nuxt', 'Vue'] } },
     })
+  })
+})
+
+describe('field.mediaPlayer()', () => {
+  const validate = (options: Parameters<typeof field.mediaPlayer>[0], value: unknown) =>
+    validateEponymeData({ video: field.mediaPlayer(options) }, { video: value }, 'publish').video
+
+  it('reads a YouTube id out of every address that carries one', () => {
+    for (const url of [
+      'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      'https://youtu.be/dQw4w9WgXcQ',
+      'https://www.youtube.com/embed/dQw4w9WgXcQ',
+      'https://www.youtube.com/shorts/dQw4w9WgXcQ',
+      'https://m.youtube.com/watch?v=dQw4w9WgXcQ&list=PL123',
+    ]) expect(parseEponymeMediaUrl(url)).toMatchObject({ provider: 'youtube', id: 'dQw4w9WgXcQ' })
+  })
+
+  it('reads a Vimeo id, including a channel path and a player address', () => {
+    expect(parseEponymeMediaUrl('https://vimeo.com/76979871')).toMatchObject({ provider: 'vimeo', id: '76979871' })
+    expect(parseEponymeMediaUrl('https://vimeo.com/channels/staffpicks/76979871')).toMatchObject({ provider: 'vimeo', id: '76979871' })
+    expect(parseEponymeMediaUrl('https://player.vimeo.com/video/76979871')).toMatchObject({ provider: 'vimeo', id: '76979871' })
+  })
+
+  it('falls back to a direct file, which has no id', () => {
+    expect(parseEponymeMediaUrl('https://cdn.example.com/reel.mp4')).toEqual({
+      provider: 'url',
+      url: 'https://cdn.example.com/reel.mp4',
+      id: '',
+    })
+  })
+
+  it('refuses a provider this field does not accept rather than treating it as a file', () => {
+    const options = { providers: ['vimeo', 'url'] } as const
+    expect(parseEponymeMediaUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ', options)).toMatchObject({ provider: '', id: '' })
+    expect(validate({ providers: ['vimeo', 'url'] }, { provider: '', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', id: '' }))
+      .toEqual(['Must be a Vimeo link or a direct video URL.'])
+  })
+
+  it('builds the embed address from the stored value', () => {
+    expect(eponymeMediaEmbedUrl(parseEponymeMediaUrl('https://youtu.be/dQw4w9WgXcQ')))
+      .toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')
+    expect(eponymeMediaEmbedUrl(parseEponymeMediaUrl('https://vimeo.com/76979871/abc123')))
+      .toBe('https://player.vimeo.com/video/76979871?h=abc123')
+    // A direct file is played as it stands, and an empty value embeds nothing.
+    expect(eponymeMediaEmbedUrl(parseEponymeMediaUrl('https://cdn.example.com/reel.mp4'))).toBe('https://cdn.example.com/reel.mp4')
+    expect(eponymeMediaEmbedUrl({ provider: 'youtube', url: 'https://youtu.be/x', id: '' })).toBe('')
+  })
+
+  it('rereads the provider on write, so a payload cannot claim one the address contradicts', () => {
+    const schema = {
+      video: field.mediaPlayer(),
+      section: field.section({ fields: { video: field.mediaPlayer() } }),
+      items: field.array({ of: { video: field.mediaPlayer() } }),
+    }
+    expect(normalizeEponymeValues(schema, {
+      video: { provider: 'vimeo', url: 'https://youtu.be/dQw4w9WgXcQ', id: '999' },
+      section: { video: { provider: '', url: 'https://vimeo.com/76979871', id: '' } },
+      items: [{ video: { provider: 'url', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', id: '' } }],
+    })).toEqual({
+      video: { provider: 'youtube', url: 'https://youtu.be/dQw4w9WgXcQ', id: 'dQw4w9WgXcQ' },
+      section: { video: { provider: 'vimeo', url: 'https://vimeo.com/76979871', id: '76979871' } },
+      items: [{ video: { provider: 'youtube', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', id: 'dQw4w9WgXcQ' } }],
+    })
+  })
+
+  it('treats an empty address as absent, leaving `required` to decide', () => {
+    expect(validate({}, { provider: '', url: '', id: '' })).toBeUndefined()
+    expect(validate({ required: true }, { provider: '', url: '', id: '' })).toEqual(['This field is required.'])
+    expect(validate({}, 'https://youtu.be/dQw4w9WgXcQ')).toEqual(['Must be a video.'])
+    expect(validate({}, { provider: '', url: 'not a url', id: '' }))
+      .toEqual(['Must be a YouTube link, a Vimeo link or a direct video URL.'])
   })
 })

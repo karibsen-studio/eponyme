@@ -1,4 +1,4 @@
-import type { ArrayFieldDefinition, ArrayItemValue, BooleanFieldDefinition, CheckboxGroupFieldDefinition, EmailFieldDefinition, FieldDefinition, NumberFieldDefinition, PhoneFieldDefinition, RadioFieldDefinition, SectionFieldDefinition, SectionValue, SelectFieldDefinition, SlugFieldDefinition, StringFieldDefinition, TabFieldDefinition, TagsFieldDefinition, TagsValueOf, TabsValue, TextareaFieldDefinition, UrlFieldDefinition, UrlValue } from './field'
+import type { ArrayFieldDefinition, ArrayItemValue, BooleanFieldDefinition, CheckboxGroupFieldDefinition, EmailFieldDefinition, FieldDefinition, MediaPlayerFieldDefinition, MediaPlayerValue, NumberFieldDefinition, PhoneFieldDefinition, RadioFieldDefinition, SectionFieldDefinition, SectionValue, SelectFieldDefinition, SlugFieldDefinition, StringFieldDefinition, TabFieldDefinition, TagsFieldDefinition, TagsValueOf, TabsValue, TextareaFieldDefinition, UrlFieldDefinition, UrlValue } from './field'
 
 export type EponymeSchema = Record<string, FieldDefinition>
 export interface EponymeCollectionDefinitionBase {
@@ -88,12 +88,13 @@ export type FieldValue<T extends FieldDefinition>
   = T extends { type: 'number' } ? number
     : T extends { type: 'boolean' } ? boolean
       : T extends UrlFieldDefinition ? UrlValue
-        : T extends ArrayFieldDefinition<infer Item> ? Array<ArrayItemValue<Item>>
-          : T extends CheckboxGroupFieldDefinition<infer Value> ? Value[]
-            : T extends TagsFieldDefinition<infer Options> ? Array<TagsValueOf<Options>>
-              : T extends SectionFieldDefinition<infer Section> ? SectionValue<Section>
-                : T extends TabFieldDefinition<infer Tabs> ? TabsValue<Tabs>
-                  : string
+        : T extends MediaPlayerFieldDefinition ? MediaPlayerValue
+          : T extends ArrayFieldDefinition<infer Item> ? Array<ArrayItemValue<Item>>
+            : T extends CheckboxGroupFieldDefinition<infer Value> ? Value[]
+              : T extends TagsFieldDefinition<infer Options> ? Array<TagsValueOf<Options>>
+                : T extends SectionFieldDefinition<infer Section> ? SectionValue<Section>
+                  : T extends TabFieldDefinition<infer Tabs> ? TabsValue<Tabs>
+                    : string
 
 export type EponymeData<T extends EponymeSchema> = {
   [K in keyof T]: T[K] extends FieldDefinition ? FieldValue<T[K]> : never
