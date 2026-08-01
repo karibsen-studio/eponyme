@@ -311,10 +311,10 @@ export default defineNuxtModule<ModuleOptions>({
     }
 
     addImports([
-      { name: 'defineEponymeConfig', from: resolver.resolve('./config/config') },
-      { name: 'collection', from: resolver.resolve('./config/collection') },
-      { name: 'form', from: resolver.resolve('./config/form') },
-      { name: 'defineEponymeVariables', from: resolver.resolve('./config/variables') },
+      { name: 'defineEponymeConfig', from: resolver.resolve('./eponyme') },
+      { name: 'collection', from: resolver.resolve('./eponyme') },
+      { name: 'form', from: resolver.resolve('./eponyme') },
+      { name: 'defineEponymeVariables', from: resolver.resolve('./eponyme') },
       { name: 'field', from: resolver.resolve('./runtime/fields') },
       { name: 'today', from: resolver.resolve('./runtime/fields') },
       // What a page needs to render a `field.mediaPlayer()` value: the embed address is
