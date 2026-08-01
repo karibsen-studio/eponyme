@@ -1,6 +1,6 @@
 import type { CountryCode } from 'libphonenumber-js/min'
 
-export type EponymeFieldType = 'string' | 'slug' | 'email' | 'phone' | 'url' | 'textarea' | 'richText' | 'number' | 'boolean' | 'image' | 'select' | 'radio' | 'checkboxGroup' | 'tags' | 'date' | 'color' | 'array' | 'section' | 'tabs'
+export type EponymeFieldType = 'string' | 'slug' | 'email' | 'phone' | 'url' | 'mediaPlayer' | 'textarea' | 'richText' | 'number' | 'boolean' | 'image' | 'select' | 'radio' | 'checkboxGroup' | 'tags' | 'date' | 'color' | 'array' | 'section' | 'tabs'
 
 export type FieldVisibilityCondition
   = | { field: string, equals: unknown, notEquals?: never }
@@ -141,6 +141,37 @@ export interface UrlFieldDefinition {
   options: UrlFieldOptions
 }
 
+/**
+ * Where a video comes from. `youtube` and `vimeo` are embedded in an iframe; `url` is a file
+ * the browser plays directly in a `<video>` element.
+ */
+export type MediaPlayerProvider = 'youtube' | 'vimeo' | 'url'
+
+export interface MediaPlayerValue {
+  /** Detected from `url`. Empty while nothing has been entered, or when nothing recognised it. */
+  provider: MediaPlayerProvider | ''
+  /** Address as it was entered. */
+  url: string
+  /** Video id at its provider. Empty for `url`, which has none. */
+  id: string
+}
+
+export interface MediaPlayerFieldOptions extends DefaultFieldOptions<MediaPlayerValue> {
+  placeholder?: string
+  /**
+   * Sources this field accepts. A video from any other one is refused rather than stored as
+   * an address nothing can play.
+   *
+   * @default ['youtube', 'vimeo', 'url']
+   */
+  providers?: readonly MediaPlayerProvider[]
+}
+
+export interface MediaPlayerFieldDefinition {
+  type: 'mediaPlayer'
+  options: MediaPlayerFieldOptions
+}
+
 export interface NumberFieldOptions extends DefaultFieldOptions<number> {
   min?: number
   max?: number
@@ -276,6 +307,7 @@ export type ArrayItemFieldDefinition
     | EmailFieldDefinition
     | PhoneFieldDefinition
     | UrlFieldDefinition
+    | MediaPlayerFieldDefinition
     | TextareaFieldDefinition
     | RichTextFieldDefinition
     | NumberFieldDefinition
@@ -295,10 +327,11 @@ export type ArrayItemValue<T extends ArrayItemDefinition>
   = T extends NumberFieldDefinition ? number
     : T extends BooleanFieldDefinition ? boolean
       : T extends UrlFieldDefinition ? UrlValue
-        : T extends CheckboxGroupFieldDefinition<infer Value> ? Value[]
-          : T extends ArrayItemFieldDefinition ? string
-            : T extends ArrayItemSchema ? { [K in keyof T]: ArrayItemValue<T[K]> }
-              : never
+        : T extends MediaPlayerFieldDefinition ? MediaPlayerValue
+          : T extends CheckboxGroupFieldDefinition<infer Value> ? Value[]
+            : T extends ArrayItemFieldDefinition ? string
+              : T extends ArrayItemSchema ? { [K in keyof T]: ArrayItemValue<T[K]> }
+                : never
 
 export interface ArrayFieldOptions<T extends ArrayItemDefinition> extends DefaultFieldOptions<Array<ArrayItemValue<T>>> {
   of: T

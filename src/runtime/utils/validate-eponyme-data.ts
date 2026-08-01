@@ -1,6 +1,7 @@
-import type { EponymeSchema, FieldDefinition, FieldValidator } from '../types'
+import type { EponymeSchema, FieldDefinition, FieldValidator, MediaPlayerFieldOptions, MediaPlayerProvider } from '../types'
 import { isArrayItemFieldDefinition } from './get-field-default-value'
 import { isFieldVisible } from './is-field-visible'
+import { MEDIA_PLAYER_PROVIDERS, mediaPlayerProviders, parseEponymeMediaUrl } from './media-player'
 import { normalizeEponymePhone } from './normalize-phone'
 import { normalizeEponymeTags } from './normalize-tags'
 
@@ -212,6 +213,30 @@ function validateFieldRules(
     return
   }
 
+  if (definition.type === 'mediaPlayer') {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      addError(errors, name, 'Must be a video.')
+      return
+    }
+    const media = value as Record<string, unknown>
+    if (
+      typeof media.url !== 'string'
+      || (media.id !== undefined && typeof media.id !== 'string')
+      || (media.provider !== undefined && media.provider !== '' && !MEDIA_PLAYER_PROVIDERS.includes(media.provider as never))
+    ) {
+      addError(errors, name, 'Must be a valid video.')
+      return
+    }
+    const address = media.url.trim()
+    if (mode === 'publish' && options.required && !address) addError(errors, name, 'This field is required.')
+    if (!address) return
+    // Read from the address rather than from what the payload claims: the provider is
+    // detected, so a value naming one the URL does not match is not a value at all.
+    const parsed = parseEponymeMediaUrl(address, definition.options)
+    if (!parsed.provider) addError(errors, name, mediaPlayerError(definition.options))
+    return
+  }
+
   if (typeof value !== 'string') {
     addError(errors, name, 'Must be a string.')
     return
@@ -295,6 +320,18 @@ function isDefaultProtocols(protocols: readonly string[] | undefined): boolean {
 function isAllowedProtocol(href: string, protocols: readonly string[] | undefined): boolean {
   const scheme = schemePattern.exec(href)?.[1]?.toLowerCase()
   return Boolean(scheme) && normalizeProtocols(protocols).includes(scheme!)
+}
+
+const MEDIA_PLAYER_LABELS: Record<MediaPlayerProvider, string> = {
+  youtube: 'a YouTube link',
+  vimeo: 'a Vimeo link',
+  url: 'a direct video URL',
+}
+
+function mediaPlayerError(options: MediaPlayerFieldOptions) {
+  const accepted = mediaPlayerProviders(options).map(provider => MEDIA_PLAYER_LABELS[provider])
+  const last = accepted.pop()
+  return `Must be ${accepted.length ? `${accepted.join(', ')} or ${last}` : last}.`
 }
 
 function getRichTextContent(value: string) {

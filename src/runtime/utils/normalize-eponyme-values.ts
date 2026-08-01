@@ -1,6 +1,7 @@
 import type { ArrayItemDefinition, FieldDefinition } from '../types/field'
 import type { EponymeSchema } from '../types'
 import { isArrayItemFieldDefinition } from './get-field-default-value'
+import { normalizeEponymeMediaPlayer } from './media-player'
 import { toEponymePhoneValue } from './normalize-phone'
 import { normalizeEponymeTags } from './normalize-tags'
 
@@ -28,6 +29,8 @@ function normalizeField(definition: FieldDefinition, value: unknown): unknown {
   if (definition.type === 'phone') return toEponymePhoneValue(value, definition.options)
 
   if (definition.type === 'tags') return Array.isArray(value) ? normalizeEponymeTags(value, definition.options) : value
+
+  if (definition.type === 'mediaPlayer') return normalizeEponymeMediaPlayer(value, definition.options)
 
   if (definition.type === 'section')
     return normalizeNested(definition.options.fields, value)

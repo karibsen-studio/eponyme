@@ -4,6 +4,7 @@ export { form } from './config/form'
 export { defineEponymeVariables } from './config/variables'
 export { field, today } from './runtime/fields'
 export { EPONYME_ROLES, canEditEponyme, isEponymeRole } from './runtime/types/auth'
+export { eponymeMediaEmbedUrl, eponymeMediaThumbnailUrl, parseEponymeMediaUrl } from './runtime/utils/media-player'
 
 export type {
   FieldDefinition,
@@ -20,6 +21,10 @@ export type {
   UrlFieldOptions,
   UrlType,
   UrlValue,
+  MediaPlayerFieldDefinition,
+  MediaPlayerFieldOptions,
+  MediaPlayerProvider,
+  MediaPlayerValue,
   NumberFieldDefinition,
   NumberFieldOptions,
   BooleanFieldDefinition,

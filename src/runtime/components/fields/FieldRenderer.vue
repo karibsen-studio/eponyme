@@ -4,6 +4,7 @@ import BooleanField from './BooleanField.vue'
 import CheckboxGroupField from './CheckboxGroupField.vue'
 import ColorField from './ColorField.vue'
 import DateField from './DateField.vue'
+import MediaPlayerField from './MediaPlayerField.vue'
 import NumberField from './NumberField.vue'
 import PhoneField from './PhoneField.vue'
 import RadioField from './RadioField.vue'
@@ -61,6 +62,7 @@ const component = computed(() => {
     case 'date': return DateField
     case 'color': return ColorField
     case 'url': return UrlField
+    case 'mediaPlayer': return MediaPlayerField
     case 'phone': return PhoneField
     case 'tags': return TagsField
     default: return TextField
@@ -108,6 +110,8 @@ const specificProps = computed<Record<string, unknown>>(() => {
       return { presets: field.options.presets }
     case 'url':
       return { placeholder: field.options.placeholder }
+    case 'mediaPlayer':
+      return { placeholder: field.options.placeholder, providers: field.options.providers }
     case 'phone':
       return {
         placeholder: field.options.placeholder,
