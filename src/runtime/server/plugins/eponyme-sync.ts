@@ -16,8 +16,7 @@ export default defineNitroPlugin(async () => {
 
   // After `syncAll`, never beside it: that is the one place singletons are healed, and the
   // index is built from what is stored. Indexing first would record pre-heal values.
-  const content = useRuntimeConfig().eponymeContent as { autoReindex?: boolean } | undefined
-  if (content?.autoReindex === false) return
+  if (useRuntimeConfig().eponymeContent.autoReindex === false) return
   try {
     await useEponymeService().syncIndexState()
   }

@@ -12,9 +12,9 @@ let eponymeService: EponymeService | undefined
 
 export function useEponymeService(): EponymeService {
   if (!eponymeService) {
-    const contentConfig = useRuntimeConfig().eponymeContent as { cacheSeconds?: number } | undefined
+    const contentConfig = useRuntimeConfig().eponymeContent
     eponymeService = new EponymeService(eponymeConfig, prisma as PrismaEponymeClient, {
-      cacheSeconds: contentConfig?.cacheSeconds ?? 5,
+      cacheSeconds: contentConfig.cacheSeconds,
     })
   }
   return eponymeService
