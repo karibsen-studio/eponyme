@@ -6,6 +6,9 @@
     "dev": "undocs dev",
     "build": "undocs build"
   },
+  "dependencies": {
+    "@vercel/analytics": "^1.4.1"
+  },
   "devDependencies": {
     "undocs": "latest"
   }
