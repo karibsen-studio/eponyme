@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import type { UrlType, UrlValue } from '../../types'
 import { computed, ref, watch } from 'vue'
 import EPButton from './EPButton.vue'
@@ -40,8 +41,8 @@ const value = computed<UrlValue>(() => {
 const downloadableExtension = computed(() => getDownloadableExtension(draftHref.value))
 
 const typeOptions = [
-  { label: 'Internal link', value: 'internal' },
-  { label: 'External link', value: 'external' },
+  { label: t('link.internal'), value: 'internal' },
+  { label: t('link.external'), value: 'external' },
 ]
 
 watch(() => props.open, (open) => {
@@ -92,15 +93,15 @@ function apply() {
       </div>
 
       <label class="ep:block">
-        <span class="ep:mb-2 ep:block ep:text-sm ep:font-medium ep:text-white">Destination</span>
+        <span class="ep:mb-2 ep:block ep:text-sm ep:font-medium ep:text-white">{{ t('link.destination') }}</span>
         <EPInputText
           :model-value="draftHref"
           :type="draftType === 'external' ? 'url' : 'text'"
-          :placeholder="draftType === 'internal' ? '/contact' : (placeholder || 'https://example.com')"
+          :placeholder="draftType === 'internal' ? t('link.internalPlaceholder') : (placeholder || t('link.externalPlaceholder'))"
           @update:model-value="updateHref"
         />
         <span class="ep:mt-1.5 ep:block ep:text-xs ep:text-muted-ep">
-          {{ draftType === 'internal' ? 'Use a path beginning with / or an anchor beginning with #.' : 'Use a complete HTTP(S) address.' }}
+          {{ draftType === 'internal' ? t('link.internalHint') : t('link.externalHint') }}
         </span>
       </label>
 

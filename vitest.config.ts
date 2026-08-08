@@ -1,9 +1,14 @@
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '#eponyme/locale': fileURLToPath(new URL('./src/runtime/locales/fallback.ts', import.meta.url)),
+    },
+  },
   test: {
     include: ['test/**/*.test.ts'],
-    // The e2e suite boots a real Nuxt build, which routinely exceeds the 5s default in CI.
     testTimeout: 120_000,
     hookTimeout: 120_000,
     coverage: {

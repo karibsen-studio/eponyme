@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import type { EponymeStatus } from '../../server/services/eponyme-store'
 import type { EponymeNavigationNode } from '../../types/eponyme-navigation'
 import EPAccordion from '../ui/EPAccordion.vue'
@@ -67,8 +68,8 @@ function setOpen(path: string, open: boolean) {
           <NuxtLink
             :to="{ path: entryPath(node.path), query: { create: '1' } }"
             class="ep:flex ep:h-7 ep:w-7 ep:items-center ep:justify-center ep:rounded-md ep:text-lg ep:font-medium ep:text-muted-ep ep:no-underline ep:transition ep:hover:bg-theme-ep ep:hover:text-white ep:focus-visible:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-white/20"
-            :aria-label="`Create in ${node.label}`"
-            title="Create entry"
+            :aria-label="t('nav.createIn', { folder: node.label })"
+            :title="t('nav.createEntry')"
             @click.stop
           >+</NuxtLink>
         </template>

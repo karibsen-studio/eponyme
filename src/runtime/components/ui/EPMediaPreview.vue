@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { computed } from 'vue'
 import { eponymeMediaEmbedUrl, toMediaPlayerValue } from '../../utils/media-player'
 
@@ -25,7 +26,7 @@ const embedUrl = computed(() => eponymeMediaEmbedUrl(media.value))
       v-else
       :key="embedUrl"
       :src="embedUrl"
-      :title="label || 'Video preview'"
+      :title="label || t('media.preview')"
       loading="lazy"
       referrerpolicy="strict-origin-when-cross-origin"
       allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"

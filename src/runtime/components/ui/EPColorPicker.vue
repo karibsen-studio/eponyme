@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { computed } from 'vue'
 import { normalizeHexColor, sameHexColor } from '../../utils/normalize-hex-color'
 
@@ -61,8 +62,8 @@ function select(value: string) {
         :value="pickerValue"
         :disabled="disabled"
         :aria-invalid="invalid || undefined"
-        aria-label="Custom color"
-        title="Custom color"
+        :aria-label="t('color.custom')"
+        :title="t('color.custom')"
         class="ep:absolute ep:inset-0 ep:h-full ep:w-full ep:cursor-pointer ep:rounded-full ep:opacity-0 ep:disabled:cursor-not-allowed"
         @input="select(($event.target as HTMLInputElement).value)"
       >

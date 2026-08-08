@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import EPButton from './EPButton.vue'
 import EPDialog from './EPDialog.vue'
 
@@ -13,8 +14,8 @@ const props = withDefaults(defineProps<{
   confirmDisabled?: boolean
   closeOnConfirm?: boolean
 }>(), {
-  cancelLabel: 'Cancel',
-  confirmLabel: 'Confirm',
+  cancelLabel: t('action.cancel'),
+  confirmLabel: t('action.confirm'),
   confirmVariant: 'primary',
   closeOnConfirm: true,
 })

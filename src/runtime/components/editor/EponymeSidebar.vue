@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { navigateTo, useRequestFetch, useRoute, useState } from '#app'
 import { onKeyStroke } from '@vueuse/core'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
@@ -149,15 +150,15 @@ watch(() => route.path, () => {
       >
         <img
           :src="logoUrl"
-          alt="Eponyme"
+          :alt="t('sidebar.logo')"
           class="ep:block ep:size-8"
         >
       </NuxtLink>
       <button
         type="button"
         class="ep:flex ep:h-8 ep:w-8 ep:shrink-0 ep:cursor-pointer ep:items-center ep:justify-center ep:rounded-lg ep:border-0 ep:bg-transparent ep:text-muted-ep ep:transition ep:hover:bg-selected-ep ep:hover:text-white"
-        :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
-        :title="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+        :aria-label="collapsed ? t('sidebar.expand') : t('sidebar.collapse')"
+        :title="collapsed ? t('sidebar.expand') : t('sidebar.collapse')"
         @click="collapsed = !collapsed"
       >
         <Icon
@@ -171,7 +172,7 @@ watch(() => route.path, () => {
       v-if="!collapsed"
       ref="navigationElement"
       class="ep:mt-6 ep:grid ep:min-h-0 ep:min-w-0 ep:flex-1 ep:content-start ep:gap-1 ep:overflow-y-auto ep:overscroll-contain ep:pr-1"
-      aria-label="Content entries"
+      :aria-label="t('sidebar.contentEntries')"
     >
       <div class="ep:relative ep:mb-3">
         <Icon
@@ -186,8 +187,8 @@ watch(() => route.path, () => {
           padded
           size="sm"
           type="search"
-          placeholder="Search"
-          aria-label="Search content entries"
+          :placeholder="t('sidebar.search')"
+          :aria-label="t('sidebar.searchLabel')"
         />
         <kbd class="ep:pointer-events-none ep:absolute ep:top-1/2 ep:right-2.5 ep:-translate-y-1/2 ep:rounded ep:border ep:border-border-ep ep:bg-theme-ep ep:px-1.5 ep:py-0.5 ep:font-sans ep:text-[10px] ep:font-medium ep:text-muted-ep">
           ⌘ K

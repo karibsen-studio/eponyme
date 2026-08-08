@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { DialogClose, DialogContent, DialogDescription, DialogOverlay, DialogPortal, DialogRoot, DialogTitle, DialogTrigger } from 'reka-ui'
 import EPButton from './EPButton.vue'
 
@@ -40,8 +41,8 @@ const emit = defineEmits<{ 'update:open': [value: boolean] }>()
             variant="ghost"
             icon="mingcute:close-line"
             class="ep:absolute ep:top-4 ep:right-4"
-            aria-label="Close"
-            title="Close"
+            :aria-label="t('action.close')"
+            :title="t('action.close')"
           />
         </DialogClose>
       </DialogContent>

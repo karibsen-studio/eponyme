@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import Image from '@tiptap/extension-image'
 import Placeholder from '@tiptap/extension-placeholder'
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
@@ -193,7 +194,7 @@ const variables = useEponymeVariables()
 // The preview shows what the variable resolves to today, so an editor can tell
 // `currentYear` from `nextYear` without leaving the page.
 const variableItems = computed(() => variables.map(variable => ({
-  label: variable.preview ? `${variable.label} — ${variable.preview}` : variable.label,
+  label: variable.preview ? t('richText.variablePreview', { label: variable.label, preview: variable.preview }) : variable.label,
   value: variable.name,
 })))
 
@@ -207,19 +208,19 @@ const tools = computed<Tool[]>(() => {
   if (!instance) return []
   trackEditorRevision()
   return [
-    { icon: 'mingcute:paragraph-line', title: 'Paragraph', active: isActive('paragraph'), run: () => instance.chain().focus().setParagraph().run() },
-    { icon: 'mingcute:heading-2-line', title: 'Heading 2', active: isActive('heading', { level: 2 }), run: () => instance.chain().focus().toggleHeading({ level: 2 }).run() },
-    { icon: 'mingcute:heading-3-line', title: 'Heading 3', active: isActive('heading', { level: 3 }), run: () => instance.chain().focus().toggleHeading({ level: 3 }).run() },
-    { icon: 'mingcute:bold-line', title: 'Bold', active: isActive('bold'), separated: true, run: () => instance.chain().focus().toggleBold().run() },
-    { icon: 'mingcute:italic-line', title: 'Italic', active: isActive('italic'), run: () => instance.chain().focus().toggleItalic().run() },
-    { icon: 'mingcute:strikethrough-line', title: 'Strikethrough', active: isActive('strike'), run: () => instance.chain().focus().toggleStrike().run() },
-    { icon: 'mingcute:link-line', title: 'Link', active: isActive('link'), run: openLinkDialog },
-    { icon: 'mingcute:pic-line', title: 'Image', active: isActive('image'), run: setImage },
-    { icon: 'mingcute:list-check-line', title: 'Bullet list', active: isActive('bulletList'), separated: true, run: () => instance.chain().focus().toggleBulletList().run() },
-    { icon: 'mingcute:list-ordered-line', title: 'Numbered list', active: isActive('orderedList'), run: () => instance.chain().focus().toggleOrderedList().run() },
-    { icon: 'mingcute:quote-left-line', title: 'Quote', active: isActive('blockquote'), run: () => instance.chain().focus().toggleBlockquote().run() },
-    { icon: 'mingcute:back-2-line', title: 'Undo', separated: true, disabled: !instance.can().chain().focus().undo().run(), run: () => instance.chain().focus().undo().run() },
-    { icon: 'mingcute:forward-2-line', title: 'Redo', disabled: !instance.can().chain().focus().redo().run(), run: () => instance.chain().focus().redo().run() },
+    { icon: 'mingcute:paragraph-line', title: t('richText.paragraph'), active: isActive('paragraph'), run: () => instance.chain().focus().setParagraph().run() },
+    { icon: 'mingcute:heading-2-line', title: t('richText.heading2'), active: isActive('heading', { level: 2 }), run: () => instance.chain().focus().toggleHeading({ level: 2 }).run() },
+    { icon: 'mingcute:heading-3-line', title: t('richText.heading3'), active: isActive('heading', { level: 3 }), run: () => instance.chain().focus().toggleHeading({ level: 3 }).run() },
+    { icon: 'mingcute:bold-line', title: t('richText.bold'), active: isActive('bold'), separated: true, run: () => instance.chain().focus().toggleBold().run() },
+    { icon: 'mingcute:italic-line', title: t('richText.italic'), active: isActive('italic'), run: () => instance.chain().focus().toggleItalic().run() },
+    { icon: 'mingcute:strikethrough-line', title: t('richText.strike'), active: isActive('strike'), run: () => instance.chain().focus().toggleStrike().run() },
+    { icon: 'mingcute:link-line', title: t('richText.link'), active: isActive('link'), run: openLinkDialog },
+    { icon: 'mingcute:pic-line', title: t('richText.image'), active: isActive('image'), run: setImage },
+    { icon: 'mingcute:list-check-line', title: t('richText.bulletList'), active: isActive('bulletList'), separated: true, run: () => instance.chain().focus().toggleBulletList().run() },
+    { icon: 'mingcute:list-ordered-line', title: t('richText.orderedList'), active: isActive('orderedList'), run: () => instance.chain().focus().toggleOrderedList().run() },
+    { icon: 'mingcute:quote-left-line', title: t('richText.quote'), active: isActive('blockquote'), run: () => instance.chain().focus().toggleBlockquote().run() },
+    { icon: 'mingcute:back-2-line', title: t('richText.undo'), separated: true, disabled: !instance.can().chain().focus().undo().run(), run: () => instance.chain().focus().undo().run() },
+    { icon: 'mingcute:forward-2-line', title: t('richText.redo'), disabled: !instance.can().chain().focus().redo().run(), run: () => instance.chain().focus().redo().run() },
   ]
 })
 </script>
@@ -240,7 +241,7 @@ const tools = computed<Tool[]>(() => {
         v-if="editor"
         class="ep:flex ep:flex-wrap ep:items-center ep:gap-1 ep:border-b ep:border-border-ep ep:p-2"
         role="toolbar"
-        :aria-label="`${label} formatting`"
+        :aria-label="t('richText.toolbar', { field: label })"
       >
         <template
           v-for="tool in tools"
@@ -277,8 +278,8 @@ const tools = computed<Tool[]>(() => {
               type="button"
               class="rich-text-tool"
               :disabled="disabled"
-              title="Insert a variable"
-              aria-label="Insert a variable"
+              :title="t('richText.variable')"
+              :aria-label="t('richText.variable')"
             >
               <Icon
                 name="mingcute:code-line"

@@ -1,3 +1,4 @@
+import { t } from '#eponyme/locale'
 import { createError, defineEventHandler, getRequestHeader, readRawBody, setResponseHeader, setResponseStatus } from 'h3'
 import { useEponymeFormService } from '../../services/eponyme-form-service'
 import { readEponymeFormRoute } from '../../utils/form-route'
@@ -51,7 +52,7 @@ export default defineEventHandler(async (event) => {
   await callEponymeBlockingHook('eponyme:form:beforeSubmit', beforeSubmit)
 
   const result = await service.submit(route.name, beforeSubmit.data)
-  if (!result) throw createError({ statusCode: 404, statusMessage: 'Eponyme form not found.' })
+  if (!result) throw createError({ statusCode: 404, statusMessage: t('server.formNotFound') })
   if ('errors' in result) {
     setResponseStatus(event, 422)
     return { errors: result.errors }

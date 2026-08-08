@@ -6,6 +6,7 @@ import {
   addServerHandler,
   addServerImports,
   addServerPlugin,
+  addTemplate,
   addTypeTemplate,
   createResolver,
   defineNuxtModule,
@@ -20,7 +21,13 @@ import type { Nuxt } from '@nuxt/schema'
 import pc from 'picocolors'
 import tailwindcss from '@tailwindcss/vite'
 import { resolve } from 'pathe'
+import { renderEponymeLocaleModule, resolveEponymeLocale } from './locale-build'
+import type { EponymeLocaleDefinition } from './runtime/locales'
 import { tagPreviewPathRoutes } from './runtime/utils/cache-tags'
+
+// Re-exported from the package root so a catalogue in `@eponyme/locale` can type itself
+// against the contract it has to satisfy.
+export type { EponymeLocaleDefinition, EponymeMessageKey } from './runtime/locales'
 
 // The runtime helpers (`field`, `collection`, `defineEponymeConfig`) live at
 // `@karibsen/eponyme/config`, since the package root has to stay the Nuxt module itself.
@@ -160,6 +167,32 @@ export interface ModuleOptions {
    * @see https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control
    */
   cdnCacheSeconds?: number
+
+  /**
+   * Language of the dashboard interface, resolved once at build time.
+   *
+   * @remarks
+   * One language per build: the catalogue is merged over English and inlined, so a key the
+   * locale does not carry falls back to English rather than showing raw. This never touches
+   * content, schema labels, or a host's own `@nuxtjs/i18n` setup.
+   *
+   * Catalogues live in `@eponyme/locale`, one subpath per language, and each export is a
+   * function so it can take overrides. Passing the function itself instead of calling it is
+   * refused at setup with a message saying so.
+   *
+   * @default undefined — English
+   * @example
+   * ```ts
+   * import { fr } from '@eponyme/locale/fr'
+   *
+   * export default defineNuxtConfig({
+   *   eponyme: {
+   *     locale: fr({ 'array.add': 'Ajouter un bloc' }),
+   *   },
+   * })
+   * ```
+   */
+  locale?: EponymeLocaleDefinition
 }
 
 const MINIMUM_NUXT_UI = '4.10.0'
@@ -296,6 +329,35 @@ export default defineNuxtModule<ModuleOptions>({
       browserCacheSeconds: options.browserCacheSeconds ?? 30,
       cdnCacheSeconds: options.cdnCacheSeconds ?? 300,
     }
+
+    // Registered before every early return below: the validation utilities import
+    // `#eponyme/locale` whether or not the rest of the wiring happens, and an alias that only
+    // sometimes exists is a build error that only sometimes appears.
+    const locale = resolveEponymeLocale(options.locale, pc.red('[Eponyme]'))
+    if (locale.missing.length) {
+      logger.warn(
+        `The \`${locale.code}\` catalogue is missing ${locale.missing.length} key${locale.missing.length > 1 ? 's' : ''}, which fall back to English:\n`
+        + locale.missing.map(key => `  - ${key}`).join('\n'),
+      )
+    }
+
+    const translatorPath = await resolver.resolvePath('./runtime/utils/translate')
+    const localeTemplate = addTemplate({
+      filename: 'eponyme-locale.mjs',
+      write: true,
+      getContents: () => renderEponymeLocaleModule(locale, translatorPath),
+    })
+
+    nuxt.options.alias['#eponyme/locale'] = localeTemplate.dst
+    addTypeTemplate({
+      filename: 'types/eponyme-locale.d.ts',
+      getContents: () => `declare module '#eponyme/locale' {\n`
+        + `  import type { EponymeLocaleDefinition, EponymeMessageKey } from ${JSON.stringify(resolver.resolve('./runtime/locales'))}\n`
+        + `  import type { EponymeTranslateParams } from ${JSON.stringify(resolver.resolve('./runtime/utils/translate'))}\n`
+        + `  export const locale: EponymeLocaleDefinition\n`
+        + `  export function t(key: EponymeMessageKey, params?: EponymeTranslateParams): string\n`
+        + `}\n`,
+    })
 
     const tagged = tagPreviewPathRoutes(options.previewPaths ?? {}, nuxt.options.routeRules ??= {})
     if (tagged.length) {

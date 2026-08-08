@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { useClipboard } from '@vueuse/core'
 import { computed } from 'vue'
 import EPButton from '../ui/EPButton.vue'
@@ -7,7 +8,7 @@ const props = withDefaults(defineProps<{
   value: string
   label?: string
 }>(), {
-  label: 'Copy',
+  label: t('action.copy'),
 })
 
 const source = computed(() => props.value)
@@ -26,7 +27,7 @@ const { copy, copied, isSupported } = useClipboard({ source })
       :aria-label="label"
       @click="copy()"
     >
-      {{ copied ? 'Copied' : label }}
+      {{ copied ? t('action.copied') : label }}
     </EPButton>
   </div>
 </template>

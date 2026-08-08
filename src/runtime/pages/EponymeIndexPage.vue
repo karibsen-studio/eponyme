@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { nextTick, ref } from 'vue'
 import { refreshNuxtData, useRequestFetch, useRoute, useSeoMeta } from '#app'
 import type { FetchError } from 'ofetch'
@@ -23,7 +24,7 @@ const forms = getEponymeForms(config)
 const entries = { ...eponymes, ...collections, ...forms }
 
 useEponymeFavicon()
-useSeoMeta({ title: 'Eponyme' })
+useSeoMeta({ title: t('index.title') })
 
 const fileInput = ref<HTMLInputElement>()
 const exporting = ref(false)
@@ -53,7 +54,7 @@ function describeError(caught: unknown, fallback: string) {
   const error = caught as FetchError<{ statusMessage?: string, data?: { schemaMismatch?: string[] } }>
   const mismatch = error?.data?.data?.schemaMismatch
   const message = error?.statusMessage || error?.data?.statusMessage || fallback
-  return mismatch?.length ? `${message} (${mismatch.join(', ')})` : message
+  return mismatch?.length ? t('index.mismatch', { message, entries: mismatch.join(', ') }) : message
 }
 
 async function exportContent() {
@@ -68,7 +69,7 @@ async function exportContent() {
     URL.revokeObjectURL(url)
   }
   catch (caught) {
-    await showToast('error', 'Export failed', describeError(caught, 'Unable to export the content.'))
+    await showToast('error', t('index.exportFailed'), describeError(caught, t('index.exportFailedBody')))
   }
   finally {
     exporting.value = false
@@ -92,9 +93,9 @@ async function reviewFile(event: Event) {
   catch (caught) {
     pendingFile.value = undefined
     preview.value = undefined
-    await showToast('error', 'Import refused', caught instanceof SyntaxError
-      ? 'This file is not valid JSON.'
-      : describeError(caught, 'Unable to read this export file.'))
+    await showToast('error', t('index.importRefused'), caught instanceof SyntaxError
+      ? t('index.importInvalidJson')
+      : describeError(caught, t('index.importUnreadable')))
   }
   finally {
     importing.value = false
@@ -147,22 +148,22 @@ function closePreview() {
           class="ep:flex ep:shrink-0 ep:items-center ep:gap-2"
         >
           <EPButton
-            label="Export"
+            :label="t('action.export')"
             icon="mingcute:download-2-line"
             size="sm"
             :loading="exporting"
             :disabled="exporting"
-            title="Download every entry as a JSON file"
+            :title="t('index.exportTitle')"
             @click="exportContent"
           />
           <EPButton
             v-if="auth.isOwner.value"
-            label="Import"
+            :label="t('action.import')"
             icon="mingcute:upload-2-line"
             size="sm"
             :loading="importing"
             :disabled="importing"
-            title="Apply an export file from another environment"
+            :title="t('index.importTitle')"
             @click="fileInput?.click()"
           />
           <input
@@ -176,14 +177,14 @@ function closePreview() {
       </div>
       <nav
         class="ep:mt-8 ep:grid ep:gap-3 ep:sm:grid-cols-2"
-        aria-label="Content entries"
+        :aria-label="t('index.heading')"
       >
         <EponymeNavigationLink
           v-for="(_, name) in entries"
           :key="name"
           :to="`${route.path.replace(/\/$/, '')}/${name}`"
           :label="label(name.split('/').at(-1) ?? name)"
-          :description="collections[name] ? 'Collection' : forms[name] ? 'Form' : undefined"
+          :description="collections[name] ? t('kind.collection') : forms[name] ? t('kind.form') : undefined"
           variant="card"
         />
       </nav>
@@ -191,15 +192,15 @@ function closePreview() {
     <ClientOnly>
       <EPDialog
         :open="Boolean(preview)"
-        title="Import content"
-        description="Entries in the file overwrite their counterpart. Nothing is ever deleted."
+        :title="t('index.importDialog')"
+        :description="t('index.importDialogDescription')"
         @update:open="!$event && closePreview()"
       >
         <div v-if="preview">
           <ul class="ep:m-0 ep:list-none ep:space-y-1 ep:p-0 ep:text-sm ep:text-muted-ep">
-            <li><span class="ep:font-semibold ep:text-white">{{ preview.created }}</span> to create</li>
-            <li><span class="ep:font-semibold ep:text-white">{{ preview.updated }}</span> to overwrite</li>
-            <li><span class="ep:font-semibold ep:text-white">{{ preview.skipped.length }}</span> skipped</li>
+            <li><span class="ep:font-semibold ep:text-white">{{ preview.created }}</span> {{ t('index.toCreate') }}</li>
+            <li><span class="ep:font-semibold ep:text-white">{{ preview.updated }}</span> {{ t('index.toOverwrite') }}</li>
+            <li><span class="ep:font-semibold ep:text-white">{{ preview.skipped.length }}</span> {{ t('index.skipped') }}</li>
           </ul>
           <ul
             v-if="preview.skipped.length"
@@ -214,12 +215,12 @@ function closePreview() {
           </ul>
           <div class="ep:mt-6 ep:flex ep:justify-end ep:gap-2">
             <EPButton
-              label="Cancel"
+              :label="t('action.cancel')"
               variant="ghost"
               @click="closePreview"
             />
             <EPButton
-              label="Import"
+              :label="t('action.import')"
               variant="primary"
               :loading="importing"
               :disabled="importing || (!preview.created && !preview.updated)"

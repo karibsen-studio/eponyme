@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { computed, ref, watch } from 'vue'
 import SectionField from './SectionField.vue'
 import type { SectionFieldDefinition, TabFieldDefinition } from '../../types'
@@ -89,7 +90,7 @@ function focusTab(offset: number) {
         {{ humanizeLabel(tabName, tabDefinition.label) }}<span
           v-if="tabHasErrors(tabName)"
           class="ep:ml-1 ep:text-danger-ep"
-          :aria-label="`${humanizeLabel(tabName, tabDefinition.label)} has errors`"
+          :aria-label="t('tabs.hasErrors', { tab: humanizeLabel(tabName, tabDefinition.label) })"
         >•</span>
       </button>
     </div>

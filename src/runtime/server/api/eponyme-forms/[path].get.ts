@@ -1,3 +1,4 @@
+import { t } from '#eponyme/locale'
 import { createError, defineEventHandler, getQuery } from 'h3'
 import { useEponymeFormService } from '../../services/eponyme-form-service'
 import { requireEponymeUser } from '../../utils/auth'
@@ -6,12 +7,12 @@ import { readEponymeFormRoute } from '../../utils/form-route'
 export default defineEventHandler(async (event) => {
   await requireEponymeUser(event)
   const route = readEponymeFormRoute(event)
-  if (!route?.submissions) throw createError({ statusCode: 404, statusMessage: 'Eponyme form not found.' })
+  if (!route?.submissions) throw createError({ statusCode: 404, statusMessage: t('server.formNotFound') })
   const service = useEponymeFormService()
 
   if (route.submissionId) {
     const submission = await service.getSubmission(route.name, route.submissionId)
-    if (!submission) throw createError({ statusCode: 404, statusMessage: 'Eponyme submission not found.' })
+    if (!submission) throw createError({ statusCode: 404, statusMessage: t('server.submissionNotFound') })
     return { submission }
   }
 
@@ -20,6 +21,6 @@ export default defineEventHandler(async (event) => {
     page: Number(query.page ?? 1),
     perPage: query.perPage === undefined ? undefined : Number(query.perPage),
   })
-  if (!page) throw createError({ statusCode: 404, statusMessage: 'Eponyme form not found.' })
+  if (!page) throw createError({ statusCode: 404, statusMessage: t('server.formNotFound') })
   return page
 })
