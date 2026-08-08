@@ -955,5 +955,4 @@ describe('ssr', async () => {
     expect(listed.submissions.map(item => item.data.value)).toEqual(['third', 'second'])
     await $fetch('/api/eponyme-forms/limited/submissions', { method: 'DELETE', ...authenticated() })
   })
-
 })
