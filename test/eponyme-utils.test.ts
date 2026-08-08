@@ -172,6 +172,8 @@ describe('form()', () => {
     const contact = form({ fields: { email: field.email({ required: true }) } })
     expect(contact.__eponymeForm).toBe(true)
     expect(contact.submission.mode).toBe('custom')
+    expect(contact.submission.maxStored).toBe(10_000)
+    expect(contact.submission.retentionDays).toBe(365)
     expect(contact.honeypot).toBe('_eponyme_hp')
     expect(contact.maxBodyBytes).toBe(64 * 1024)
   })
@@ -179,11 +181,13 @@ describe('form()', () => {
   it('keeps an explicit managed mode and overrides', () => {
     const contact = form({
       fields: { email: field.email() },
-      submission: { mode: 'managed' },
+      submission: { mode: 'managed', maxStored: 50, retentionDays: false },
       honeypot: false,
       maxBodyBytes: 1024,
     })
     expect(contact.submission.mode).toBe('managed')
+    expect(contact.submission.maxStored).toBe(50)
+    expect(contact.submission.retentionDays).toBe(false)
     expect(contact.honeypot).toBe(false)
     expect(contact.maxBodyBytes).toBe(1024)
   })
@@ -231,6 +235,11 @@ describe('form()', () => {
   it('refuses a honeypot that shadows a declared field', () => {
     expect(() => form({ fields: { website: field.url() }, honeypot: 'website' })).toThrow(/collides with a declared field/)
   })
+
+  it('refuses invalid submission retention limits', () => {
+    expect(() => form({ fields: { email: field.email() }, submission: { maxStored: 0 } })).toThrow(/maxStored/)
+    expect(() => form({ fields: { email: field.email() }, submission: { retentionDays: Number.NaN } })).toThrow(/retentionDays/)
+  })
 })
 
 describe('form discovery', () => {
@@ -255,6 +264,15 @@ describe('form discovery', () => {
     expect(isEponymeSchema(config.contact)).toBe(false)
     expect(isEponymeForm(config.contact)).toBe(true)
     expect(isEponymeForm(config.articles)).toBe(false)
+  })
+
+  it('builds route-facing registries without an Object prototype', () => {
+    for (const registry of [getEponymeSchemas(config), getEponymeCollections(config), getEponymeForms(config)]) {
+      expect(Object.getPrototypeOf(registry)).toBeNull()
+      expect(registry.constructor).toBeUndefined()
+      expect(registry.toString).toBeUndefined()
+      expect(registry.__proto__).toBeUndefined()
+    }
   })
 })
 

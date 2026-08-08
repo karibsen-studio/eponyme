@@ -382,12 +382,12 @@ export function validateEponymePatch(
   mode: ValidationMode = 'publish',
 ): ValidationErrors {
   const errors = createErrors()
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { _form: ['Body must be an object.'] }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { _form: [t('form.body')] }
   const context = data ?? payload as Record<string, unknown>
 
   for (const [name, value] of Object.entries(payload)) {
     const definition = Object.hasOwn(schema, name) ? schema[name] : undefined
-    if (!definition) addError(errors, name, 'Unknown field.')
+    if (!definition) addError(errors, name, t('field.unknown'))
     else validateField(name, definition, value, errors, mode, context)
   }
 
