@@ -10,11 +10,15 @@
     "prisma:migrate": "prisma migrate dev"
   },
   "dependencies": {
-    "@prisma/client": "^6.16.2",
+    "@eponyme/locale": "^0.1.0",
     "@karibsen/eponyme": "link:..",
-    "nuxt": "^4.4.8"
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
+    "nuxt": "^4.5.1"
   },
   "devDependencies": {
-    "prisma": "^6.16.2"
+    "dotenv": "^17.4.2",
+    "prisma": "^7.9.1",
+    "nuxt": "^4.4.8"
   }
 }

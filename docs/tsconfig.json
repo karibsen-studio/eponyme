@@ -1,0 +1,11 @@
+{
+  // Present so a tsconfig lookup from this directory stops here. The repository root extends
+  // `./.nuxt/tsconfig.json`, which only exists once the module itself has been prepared, and a
+  // documentation-only build never prepares it. Without this file the search walks up, finds
+  // that reference and fails on it.
+  "compilerOptions": {
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext"
+  }
+}
