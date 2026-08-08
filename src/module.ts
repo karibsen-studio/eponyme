@@ -117,16 +117,65 @@ export interface ModuleOptions {
     sessionDurationDays?: number
   }
 
+  rateLimits?: {
+    /** Login attempts per client address and minute. @default 10 */
+    loginPerIp?: number
+    /** Login attempts across the deployment and minute. @default 300 */
+    loginGlobal?: number
+    /** Failed login attempts per account and 15 minutes. @default 5 */
+    loginAccountFailures?: number
+    /** Managed-form submissions per client address, form and minute. @default 5 */
+    formPerIp?: number
+    /** Managed-form submissions per form across the deployment and minute. @default 100 */
+    formGlobal?: number
+  }
+
   /**
-   * How long a server instance may reuse content it has already read, in seconds. `0` disables it.
+   * How long content already read may be reused, in seconds. `0` disables it.
    *
    * @remarks
-   * A save only clears the instance that served it, so this bounds how long another instance can
-   * still answer with the previous content.
+   * Without `cacheStorage`, the cache is per instance and a save only clears the instance that
+   * served it — so this also bounds how long another instance can still answer with the previous
+   * content. With `cacheStorage`, an invalidation reaches every instance and this is simply how
+   * long a cached read lives.
    *
    * @default 5
    */
   cacheSeconds?: number
+
+  /**
+   * Name of a Nitro storage mount the content cache is shared through, typically Redis.
+   * Left out, the cache stays in the memory of each instance.
+   *
+   * @remarks
+   * This is what makes a publication visible everywhere at once: a shared mount is a cache a
+   * write can actually invalidate across instances, which an in-process map cannot be.
+   *
+   * A small in-process tier is kept in front of it either way — it coalesces the concurrent
+   * reads of one render and answers repeats without a network hop — so an instance can still
+   * miss an invalidation for up to a second.
+   *
+   * The mount is declared by the application, and the driver's `base` is what the keys are
+   * prefixed with:
+   *
+   * ```ts
+   * // nuxt.config.ts
+   * nitro: {
+   *   storage: {
+   *     eponyme: { driver: 'redis', url: process.env.REDIS_URL, base: 'eponyme' },
+   *   },
+   * },
+   * eponyme: { cacheStorage: 'eponyme', cacheSeconds: 60 },
+   * ```
+   *
+   * Keys then read `eponyme:row:<name>` and `eponyme:rows:<collection>:<version>`.
+   *
+   * `unstorage` ships the Redis driver; the application adds `ioredis` itself, so a deployment
+   * that caches in memory does not carry a Redis client it never builds.
+   *
+   * @see https://nitro.build/guide/storage
+   */
+  cacheStorage?: string
 
   /**
    * Whether the filterable index is rebuilt at startup when the configuration that produced
@@ -241,6 +290,13 @@ async function warnOnIncompatibleNuxtUi(nuxt: Nuxt, logger: ReturnType<typeof us
   )
 }
 
+function positiveInteger(value: number | undefined, fallback: number, name: string): number {
+  const resolved = value ?? fallback
+  if (!Number.isSafeInteger(resolved) || resolved < 1)
+    throw new TypeError(`${pc.red('[Eponyme]')} ${name} must be a positive integer.`)
+  return resolved
+}
+
 export default defineNuxtModule<ModuleOptions>({
   meta: {
     name: '@karibsen/eponyme',
@@ -257,6 +313,13 @@ export default defineNuxtModule<ModuleOptions>({
     colorPresets: [],
     auth: {
       sessionDurationDays: 7,
+    },
+    rateLimits: {
+      loginPerIp: 10,
+      loginGlobal: 300,
+      loginAccountFailures: 5,
+      formPerIp: 5,
+      formGlobal: 100,
     },
     cacheSeconds: 5,
     autoReindex: true,
@@ -323,16 +386,22 @@ export default defineNuxtModule<ModuleOptions>({
     nuxt.options.runtimeConfig.eponymeAuth = {
       sessionDurationDays: options.auth?.sessionDurationDays ?? 7,
     }
-    nuxt.options.runtimeConfig.eponymeContent = {
+    nuxt.options.runtimeConfig.eponymeRateLimits = {
+      loginPerIp: positiveInteger(options.rateLimits?.loginPerIp, 10, 'eponyme.rateLimits.loginPerIp'),
+      loginGlobal: positiveInteger(options.rateLimits?.loginGlobal, 300, 'eponyme.rateLimits.loginGlobal'),
+      loginAccountFailures: positiveInteger(options.rateLimits?.loginAccountFailures, 5, 'eponyme.rateLimits.loginAccountFailures'),
+      formPerIp: positiveInteger(options.rateLimits?.formPerIp, 5, 'eponyme.rateLimits.formPerIp'),
+      formGlobal: positiveInteger(options.rateLimits?.formGlobal, 100, 'eponyme.rateLimits.formGlobal'),
+    }
+    const eponymeContent = {
       cacheSeconds: options.cacheSeconds ?? 5,
+      cacheStorage: options.cacheStorage?.trim() || '',
       autoReindex: options.autoReindex ?? true,
       browserCacheSeconds: options.browserCacheSeconds ?? 30,
       cdnCacheSeconds: options.cdnCacheSeconds ?? 300,
     }
+    nuxt.options.runtimeConfig.eponymeContent = eponymeContent
 
-    // Registered before every early return below: the validation utilities import
-    // `#eponyme/locale` whether or not the rest of the wiring happens, and an alias that only
-    // sometimes exists is a build error that only sometimes appears.
     const locale = resolveEponymeLocale(options.locale, pc.red('[Eponyme]'))
     if (locale.missing.length) {
       logger.warn(
@@ -409,7 +478,6 @@ export default defineNuxtModule<ModuleOptions>({
       { name: 'reindexEponymeEntries', from: resolver.resolve('./runtime/server/utils/eponyme-reindex') },
       { name: 'runEponymeSchedule', from: resolver.resolve('./runtime/server/utils/eponyme-schedule') },
       { name: 'validateEponymeForm', from: resolver.resolve('./runtime/server/utils/eponyme-form') },
-      { name: 'storeEponymeFormSubmission', from: resolver.resolve('./runtime/server/utils/eponyme-form') },
       { name: 'assertEponymeFormRateLimit', from: resolver.resolve('./runtime/server/utils/eponyme-form') },
       { name: 'getEponymeCacheTags', from: resolver.resolve('./runtime/server/utils/eponyme-cache') },
     ])

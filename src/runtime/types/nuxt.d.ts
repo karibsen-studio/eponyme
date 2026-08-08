@@ -13,8 +13,16 @@ declare module '@nuxt/schema' {
     eponymeAuth: {
       sessionDurationDays: number
     }
+    eponymeRateLimits: {
+      loginPerIp: number
+      loginGlobal: number
+      loginAccountFailures: number
+      formPerIp: number
+      formGlobal: number
+    }
     eponymeContent: {
       cacheSeconds: number
+      cacheStorage: string
       autoReindex: boolean
       browserCacheSeconds: number
       cdnCacheSeconds: number

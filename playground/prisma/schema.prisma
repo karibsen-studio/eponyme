@@ -129,11 +129,3 @@ model EponymeRateLimit {
   @@index([expiresAt])
   @@map("eponyme_rate_limits")
 }
-
-model EponymeSchema {
-  key       String   @id @default("eponyme")
-  version   Int
-  updatedAt DateTime @updatedAt
-
-  @@map("_eponyme_schema")
-}
