@@ -13,6 +13,7 @@ import { useEponymeConfig } from '../composables/useEponymeConfig'
 import { useEponymeFavicon } from '../composables/useEponymeFavicon'
 import type { EponymeExportFile, EponymeImportResult } from '../server/services/eponyme-store'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas } from '../utils/get-eponyme-schemas'
+import '../assets/dashboard.css'
 
 const config = useEponymeConfig()
 const route = useRoute()
@@ -112,12 +113,14 @@ async function confirmImport() {
     await refreshNuxtData()
     await showToast(
       'success',
-      'Content imported',
-      `${result.created} created, ${result.updated} updated${result.skipped.length ? `, ${result.skipped.length} skipped` : ''}.`,
+      t('index.imported'),
+      result.skipped.length
+        ? t('index.importedBodySkipped', { created: result.created, updated: result.updated, skipped: result.skipped.length })
+        : t('index.importedBody', { created: result.created, updated: result.updated }),
     )
   }
   catch (caught) {
-    await showToast('error', 'Import failed', describeError(caught, 'Unable to import this file.'))
+    await showToast('error', t('index.importFailed'), describeError(caught, t('index.importFailedBody')))
   }
   finally {
     importing.value = false
@@ -137,10 +140,10 @@ function closePreview() {
       <div class="ep:flex ep:flex-wrap ep:items-start ep:justify-between ep:gap-4">
         <div>
           <h1 class="ep:mt-2 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-white">
-            Content entries
+            {{ t('index.heading') }}
           </h1>
           <p class="ep:mt-2 ep:text-sm ep:text-muted-ep">
-            Choose the content area you want to update.
+            {{ t('index.subheading') }}
           </p>
         </div>
         <div

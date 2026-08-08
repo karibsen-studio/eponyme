@@ -7,8 +7,10 @@ import { useEponymeAuth } from '../composables/useEponymeAuth'
 import { useEponymeFavicon } from '../composables/useEponymeFavicon'
 import EPButton from '../components/ui/EPButton.vue'
 import EPFormField from '../components/ui/EPFormField.vue'
+import EPInputPassword from '../components/ui/EPInputPassword.vue'
 import EPInputText from '../components/ui/EPInputText.vue'
 import logoUrl from '../assets/logo.png?url'
+import '../assets/dashboard.css'
 
 const route = useRoute()
 const auth = useEponymeAuth()
@@ -52,14 +54,14 @@ async function navigateAfterLogin(mustChangePassword: boolean) {
     <section class="ep:w-full ep:max-w-sm">
       <img
         :src="logoUrl"
-        alt="Eponyme"
+        :alt="t('sidebar.logo')"
         class="ep:block ep:size-14"
       >
       <h1 class="ep:mt-4 ep:mb-2 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-white">
-        Sign in
+        {{ t('login.heading') }}
       </h1>
       <p class="ep:mt-0 ep:mb-8 ep:text-sm ep:leading-relaxed ep:text-muted-ep">
-        Use your Eponyme username and password to open the content dashboard.
+        {{ t('login.subheading') }}
       </p>
       <form
         class="ep:grid ep:gap-5"
@@ -80,13 +82,12 @@ async function navigateAfterLogin(mustChangePassword: boolean) {
         </EPFormField>
         <EPFormField
           id="eponyme-login-password"
-          label="Password"
+          :label="t('login.password')"
           required
         >
-          <EPInputText
+          <EPInputPassword
             id="eponyme-login-password"
             v-model="password"
-            type="password"
             autocomplete="current-password"
             required
           />
@@ -105,7 +106,7 @@ async function navigateAfterLogin(mustChangePassword: boolean) {
           :disabled="!username || !password"
           class="ep:w-full"
         >
-          Sign in
+          {{ t('login.heading') }}
         </EPButton>
       </form>
     </section>

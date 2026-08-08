@@ -1,12 +1,20 @@
 <script setup lang="ts">
+import { Avatar, Style } from '@dicebear/core'
+import glass from '@dicebear/styles/glass.json' with { type: 'json' }
 import { AvatarFallback, AvatarImage, AvatarRoot } from 'reka-ui'
+import { computed } from 'vue'
 import { initials } from '../../utils/initials'
 
-withDefaults(defineProps<{ src?: string, alt?: string, fallback?: string, size?: 'sm' | 'md' | 'lg' }>(), {
+const glassStyle = new Style(glass)
+
+const props = withDefaults(defineProps<{ src?: string, alt?: string, username?: string, fallback?: string, size?: 'sm' | 'md' | 'lg' }>(), {
   alt: '',
   fallback: '?',
   size: 'md',
 })
+
+const seed = computed(() => (props.username || props.fallback).trim() || '?')
+const resolvedSrc = computed(() => props.src || new Avatar(glassStyle, { seed: seed.value }).toDataUri())
 </script>
 
 <template>
@@ -15,11 +23,10 @@ withDefaults(defineProps<{ src?: string, alt?: string, fallback?: string, size?:
     :class="{ sm: 'ep:h-8 ep:w-8', md: 'ep:h-9 ep:w-9', lg: 'ep:h-12 ep:w-12' }[size]"
   >
     <AvatarImage
-      v-if="src"
-      :src="src"
+      :src="resolvedSrc"
       :alt="alt"
       class="ep:h-full ep:w-full ep:object-cover"
     />
-    <AvatarFallback>{{ initials(fallback) }}</AvatarFallback>
+    <AvatarFallback>{{ initials(seed) }}</AvatarFallback>
   </AvatarRoot>
 </template>

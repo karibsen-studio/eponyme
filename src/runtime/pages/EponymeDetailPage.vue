@@ -12,6 +12,7 @@ import EponymeSidebar from '../components/editor/EponymeSidebar.vue'
 import { useEponymeConfig } from '../composables/useEponymeConfig'
 import { useEponymeFavicon } from '../composables/useEponymeFavicon'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas } from '../utils/get-eponyme-schemas'
+import '../assets/dashboard.css'
 
 const route = useRoute()
 const config = useEponymeConfig()

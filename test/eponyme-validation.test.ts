@@ -375,6 +375,9 @@ describe('validateEponymePatch', () => {
 
   it('rejects unknown fields and non-object bodies', () => {
     expect(validateEponymePatch(schema, { nope: 1 })).toEqual({ nope: ['Unknown field.'] })
+    expect(validateEponymePatch(schema, JSON.parse('{"constructor":true,"toString":true,"__proto__":true}'))).toEqual(
+      JSON.parse('{"constructor":["Unknown field."],"toString":["Unknown field."],"__proto__":["Unknown field."]}'),
+    )
     expect(validateEponymePatch(schema, 'not an object')).toEqual({ _form: ['Body must be an object.'] })
     expect(validateEponymePatch(schema, [])).toEqual({ _form: ['Body must be an object.'] })
   })

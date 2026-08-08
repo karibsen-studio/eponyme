@@ -1,5 +1,6 @@
 import { defineNitroPlugin, useRuntimeConfig } from 'nitropack/runtime'
 import { useEponymeAuthService } from '../services/eponyme-auth-service'
+import { useEponymeFormService } from '../services/eponyme-form-service'
 import { useEponymeRateLimitService } from '../services/eponyme-rate-limit-service'
 import { useEponymeService } from '../services/eponyme-service'
 
@@ -10,6 +11,15 @@ export default defineNitroPlugin(async () => {
   catch (error) {
     throw new Error(
       '[Eponyme] Rate-limit bootstrap failed. Apply the EponymeRateLimit Prisma migration before starting the application.',
+      { cause: error },
+    )
+  }
+  try {
+    await useEponymeFormService().pruneStoredSubmissions()
+  }
+  catch (error) {
+    throw new Error(
+      '[Eponyme] Form-submission retention failed. Apply the EponymeFormSubmission Prisma migration before starting the application.',
       { cause: error },
     )
   }

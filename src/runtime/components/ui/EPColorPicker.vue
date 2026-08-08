@@ -15,7 +15,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
-const swatchClasses = 'ep:h-8 ep:w-8 ep:shrink-0 ep:cursor-pointer ep:rounded-full ep:border ep:border-white/15 ep:transition ep:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-white/40 ep:disabled:cursor-not-allowed ep:disabled:opacity-50'
+const swatchClasses = 'ep:h-8 ep:w-8 ep:shrink-0 ep:cursor-pointer ep:rounded-lg ep:border ep:border-white/15 ep:transition ep:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-white/40 ep:disabled:cursor-not-allowed ep:disabled:opacity-50'
 
 /** Falls back to black so the native picker always opens on a valid colour. */
 const pickerValue = computed(() => normalizeHexColor(props.modelValue)?.slice(0, 7) ?? '#000000')

@@ -59,6 +59,8 @@
     "test:types": "vue-tsc --noEmit && cd playground && vue-tsc --noEmit"
   },
   "dependencies": {
+    "@dicebear/core": "^10.4.0",
+    "@dicebear/styles": "^10.3.0",
     "@iconify-json/mingcute": "^1.2.7",
     "@karibsen/ui": "^1.0.1",
     "@nuxt/icon": "^2.3.1",

@@ -18,6 +18,7 @@ const props = defineProps<{
   /** Errors of this subtree, keyed relative to this section. */
   errors?: ValidationErrors
   hideHeader?: boolean
+  hideTopBorder?: boolean
   disabled?: boolean
 }>()
 
@@ -47,7 +48,7 @@ function focusNextField(name: string) {
 </script>
 
 <template>
-  <section :class="hideHeader ? '' : 'ep:border-t ep:border-border-ep ep:pt-5'">
+  <section :class="hideHeader ? '' : ['ep:border-border-ep ep:pt-5', { 'ep:border-t': !hideTopBorder }]">
     <button
       v-if="!hideHeader"
       type="button"

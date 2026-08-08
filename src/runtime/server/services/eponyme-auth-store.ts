@@ -5,8 +5,7 @@ import { isEponymeRole } from '../../types'
 import { generateTemporaryPassword, hashPassword, validatePassword, verifyPassword } from '../utils/password'
 
 const OWNER_USERNAME = 'EponymeOwner'
-const MAX_LOGIN_ATTEMPTS = 5
-const LOGIN_LOCK_MS = 15 * 60 * 1000
+const PASSWORD_MAX_LENGTH = 128
 const USERNAME_PATTERN = /^[\w.-]{3,50}$/
 
 type DateValue = Date | string
@@ -60,7 +59,7 @@ export interface CreatedSession {
 
 export type LoginResult
   = | { ok: true, session: CreatedSession }
-    | { ok: false, reason: 'invalid' | 'locked' }
+    | { ok: false, reason: 'invalid' }
 
 const dummyPasswordHash = hashPassword('Eponyme timing-safe dummy password')
 
@@ -102,19 +101,15 @@ export class EponymeAuthService {
 
   async login(username: unknown, password: unknown): Promise<LoginResult> {
     const normalized = typeof username === 'string' ? normalizeUsername(username) : ''
-    const submittedPassword = typeof password === 'string' ? password : ''
+    // Do not hand an attacker-controlled multi-megabyte string to scrypt. The route also has
+    // a byte limit; this guard protects direct service consumers and future login transports.
+    const submittedPassword = typeof password === 'string' && password.length <= PASSWORD_MAX_LENGTH ? password : ''
     const user = normalized
       ? await this.client.eponymeUser.findUnique({ where: { usernameNormalized: normalized } })
       : null
 
     const validPassword = await verifyPassword(submittedPassword, user?.passwordHash ?? await dummyPasswordHash)
-    if (!user || !user.active || !validPassword) {
-      if (user?.active) await this.recordFailedLogin(user)
-      return { ok: false, reason: 'invalid' }
-    }
-
-    if (user.lockedUntil && new Date(user.lockedUntil).getTime() > Date.now())
-      return { ok: false, reason: 'locked' }
+    if (!user || !user.active || !validPassword) return { ok: false, reason: 'invalid' }
 
     if (user.failedLoginAttempts || user.lockedUntil) {
       await this.client.eponymeUser.update({
@@ -282,18 +277,6 @@ export class EponymeAuthService {
       },
     })
     return { token, expiresAt, user: toAuthUser(user) }
-  }
-
-  private async recordFailedLogin(user: PrismaEponymeUserRow): Promise<void> {
-    if (user.lockedUntil && new Date(user.lockedUntil).getTime() > Date.now()) return
-    const attempts = user.failedLoginAttempts + 1
-    await this.client.eponymeUser.update({
-      where: { id: user.id },
-      data: {
-        failedLoginAttempts: attempts >= MAX_LOGIN_ATTEMPTS ? 0 : attempts,
-        lockedUntil: attempts >= MAX_LOGIN_ATTEMPTS ? new Date(Date.now() + LOGIN_LOCK_MS) : null,
-      },
-    })
   }
 }
 

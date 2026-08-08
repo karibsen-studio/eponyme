@@ -499,7 +499,9 @@ export class EponymeService {
       return await this.client.$transaction(tx => fn(tx, name => touched.add(name)), options)
     }
     finally {
-      for (const name of touched) this.invalidate(name)
+      // Awaited, so the shared tier has actually dropped the keys before the caller, and the
+      // response it is about to send, lets a reader repopulate them.
+      await Promise.all([...touched].map(name => this.invalidate(name)))
     }
   }
 
@@ -535,7 +537,7 @@ export class EponymeService {
         const state = this.rowToState(definition.fields, row)
         if (sameRow(state, row)) continue
         await this.client.eponyme.update({ where: { name: row.name }, data: stateToColumns(state) })
-        this.invalidate(row.name)
+        await this.invalidate(row.name)
       }
     }
   }
@@ -554,7 +556,7 @@ export class EponymeService {
     const defaults = createDefaultEponymeData(schema) as Record<string, unknown>
     return Object.fromEntries(Object.keys(schema).map((key) => {
       const definition = schema[key]!
-      const candidate = key in persisted
+      const candidate = Object.hasOwn(persisted, key)
         ? this.reconcileField(definition, persisted[key], mode)
         : defaults[key]
       // Errors are keyed by path, so a nested failure shows up as `key.sub` — any key at all
@@ -698,7 +700,7 @@ export class EponymeService {
     if (!heal && this.healedByRead.has(name)) return { state, updatedAt: row.updatedAt }
     this.healedByRead.add(name)
     const healed = await this.client.eponyme.update({ where: { name }, data: stateToColumns(state) })
-    this.invalidate(name)
+    await this.invalidate(name)
     return { state, updatedAt: healed.updatedAt ?? row.updatedAt }
   }
 
@@ -1081,7 +1083,7 @@ export class EponymeService {
     // is the same risk as a divergent fingerprint.
     for (const entry of parsed.entries) {
       const owner = entry.collection ?? this.getCollectionEntry(entry.name)?.name ?? entry.name
-      if (!(owner in declared) && !mismatch.includes(owner)) mismatch.push(owner)
+      if (!Object.hasOwn(declared, owner) && !mismatch.includes(owner)) mismatch.push(owner)
     }
     if (mismatch.length) {
       return {
@@ -1256,7 +1258,7 @@ export class EponymeService {
       where: { name, deletedAt: null },
       data: { deletedAt: new Date() },
     })
-    this.invalidate(name)
+    await this.invalidate(name)
     return count > 0
   }
 
@@ -1266,7 +1268,7 @@ export class EponymeService {
       where: { name, deletedAt: { not: null } },
       data: { deletedAt: null },
     })
-    this.invalidate(name)
+    await this.invalidate(name)
     return count > 0
   }
 
@@ -1277,7 +1279,7 @@ export class EponymeService {
     if (!row?.deletedAt) return false
     try {
       await this.client.eponyme.delete({ where: { name } })
-      this.invalidate(name)
+      await this.invalidate(name)
     }
     catch (error) {
       // Already gone, or purged by a concurrent request.
@@ -1459,7 +1461,7 @@ export class EponymeService {
     return versions.map(version => ({
       id: version.id,
       action: isHistoryAction(version.action) ? version.action : 'restore',
-      status: version.status === 'draft' ? 'draft' : 'published',
+      status: toEponymeStatus(version.status),
       createdAt: new Date(version.createdAt).toISOString(),
       user: version.user ? { id: version.user.id, username: version.user.username } : null,
     }))
