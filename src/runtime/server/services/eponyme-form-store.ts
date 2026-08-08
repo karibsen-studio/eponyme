@@ -84,7 +84,7 @@ export class EponymeFormService {
     // The honeypot is transport, not content: it must not reach validation, which only
     // knows about declared fields.
     const { [definition.honeypot || '']: _honeypot, ...submitted } = input
-    const unknownKeys = Object.keys(submitted).filter(key => !(key in definition.fields))
+    const unknownKeys = Object.keys(submitted).filter(key => !Object.hasOwn(definition.fields, key))
     if (unknownKeys.length)
       return { errors: Object.fromEntries(unknownKeys.map(key => [key, ['Unknown field.']])) }
 

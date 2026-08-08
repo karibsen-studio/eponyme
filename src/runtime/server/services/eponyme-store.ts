@@ -556,7 +556,7 @@ export class EponymeService {
     const defaults = createDefaultEponymeData(schema) as Record<string, unknown>
     return Object.fromEntries(Object.keys(schema).map((key) => {
       const definition = schema[key]!
-      const candidate = key in persisted
+      const candidate = Object.hasOwn(persisted, key)
         ? this.reconcileField(definition, persisted[key], mode)
         : defaults[key]
       // Errors are keyed by path, so a nested failure shows up as `key.sub` — any key at all
@@ -1083,7 +1083,7 @@ export class EponymeService {
     // is the same risk as a divergent fingerprint.
     for (const entry of parsed.entries) {
       const owner = entry.collection ?? this.getCollectionEntry(entry.name)?.name ?? entry.name
-      if (!(owner in declared) && !mismatch.includes(owner)) mismatch.push(owner)
+      if (!Object.hasOwn(declared, owner) && !mismatch.includes(owner)) mismatch.push(owner)
     }
     if (mismatch.length) {
       return {
