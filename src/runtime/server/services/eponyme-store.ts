@@ -12,6 +12,7 @@ import { validateEponymeData, validateEponymePatch, type ValidationErrors, type 
 import { normalizeEponymeValues } from '../../utils/normalize-eponyme-values'
 import { eponymeRichTextRejections } from '../../utils/sanitize-rich-text'
 import { buildEponymeIndexRows, describeEponymeIndexSchema, eponymeIndexKeys, foldEponymeIndexValue, type EponymeIndexRow } from '../../utils/eponyme-entry-index'
+import { EponymeCache, type EponymeSharedCacheStorage } from './eponyme-cache-store'
 
 export type EponymeAction = 'draft' | 'publish' | 'unpublish' | 'revertToDraft' | 'schedule' | 'unschedule'
 export type EponymeVersion = 'draft' | 'published'
@@ -332,41 +333,44 @@ export class EponymeService {
    * Writers never read from it, so the `updatedAt` they lock on always comes from the
    * database and a stale key can never turn into a spurious conflict.
    */
-  private readonly cache = new Map<string, { value: unknown, expires: number }>()
-  private readonly cacheMs: number
+  private readonly cache: EponymeCache
 
-  constructor(config: EponymeConfig, private readonly client: PrismaEponymeClient, options: { cacheSeconds?: number } = {}) {
+  constructor(
+    config: EponymeConfig,
+    private readonly client: PrismaEponymeClient,
+    options: {
+      cacheSeconds?: number
+      cacheStorage?: string
+      resolveCacheStorage?: (mount: string) => EponymeSharedCacheStorage
+    } = {},
+  ) {
     this.schemas = getEponymeSchemas(config)
     this.collections = getEponymeCollections(config)
-    this.cacheMs = Math.max(0, options.cacheSeconds ?? 5) * 1000
+    const mount = options.cacheStorage?.trim()
+    this.cache = new EponymeCache({
+      cacheSeconds: options.cacheSeconds,
+      storage: mount && options.resolveCacheStorage
+        ? () => options.resolveCacheStorage?.(mount)
+        : undefined,
+    })
   }
 
   private cached<T>(key: string, load: () => Promise<T>): Promise<T> {
-    if (!this.cacheMs) return load()
-    const hit = this.cache.get(key)
-    if (hit && hit.expires > Date.now()) return hit.value as Promise<T>
-    // The promise itself is stored, so concurrent readers of a cold key share one query
-    // rather than each starting their own.
-    const pending = load().catch((error) => {
-      this.cache.delete(key)
-      throw error
-    })
-    this.cache.set(key, { value: pending, expires: Date.now() + this.cacheMs })
-    return pending
+    return this.cache.get(key, load)
   }
 
   /**
    * Drops what a write to `name` invalidates: the entry itself, and the listing of the
    * collection that contains it, whose row set just changed.
    */
-  private invalidate(name: string) {
-    this.cache.delete(`row:${name}`)
+  private async invalidate(name: string) {
     const collection = this.getCollectionEntry(name)?.name
-    // A prefix rather than an exact key: a listing is cached per version, and after the
-    // column split per selected shape, so one write has to drop all of them.
-    if (collection) {
-      for (const key of this.cache.keys()) if (key.startsWith(`rows:${collection}:`)) this.cache.delete(key)
-    }
+    await Promise.all([
+      this.cache.drop(`row:${name}`),
+      // A prefix rather than an exact key: a listing is cached per version, and after the
+      // column split per selected shape, so one write has to drop all of them.
+      collection ? this.cache.dropPrefix(`rows:${collection}`) : undefined,
+    ])
   }
 
   /**

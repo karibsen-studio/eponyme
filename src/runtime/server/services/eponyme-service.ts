@@ -1,6 +1,7 @@
 import eponymeConfig from '#eponyme/config'
 import prisma from '#eponyme/prisma'
-import { useRuntimeConfig } from 'nitropack/runtime'
+import { useRuntimeConfig, useStorage } from 'nitropack/runtime'
+import type { EponymeSharedCacheStorage } from './eponyme-cache-store'
 import { EponymeService } from './eponyme-store'
 import type { PrismaEponymeClient } from './eponyme-store'
 
@@ -12,9 +13,13 @@ let eponymeService: EponymeService | undefined
 
 export function useEponymeService(): EponymeService {
   if (!eponymeService) {
-    const contentConfig = useRuntimeConfig().eponymeContent
+    const contentConfig = useRuntimeConfig().eponymeContent as ReturnType<typeof useRuntimeConfig>['eponymeContent'] & {
+      cacheStorage?: string
+    }
     eponymeService = new EponymeService(eponymeConfig, prisma as PrismaEponymeClient, {
       cacheSeconds: contentConfig.cacheSeconds,
+      cacheStorage: contentConfig.cacheStorage,
+      resolveCacheStorage: mount => useStorage(mount) as EponymeSharedCacheStorage,
     })
   }
   return eponymeService
