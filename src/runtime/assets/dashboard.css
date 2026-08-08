@@ -15,26 +15,44 @@
   --color-success-ep: #72d39a;
   --color-warning-ep: #e6b85c;
   --color-danger-ep: #ff8585;
+  --color-canvas-ep: #ffffff;
+  --color-inverse-ep: #ffffff;
 }
 
-:root.dark {
-  --color-eponyme-50: #fafafa;
-  --color-eponyme-100: #f5f5f5;
-  --color-eponyme-200: #e6e6e6;
-  --color-eponyme-300: #d3d3d3;
-  --color-eponyme-400: #a3a3a3;
-  --color-eponyme-500: #727272;
-  --color-eponyme-600: #535353;
-  --color-eponyme-700: #404040;
-  --color-eponyme-800: #272727;
-  --color-eponyme-900: #1c1c1c;
-  --color-eponyme-950: #0b0b0b;
+:root,
+:root.ep-dark {
+  --ep-color-theme-ep: #1c1c1c;
+  --ep-color-border-ep: #343434;
+  --ep-color-selected-ep: #262626;
+  --ep-color-text-ep: #e7e7e7;
+  --ep-color-muted-ep: #8d8d8d;
+  --ep-color-success-ep: #72d39a;
+  --ep-color-warning-ep: #e6b85c;
+  --ep-color-danger-ep: #ff8585;
+  --ep-color-white: #ffffff;
+}
+
+:root.ep-light {
+  --ep-color-theme-ep: #f7f7f8;
+  --ep-color-border-ep: rgb(172 176 188 / 0.27) !important;
+  --ep-color-selected-ep: #ededf0;
+  --ep-color-text-ep: #1c1d20;
+  --ep-color-muted-ep: #62656d;
+  --ep-color-success-ep: #187443;
+  --ep-color-warning-ep: #ffa700;
+  --ep-color-danger-ep: #b42336;
+  --ep-color-white: #1c1d20;
 }
 
 @layer base {
   .eponyme-root,
   .eponyme-portal {
+    color-scheme: dark;
     font-family: var(--ep-font-sans);
+  }
+
+  :root.ep-light :where(.eponyme-root, .eponyme-portal) {
+    color-scheme: light;
   }
 
   :where(.eponyme-root, .eponyme-portal),

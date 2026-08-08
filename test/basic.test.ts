@@ -55,6 +55,19 @@ describe('ssr', async () => {
     }
   })
 
+  it('restores the Eponyme theme from its cookie on the html element', async () => {
+    for (const theme of ['light', 'dark']) {
+      const html = String(await $fetch('/__eponyme/login', {
+        headers: { cookie: `eponyme-theme=${theme}` },
+      }))
+      expect(html).toMatch(new RegExp(`<html[^>]*class="[^"]*ep-${theme}[^"]*"`))
+    }
+
+    const firstVisitHtml = String(await $fetch('/__eponyme/login'))
+    expect(firstVisitHtml).toContain('eponyme-theme')
+    expect(firstVisitHtml).toContain('prefers-color-scheme: light')
+  })
+
   it('exposes and updates Eponyme data', async () => {
     await expect($fetch('/api/eponyme-statuses', authenticated())).resolves.toEqual({
       statuses: { 'pages/homepage': 'published' },
