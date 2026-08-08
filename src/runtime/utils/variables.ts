@@ -24,6 +24,9 @@ export function builtinEponymeVariables(now: Date = new Date()): Record<string, 
     currentYear: { label: 'Current year', description: 'The year at the time the page is served.', value: () => now.getFullYear() },
     nextYear: { label: 'Next year', description: 'Useful for a season spanning two years.', value: () => now.getFullYear() + 1 },
     previousYear: { label: 'Previous year', value: () => now.getFullYear() - 1 },
+    // Pinned to the configured locale rather than the ambient one: `undefined` resolves to the
+    // server's locale during SSR and the visitor's in the browser, so the same page renders two
+    // different words and Vue reports a hydration mismatch.
     currentMonth: { label: 'Current month', value: () => now.toLocaleDateString(EPONYME_DATE_LOCALE, { month: 'long' }) },
     currentDay: { label: 'Current day', value: () => String(now.getDate()) },
     today: { label: 'Today', description: 'Localised date, for example 29 July 2026.', value: () => now.toLocaleDateString(EPONYME_DATE_LOCALE, { dateStyle: 'long' }) },

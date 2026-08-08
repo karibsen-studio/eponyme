@@ -1461,7 +1461,7 @@ export class EponymeService {
     return versions.map(version => ({
       id: version.id,
       action: isHistoryAction(version.action) ? version.action : 'restore',
-      status: version.status === 'draft' ? 'draft' : 'published',
+      status: toEponymeStatus(version.status),
       createdAt: new Date(version.createdAt).toISOString(),
       user: version.user ? { id: version.user.id, username: version.user.username } : null,
     }))
