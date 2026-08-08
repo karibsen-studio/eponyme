@@ -32,7 +32,8 @@ export function getFieldDefaultValue(definition: FieldDefinition): unknown {
         Object.fromEntries(Object.entries(tab.fields).map(([name, field]) => [name, getFieldDefaultValue(field)])),
       ]),
     )
-    case 'number': return 0
+    case 'number':
+    case 'duration': return 0
     case 'url': return { href: '', type: 'external', openInNewTab: false, download: false }
     case 'mediaPlayer': return { provider: '', url: '', id: '' }
     case 'boolean': return false

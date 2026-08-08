@@ -1,4 +1,4 @@
-import { collection, defineEponymeConfig, field, form, today } from '../src/eponyme'
+import { collection, defineEponymeConfig, field, form, today, toMs } from '../src/eponyme'
 
 export default defineEponymeConfig({
   pages: {
@@ -153,6 +153,20 @@ export default defineEponymeConfig({
                   min: '2026-01-01',
                   visibleWhen: { field: 'showLaunchDate', equals: true },
                 }),
+                launchDateTime: field.datetime({
+                  label: 'Launch date and time',
+                  description: 'Displayed in your local time zone and stored as UTC.',
+                  defaultValue: '2026-09-01T08:30:00.000Z',
+                  min: '2026-01-01T00:00:00.000Z',
+                  visibleWhen: { field: 'showLaunchDate', equals: true },
+                }),
+                launchDuration: field.duration({
+                  label: 'Launch duration',
+                  description: 'Entered as hours, minutes, seconds and milliseconds; stored in milliseconds.',
+                  defaultValue: '1h 10min',
+                  min: '1min',
+                  max: toMs('24h'),
+                }),
                 accentColor: field.color({
                   label: 'Accent color',
                   description: 'Uses the palette declared in nuxt.config.ts.',
@@ -175,7 +189,20 @@ export default defineEponymeConfig({
                   max: 1440,
                   step: 20,
                   slider: true,
+                  suffix: 'px',
                   defaultValue: 960,
+                }),
+                heroPrice: field.number({
+                  label: 'Hero price',
+                  min: 0,
+                  step: 0.5,
+                  prefix: '€',
+                  suffix: '/month',
+                }),
+                heroBudget: field.money({
+                  label: 'Hero budget',
+                  currency: 'USD',
+                  min: 0,
                 }),
                 published: field.boolean({
                   label: 'Published',
