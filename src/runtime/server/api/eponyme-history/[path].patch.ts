@@ -26,6 +26,8 @@ export default defineEventHandler(async (event) => {
     action: 'restore',
     status: result.status,
     publishedAt: result.publishedAt,
+    scheduledPublishAt: result.scheduledPublishAt,
+    scheduledUnpublishAt: result.scheduledUnpublishAt,
     data: result.data,
     userId: user.id,
   })

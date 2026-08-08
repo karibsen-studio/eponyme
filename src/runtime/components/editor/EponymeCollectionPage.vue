@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { useAsyncData, useRequestFetch, useRoute, useRouter, useState } from '#app'
 import type { FetchError } from 'ofetch'
 import { computed, ref, watch } from 'vue'
@@ -228,7 +229,11 @@ function formatDate(value: string | null) {
           <span class="ep:flex ep:min-w-0 ep:items-center ep:gap-2">
             <span class="ep:min-w-0 ep:flex-1 ep:overflow-hidden ep:text-ellipsis ep:whitespace-nowrap ep:text-sm ep:font-semibold ep:text-white">{{ truncateTitle(entry.title) }}</span>
           </span>
-          <span class="ep:mt-1 ep:block ep:text-xs ep:text-muted-ep ep:capitalize">{{ entry.status }}<template v-if="entry.updatedAt"> · {{ formatDate(entry.updatedAt) }}</template></span>
+          <span class="ep:mt-1 ep:block ep:text-xs ep:text-muted-ep">
+            {{ t(`status.${entry.status}`) }}<template v-if="entry.updatedAt"> · {{ formatDate(entry.updatedAt) }}</template>
+            <template v-if="entry.scheduledPublishAt"><br>{{ t('collection.scheduledPublish', { date: formatDate(entry.scheduledPublishAt) }) }}</template>
+            <template v-if="entry.scheduledUnpublishAt"><br>{{ t('collection.scheduledUnpublish', { date: formatDate(entry.scheduledUnpublishAt) }) }}</template>
+          </span>
         </NuxtLink>
         <EPButton
           v-if="auth.canEdit.value"
@@ -237,7 +242,7 @@ function formatDate(value: string | null) {
           class="ep:shrink-0 ep:md:opacity-0 ep:md:group-hover:opacity-100 ep:md:focus-visible:opacity-100"
           @click="deleteEntry(entry)"
         >
-          Delete
+          {{ t('action.delete') }}
         </EPButton>
       </article>
     </div>

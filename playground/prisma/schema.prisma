@@ -18,6 +18,10 @@ model Eponyme {
   /// A real column rather than a key inside the payload, which is what lets a listing
   /// filter, order and paginate published entries in SQL instead of in memory.
   publishedAt DateTime?
+  /// Due dates for the scheduled transitions. Nullable, so an entry with no schedule
+  /// costs nothing and the public read stays a single indexed comparison.
+  scheduledPublishAt   DateTime?
+  scheduledUnpublishAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
@@ -26,6 +30,8 @@ model Eponyme {
 
   @@index([deletedAt])
   @@index([publishedAt])
+  @@index([scheduledPublishAt])
+  @@index([scheduledUnpublishAt])
   @@map("eponyme_entries")
 }
 

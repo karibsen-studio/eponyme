@@ -21,8 +21,9 @@ function setCacheTags(event: H3Event, tags: string[]) {
  * Published content is identical for every visitor, so both the browser and the CDN may
  * hold on to it. The two windows are deliberately different:
  *
- * - `s-maxage` is the CDN's, and a CDN can be purged — `eponyme:entry:published` is the
- *   hook to do it from, so this one can afford to be long.
+ * - `s-maxage` is the CDN's, and a CDN can be purged. Publication, unpublication and
+ *   schedule hooks are the places to do it from, so this one can afford to be long. A due
+ *   transition that is never materialized can only reach a CDN once this window expires.
  * - `max-age` is the browser's, and a browser cache cannot be purged by anyone. Whatever
  *   it holds is served until it expires, publication or not, which is why it stays short.
  */
