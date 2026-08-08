@@ -3,9 +3,12 @@ import { boolean } from './boolean'
 import { checkboxGroup } from './checkbox-group'
 import { color } from './color'
 import { date, today } from './date'
+import { datetime } from './datetime'
+import { duration } from './duration'
 import { email } from './email'
 import { image } from './image'
 import { mediaPlayer } from './media-player'
+import { money } from './money'
 import { number } from './number'
 import { phone } from './phone'
 import { radio } from './radio'
@@ -19,5 +22,6 @@ import { tab } from './tab'
 import { textarea } from './textarea'
 import { url } from './url'
 
-export const field = { string, slug, email, phone, url, mediaPlayer, textarea, richText, number, boolean, image, select, radio, checkboxGroup, tags, date, color, array, section, tab }
+export const field = { string, slug, email, phone, url, mediaPlayer, textarea, richText, number, money, boolean, image, select, radio, checkboxGroup, tags, date, datetime, duration, color, array, section, tab }
 export { today }
+export { toMs } from '../utils/duration'

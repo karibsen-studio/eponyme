@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { computed, ref } from 'vue'
 import {
   TagsInputItem,
@@ -81,7 +82,7 @@ function onEnter(event: KeyboardEvent) {
       >
         <TagsInputItemText />
         <TagsInputItemDelete
-          :aria-label="`Remove ${tag}`"
+          :aria-label="t('tags.remove', { tag })"
           class="ep:flex ep:size-5 ep:cursor-pointer ep:items-center ep:justify-center ep:rounded-md ep:border-0 ep:bg-transparent ep:text-muted-ep ep:transition ep:hover:bg-white/10 ep:hover:text-white"
         >
           <Icon

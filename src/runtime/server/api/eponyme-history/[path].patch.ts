@@ -1,3 +1,4 @@
+import { t } from '#eponyme/locale'
 import { createError, defineEventHandler, getRequestURL } from 'h3'
 import { useEponymeService } from '../../services/eponyme-service'
 import { assertEponymeMutationOrigin, requireEponymeUser } from '../../utils/auth'
@@ -9,13 +10,13 @@ export default defineEventHandler(async (event) => {
   const user = await requireEponymeUser(event, { roles: ['editor', 'owner'] })
   const path = decodeURIComponent(getRequestURL(event).pathname.replace(/^\/api\/eponyme-history\//, ''))
   const match = path.match(/^(.+)\/(\d+)$/)
-  if (!match) throw createError({ statusCode: 400, statusMessage: 'A valid version id is required.' })
+  if (!match) throw createError({ statusCode: 400, statusMessage: t('server.versionIdRequired') })
   const [, name, rawVersionId] = match
   const versionId = Number(rawVersionId)
-  if (!Number.isSafeInteger(versionId)) throw createError({ statusCode: 404, statusMessage: 'Eponyme version not found.' })
+  if (!Number.isSafeInteger(versionId)) throw createError({ statusCode: 404, statusMessage: t('server.versionNotFound') })
   const service = useEponymeService()
   const result = await service.restore(name!, versionId, user.id)
-  if (!result) throw createError({ statusCode: 404, statusMessage: 'Eponyme version not found.' })
+  if (!result) throw createError({ statusCode: 404, statusMessage: t('server.versionNotFound') })
   if ('conflict' in result)
     throw createError({ statusCode: 409, message: 'This entry was changed by someone else. Reload the page to get the latest version.' })
 
@@ -25,6 +26,8 @@ export default defineEventHandler(async (event) => {
     action: 'restore',
     status: result.status,
     publishedAt: result.publishedAt,
+    scheduledPublishAt: result.scheduledPublishAt,
+    scheduledUnpublishAt: result.scheduledUnpublishAt,
     data: result.data,
     userId: user.id,
   })

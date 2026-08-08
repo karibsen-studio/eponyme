@@ -31,6 +31,20 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    # The Redis integration tests skip themselves when the variable below is unset, so a
+    # local `pnpm test` needs nothing. CI runs them for real, since the shared cache and the
+    # rate-limit counter are the two paths a mock cannot prove.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6399:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v6
 
@@ -49,6 +63,8 @@ jobs:
 
       - name: Test
         run: pnpm test
+        env:
+          EPONYME_TEST_REDIS_URL: redis://127.0.0.1:6399
 
   types:
     runs-on: ubuntu-latest

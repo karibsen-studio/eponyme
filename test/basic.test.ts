@@ -55,6 +55,19 @@ describe('ssr', async () => {
     }
   })
 
+  it('restores the Eponyme theme from its cookie on the html element', async () => {
+    for (const theme of ['light', 'dark']) {
+      const html = String(await $fetch('/__eponyme/login', {
+        headers: { cookie: `eponyme-theme=${theme}` },
+      }))
+      expect(html).toMatch(new RegExp(`<html[^>]*class="[^"]*ep-${theme}[^"]*"`))
+    }
+
+    const firstVisitHtml = String(await $fetch('/__eponyme/login'))
+    expect(firstVisitHtml).toContain('eponyme-theme')
+    expect(firstVisitHtml).toContain('prefers-color-scheme: light')
+  })
+
   it('exposes and updates Eponyme data', async () => {
     await expect($fetch('/api/eponyme-statuses', authenticated())).resolves.toEqual({
       statuses: { 'pages/homepage': 'published' },
@@ -78,7 +91,7 @@ describe('ssr', async () => {
       ...authenticated(),
     })
     await expect($fetch('/api/eponyme-statuses', authenticated())).resolves.toEqual({
-      statuses: { 'pages/homepage': 'draft' },
+      statuses: { 'pages/homepage': 'published' },
     })
   })
 
@@ -147,6 +160,25 @@ describe('ssr', async () => {
       body: { title: 'Hooked' },
       ...authenticated(),
     })
+    await $fetch('/api/eponyme/pages/homepage?action=schedule', {
+      method: 'PATCH',
+      body: {
+        data: { title: 'Hooked' },
+        scheduledUnpublishAt: '2099-01-01T00:00:00.000Z',
+      },
+      ...authenticated(),
+    })
+    await $fetch('/api/eponyme/pages/homepage?action=unschedule', {
+      method: 'PATCH',
+      body: { title: 'Hooked' },
+      ...authenticated(),
+    })
+    await $fetch('/api/eponyme/pages/homepage?action=unpublish', {
+      method: 'PATCH',
+      body: { title: 'Hooked' },
+      ...authenticated(),
+    })
+    await expect($fetch('/api/eponyme/pages/homepage')).rejects.toMatchObject({ statusCode: 404 })
     await $fetch('/api/eponyme-forms/contact', {
       method: 'POST',
       body: { name: 'Ada', email: 'ada@example.com', message: 'Hook me up.' },
@@ -156,6 +188,9 @@ describe('ssr', async () => {
     // A listener throwing on `saved` must not have failed the save itself.
     expect(seen).toContain('saved:pages/homepage')
     expect(seen).toContain('published:pages/homepage:-')
+    expect(seen).toContain('scheduled:pages/homepage')
+    expect(seen).toContain('unscheduled:pages/homepage')
+    expect(seen).toContain('unpublished:pages/homepage')
     expect(seen).toContain('submitted:contact:true')
 
     // Later tests share this fixture's database, so put it back as it was.
@@ -205,6 +240,12 @@ describe('ssr', async () => {
     expect(html).toContain('Welcome')
     expect(html).toContain('Add item')
     expect(html).toContain('Metadata')
+    expect(html).toContain('aria-label="Entry sections"')
+    expect(html).toContain('Publication')
+    expect(html).toContain('Save')
+    expect(html).toContain('Revert to draft')
+    expect(html).toContain('Unpublish')
+    expect(html).toContain('Schedule')
     expect(html).not.toContain('Loading…')
   })
 
@@ -573,6 +614,22 @@ describe('ssr', async () => {
       .rejects.toMatchObject({ statusCode: 422, data: { errors: { email: expect.any(Array) } } })
   })
 
+  it('rate-limits a custom route that opts in, the way the managed endpoint does', async () => {
+    const limit = 20
+    const post = () => $fetch('/throttled', { method: 'POST', body: { email: 'ada@example.com' } })
+
+    for (let attempt = 0; attempt < limit; attempt++)
+      await expect(post()).resolves.toMatchObject({ accepted: true })
+
+    // Refused rather than merely counted, and carrying what a client needs to back off.
+    const refused = await post().catch((error: { statusCode: number, response: Response }) => error)
+    expect(refused).toMatchObject({ statusCode: 429 })
+    const { response } = refused as { response: Response }
+    expect(Number(response.headers.get('retry-after'))).toBeGreaterThan(0)
+    expect(response.headers.get('x-ratelimit-limit')).toBe(String(limit))
+    expect(response.headers.get('x-ratelimit-remaining')).toBe('0')
+  })
+
   it('renders a public form from the composable alone', async () => {
     const html = String(await $fetch('/contact'))
     // Labels and the honeypot come from the config, the markup from the host app.
@@ -697,7 +754,7 @@ describe('ssr', async () => {
       query: { version: 'draft' },
       headers: { cookie: viewerCookie },
     })).resolves.toMatchObject({ data: { title: 'Welcome' } })
-    const forbidden = await fetch(url('/api/eponyme/pages/homepage'), {
+    const forbidden = await fetch(url('/api/eponyme/pages/homepage?action=unpublish'), {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', 'cookie': viewerCookie },
       body: JSON.stringify({ title: 'Forbidden edit' }),

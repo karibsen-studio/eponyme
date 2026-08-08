@@ -1,3 +1,4 @@
+import { t } from '#eponyme/locale'
 import { createError } from 'h3'
 import { useNitroApp } from 'nitropack/runtime'
 import type { EponymeHooks } from '../../types/hooks'
@@ -48,7 +49,7 @@ export async function callEponymeBlockingHook<Name extends Extract<HookName, `${
     if (error && typeof error === 'object' && 'statusCode' in error) throw error
     throw createError({
       statusCode: 422,
-      statusMessage: error instanceof Error ? error.message : `Rejected by the "${name}" hook.`,
+      statusMessage: error instanceof Error ? error.message : t('server.hookRejected', { hook: name }),
       data: { errors: { _form: [error instanceof Error ? error.message : 'Rejected by a server hook.'] } },
     })
   }

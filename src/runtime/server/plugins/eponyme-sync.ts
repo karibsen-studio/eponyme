@@ -1,8 +1,18 @@
 import { defineNitroPlugin, useRuntimeConfig } from 'nitropack/runtime'
 import { useEponymeAuthService } from '../services/eponyme-auth-service'
+import { useEponymeRateLimitService } from '../services/eponyme-rate-limit-service'
 import { useEponymeService } from '../services/eponyme-service'
 
 export default defineNitroPlugin(async () => {
+  try {
+    await useEponymeRateLimitService().verify()
+  }
+  catch (error) {
+    throw new Error(
+      '[Eponyme] Rate-limit bootstrap failed. Apply the EponymeRateLimit Prisma migration before starting the application.',
+      { cause: error },
+    )
+  }
   try {
     await useEponymeAuthService().bootstrapOwner()
   }

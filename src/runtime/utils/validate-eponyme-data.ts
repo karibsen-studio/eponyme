@@ -1,9 +1,12 @@
+import { locale, t } from '#eponyme/locale'
 import type { EponymeSchema, FieldDefinition, FieldValidator, MediaPlayerFieldOptions, MediaPlayerProvider } from '../types'
+import type { EponymeMessageKey } from '../locales'
 import { isArrayItemFieldDefinition } from './get-field-default-value'
 import { isFieldVisible } from './is-field-visible'
 import { MEDIA_PLAYER_PROVIDERS, mediaPlayerProviders, parseEponymeMediaUrl } from './media-player'
 import { normalizeEponymePhone } from './normalize-phone'
 import { normalizeEponymeTags } from './normalize-tags'
+import { normalizeEponymeDateTime } from './datetime'
 
 /**
  * Errors are keyed by the path of the field they belong to — `title`, `hero.title`,
@@ -54,7 +57,7 @@ function validateField(
     else if (Array.isArray(result)) result.forEach(message => addError(errors, path, message))
   }
   catch {
-    addError(errors, path, 'Custom validation failed.')
+    addError(errors, path, t('field.custom'))
   }
 }
 
@@ -69,18 +72,18 @@ function validateFieldRules(
   const { options } = definition
 
   if (value === undefined || value === null) {
-    if (mode === 'publish' && options.required) addError(errors, name, 'This field is required.')
+    if (mode === 'publish' && options.required) addError(errors, name, t('field.required'))
     return
   }
 
   if (definition.type === 'section') {
     if (typeof value !== 'object' || Array.isArray(value)) {
-      addError(errors, name, 'Must be an object.')
+      addError(errors, name, t('field.object'))
       return
     }
     const sectionData = value as Record<string, unknown>
     for (const sectionField of Object.keys(sectionData)) {
-      if (!definition.options.fields[sectionField]) addError(errors, `${name}.${sectionField}`, 'Unknown field.')
+      if (!Object.hasOwn(definition.options.fields, sectionField)) addError(errors, `${name}.${sectionField}`, t('field.unknown'))
     }
     for (const [sectionField, sectionDefinition] of Object.entries(definition.options.fields))
       validateField(`${name}.${sectionField}`, sectionDefinition, sectionData[sectionField], errors, mode, sectionData)
@@ -89,22 +92,22 @@ function validateFieldRules(
 
   if (definition.type === 'tabs') {
     if (typeof value !== 'object' || Array.isArray(value)) {
-      addError(errors, name, 'Must be an object.')
+      addError(errors, name, t('field.object'))
       return
     }
     const tabsData = value as Record<string, unknown>
     for (const tabName of Object.keys(tabsData)) {
-      if (!definition.options.tabs[tabName]) addError(errors, `${name}.${tabName}`, 'Unknown tab.')
+      if (!Object.hasOwn(definition.options.tabs, tabName)) addError(errors, `${name}.${tabName}`, t('field.unknownTab'))
     }
     for (const [tabName, tabDefinition] of Object.entries(definition.options.tabs)) {
       const tabValue = tabsData[tabName]
       if (!tabValue || typeof tabValue !== 'object' || Array.isArray(tabValue)) {
-        addError(errors, `${name}.${tabName}`, 'Must be an object.')
+        addError(errors, `${name}.${tabName}`, t('field.object'))
         continue
       }
       const tabData = tabValue as Record<string, unknown>
       for (const tabField of Object.keys(tabData)) {
-        if (!tabDefinition.fields[tabField]) addError(errors, `${name}.${tabName}.${tabField}`, 'Unknown field.')
+        if (!Object.hasOwn(tabDefinition.fields, tabField)) addError(errors, `${name}.${tabName}.${tabField}`, t('field.unknown'))
       }
       for (const [tabField, fieldDefinition] of Object.entries(tabDefinition.fields))
         validateField(`${name}.${tabName}.${tabField}`, fieldDefinition, tabData[tabField], errors, mode, tabData)
@@ -114,52 +117,52 @@ function validateFieldRules(
 
   if (definition.type === 'tags') {
     if (!Array.isArray(value)) {
-      addError(errors, name, 'Must be an array.')
+      addError(errors, name, t('field.array'))
       return
     }
     const tags = normalizeEponymeTags(value, definition.options)
-    if (mode === 'publish' && options.required && tags.length === 0) addError(errors, name, 'This field is required.')
-    if (mode === 'publish' && definition.options.minItems !== undefined && tags.length < definition.options.minItems) addError(errors, name, `Must contain at least ${definition.options.minItems} items.`)
-    if (definition.options.maxItems !== undefined && tags.length > definition.options.maxItems) addError(errors, name, `Must contain at most ${definition.options.maxItems} items.`)
+    if (mode === 'publish' && options.required && tags.length === 0) addError(errors, name, t('field.required'))
+    if (mode === 'publish' && definition.options.minItems !== undefined && tags.length < definition.options.minItems) addError(errors, name, t('field.minItems', { min: definition.options.minItems }))
+    if (definition.options.maxItems !== undefined && tags.length > definition.options.maxItems) addError(errors, name, t('field.maxItems', { max: definition.options.maxItems }))
     // Counted on the raw value: a non-string or a blank entry is a bad payload, and normalising
     // silently drops it, so the check has to happen before the dropping is taken as truth.
-    if (value.some(item => typeof item !== 'string' || !item.trim())) addError(errors, name, 'Must contain only non-empty tags.')
+    if (value.some(item => typeof item !== 'string' || !item.trim())) addError(errors, name, t('field.tagsNotEmpty'))
     const suggestions = definition.options.suggestions
     if (!definition.options.allowCustom && suggestions?.length && tags.some(tag => !suggestions.includes(tag)))
-      addError(errors, name, 'Must contain only available options.')
+      addError(errors, name, t('field.optionsOnly'))
     return
   }
 
   if (definition.type === 'checkboxGroup') {
     if (!Array.isArray(value)) {
-      addError(errors, name, 'Must be an array.')
+      addError(errors, name, t('field.array'))
       return
     }
-    if (mode === 'publish' && definition.options.required && value.length === 0) addError(errors, name, 'This field is required.')
-    if (mode === 'publish' && definition.options.minItems !== undefined && value.length < definition.options.minItems) addError(errors, name, `Must contain at least ${definition.options.minItems} items.`)
-    if (definition.options.maxItems !== undefined && value.length > definition.options.maxItems) addError(errors, name, `Must contain at most ${definition.options.maxItems} items.`)
+    if (mode === 'publish' && definition.options.required && value.length === 0) addError(errors, name, t('field.required'))
+    if (mode === 'publish' && definition.options.minItems !== undefined && value.length < definition.options.minItems) addError(errors, name, t('field.minItems', { min: definition.options.minItems }))
+    if (definition.options.maxItems !== undefined && value.length > definition.options.maxItems) addError(errors, name, t('field.maxItems', { max: definition.options.maxItems }))
     if (value.some(item => typeof item !== 'string' || !definition.options.options.some(option => option.value === item)))
-      addError(errors, name, 'Must contain only available options.')
+      addError(errors, name, t('field.optionsOnly'))
     return
   }
 
   if (definition.type === 'array') {
     if (!Array.isArray(value)) {
-      addError(errors, name, 'Must be an array.')
+      addError(errors, name, t('field.array'))
       return
     }
-    if (mode === 'publish' && options.required && value.length === 0) addError(errors, name, 'This field is required.')
-    if (mode === 'publish' && definition.options.minItems !== undefined && value.length < definition.options.minItems) addError(errors, name, `Must contain at least ${definition.options.minItems} items.`)
-    if (definition.options.maxItems !== undefined && value.length > definition.options.maxItems) addError(errors, name, `Must contain at most ${definition.options.maxItems} items.`)
+    if (mode === 'publish' && options.required && value.length === 0) addError(errors, name, t('field.required'))
+    if (mode === 'publish' && definition.options.minItems !== undefined && value.length < definition.options.minItems) addError(errors, name, t('field.minItems', { min: definition.options.minItems }))
+    if (definition.options.maxItems !== undefined && value.length > definition.options.maxItems) addError(errors, name, t('field.maxItems', { max: definition.options.maxItems }))
     value.forEach((item, index) => {
       if (!isArrayItemFieldDefinition(definition.options.of)) {
         if (!item || typeof item !== 'object' || Array.isArray(item)) {
-          addError(errors, `${name}.${index}`, 'Must be an object.')
+          addError(errors, `${name}.${index}`, t('field.object'))
           return
         }
         const itemData = item as Record<string, unknown>
         for (const itemField of Object.keys(itemData)) {
-          if (!definition.options.of[itemField]) addError(errors, `${name}.${index}.${itemField}`, 'Unknown field.')
+          if (!Object.hasOwn(definition.options.of, itemField)) addError(errors, `${name}.${index}.${itemField}`, t('field.unknown'))
         }
         for (const [itemField, itemDefinition] of Object.entries(definition.options.of))
           validateField(`${name}.${index}.${itemField}`, itemDefinition, itemData[itemField], errors, mode, itemData)
@@ -172,22 +175,32 @@ function validateFieldRules(
 
   if (definition.type === 'number') {
     if (typeof value !== 'number' || Number.isNaN(value)) {
-      addError(errors, name, 'Must be a number.')
+      addError(errors, name, t('field.number'))
       return
     }
-    if (definition.options.min !== undefined && value < definition.options.min) addError(errors, name, `Must be at least ${definition.options.min}.`)
-    if (definition.options.max !== undefined && value > definition.options.max) addError(errors, name, `Must be at most ${definition.options.max}.`)
+    if (definition.options.min !== undefined && value < definition.options.min) addError(errors, name, t('field.min', { min: definition.options.min }))
+    if (definition.options.max !== undefined && value > definition.options.max) addError(errors, name, t('field.max', { max: definition.options.max }))
+    return
+  }
+
+  if (definition.type === 'duration') {
+    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+      addError(errors, name, t('field.duration'))
+      return
+    }
+    if (definition.options.min !== undefined && value < definition.options.min) addError(errors, name, t('field.durationMin', { min: definition.options.min }))
+    if (definition.options.max !== undefined && value > definition.options.max) addError(errors, name, t('field.durationMax', { max: definition.options.max }))
     return
   }
 
   if (definition.type === 'boolean') {
-    if (typeof value !== 'boolean') addError(errors, name, 'Must be a boolean.')
+    if (typeof value !== 'boolean') addError(errors, name, t('field.boolean'))
     return
   }
 
   if (definition.type === 'url') {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
-      addError(errors, name, 'Must be a link.')
+      addError(errors, name, t('field.link'))
       return
     }
     const link = value as Record<string, unknown>
@@ -197,25 +210,25 @@ function validateFieldRules(
       || typeof link.openInNewTab !== 'boolean'
       || (link.download !== undefined && typeof link.download !== 'boolean')
     ) {
-      addError(errors, name, 'Must be a valid link.')
+      addError(errors, name, t('field.linkInvalid'))
       return
     }
     const href = link.href.trim()
-    if (mode === 'publish' && options.required && !href) addError(errors, name, 'This field is required.')
+    if (mode === 'publish' && options.required && !href) addError(errors, name, t('field.required'))
     if (!href) return
     if (link.type === 'external' && !isAllowedProtocol(href, definition.options.protocols)) {
       const allowed = normalizeProtocols(definition.options.protocols)
       addError(errors, name, isDefaultProtocols(definition.options.protocols)
-        ? 'External links must be HTTP(S) URLs.'
-        : `External links must start with ${allowed.map(protocol => `${protocol}:`).join(' or ')}.`)
+        ? t('field.linkHttp')
+        : t('field.linkProtocols', { protocols: listDisjunction(allowed.map(protocol => `${protocol}:`)) }))
     }
-    if (link.type === 'internal' && !href.startsWith('/') && !href.startsWith('#')) addError(errors, name, 'Internal links must start with / or #.')
+    if (link.type === 'internal' && !href.startsWith('/') && !href.startsWith('#')) addError(errors, name, t('field.linkInternal'))
     return
   }
 
   if (definition.type === 'mediaPlayer') {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
-      addError(errors, name, 'Must be a video.')
+      addError(errors, name, t('field.video'))
       return
     }
     const media = value as Record<string, unknown>
@@ -224,11 +237,11 @@ function validateFieldRules(
       || (media.id !== undefined && typeof media.id !== 'string')
       || (media.provider !== undefined && media.provider !== '' && !MEDIA_PLAYER_PROVIDERS.includes(media.provider as never))
     ) {
-      addError(errors, name, 'Must be a valid video.')
+      addError(errors, name, t('field.videoInvalid'))
       return
     }
     const address = media.url.trim()
-    if (mode === 'publish' && options.required && !address) addError(errors, name, 'This field is required.')
+    if (mode === 'publish' && options.required && !address) addError(errors, name, t('field.required'))
     if (!address) return
     // Read from the address rather than from what the payload claims: the provider is
     // detected, so a value naming one the URL does not match is not a value at all.
@@ -238,28 +251,36 @@ function validateFieldRules(
   }
 
   if (typeof value !== 'string') {
-    addError(errors, name, 'Must be a string.')
+    addError(errors, name, t('field.string'))
     return
   }
 
   const normalized = value.trim()
   const normalizedContent = definition.type === 'richText' ? getRichTextContent(normalized) : normalized
-  if (mode === 'publish' && options.required && !normalizedContent) addError(errors, name, 'This field is required.')
+  if (mode === 'publish' && options.required && !normalizedContent) addError(errors, name, t('field.required'))
   if (mode === 'draft' && !normalizedContent) return
-  if (definition.type === 'image' && normalized && !urlPattern.test(normalized)) addError(errors, name, 'Must be an HTTP(S) URL.')
+  if (definition.type === 'image' && normalized && !urlPattern.test(normalized)) addError(errors, name, t('field.image'))
   if (definition.type === 'image') return
 
   if (definition.type === 'select' || definition.type === 'radio') {
-    if (normalized && !definition.options.options.some(option => option.value === value)) addError(errors, name, 'Must be one of the available options.')
+    if (normalized && !definition.options.options.some(option => option.value === value)) addError(errors, name, t('field.option'))
     return
   }
 
   if (definition.type === 'date') {
     const timestamp = Date.parse(`${normalized}T00:00:00Z`)
     const isValid = datePattern.test(normalized) && !Number.isNaN(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === normalized
-    if (normalized && !isValid) addError(errors, name, 'Must be a valid date.')
-    if (definition.options.min && normalized < definition.options.min) addError(errors, name, `Must be on or after ${definition.options.min}.`)
-    if (definition.options.max && normalized > definition.options.max) addError(errors, name, `Must be on or before ${definition.options.max}.`)
+    if (normalized && !isValid) addError(errors, name, t('field.date'))
+    if (definition.options.min && normalized < definition.options.min) addError(errors, name, t('field.dateMin', { min: definition.options.min }))
+    if (definition.options.max && normalized > definition.options.max) addError(errors, name, t('field.dateMax', { max: definition.options.max }))
+    return
+  }
+
+  if (definition.type === 'datetime') {
+    const canonical = normalizeEponymeDateTime(normalized)
+    if (normalized && canonical === null) addError(errors, name, t('field.datetime'))
+    if (canonical && definition.options.min && canonical < definition.options.min) addError(errors, name, t('field.datetimeMin', { min: definition.options.min }))
+    if (canonical && definition.options.max && canonical > definition.options.max) addError(errors, name, t('field.datetimeMax', { max: definition.options.max }))
     return
   }
 
@@ -268,40 +289,40 @@ function validateFieldRules(
     if (normalized && phone.countryNotAllowed) {
       const accepted = definition.options.countries?.join(', ')
       addError(errors, name, phone.country
-        ? `Numbers from ${phone.country} are not accepted. Use a number from: ${accepted}.`
-        : `Must be a number from: ${accepted}.`)
+        ? t('field.phoneCountry', { country: phone.country, accepted: accepted })
+        : t('field.phoneCountries', { accepted: accepted }))
     }
     else if (normalized && !phone.valid) {
       addError(errors, name, definition.options.detectCountry === false
-        ? 'Must be a valid phone number in international format, starting with the country code.'
-        : 'Must be a valid phone number.')
+        ? t('field.phoneInternational')
+        : t('field.phone'))
     }
     return
   }
 
   if (definition.type === 'color') {
-    if (normalized && !colorPattern.test(normalized)) addError(errors, name, 'Must be a valid hex color.')
+    if (normalized && !colorPattern.test(normalized)) addError(errors, name, t('field.color'))
     return
   }
 
   if (definition.type === 'slug') {
-    if (normalized && !slugPattern.test(normalized)) addError(errors, name, 'Must contain only lowercase letters, numbers and single hyphens.')
-    if (mode === 'publish' && definition.options.minLength !== undefined && value.length < definition.options.minLength) addError(errors, name, `Must contain at least ${definition.options.minLength} characters.`)
-    if (definition.options.maxLength !== undefined && value.length > definition.options.maxLength) addError(errors, name, `Must contain at most ${definition.options.maxLength} characters.`)
+    if (normalized && !slugPattern.test(normalized)) addError(errors, name, t('field.slug'))
+    if (mode === 'publish' && definition.options.minLength !== undefined && value.length < definition.options.minLength) addError(errors, name, t('field.minLength', { min: definition.options.minLength }))
+    if (definition.options.maxLength !== undefined && value.length > definition.options.maxLength) addError(errors, name, t('field.maxLength', { max: definition.options.maxLength }))
     return
   }
 
   if (definition.type === 'richText') {
-    if (mode === 'publish' && definition.options.minLength !== undefined && normalizedContent.length < definition.options.minLength) addError(errors, name, `Must contain at least ${definition.options.minLength} characters.`)
-    if (definition.options.maxLength !== undefined && normalizedContent.length > definition.options.maxLength) addError(errors, name, `Must contain at most ${definition.options.maxLength} characters.`)
+    if (mode === 'publish' && definition.options.minLength !== undefined && normalizedContent.length < definition.options.minLength) addError(errors, name, t('field.minLength', { min: definition.options.minLength }))
+    if (definition.options.maxLength !== undefined && normalizedContent.length > definition.options.maxLength) addError(errors, name, t('field.maxLength', { max: definition.options.maxLength }))
     return
   }
 
-  if (mode === 'publish' && definition.options.minLength !== undefined && value.length < definition.options.minLength) addError(errors, name, `Must contain at least ${definition.options.minLength} characters.`)
-  if (definition.options.maxLength !== undefined && value.length > definition.options.maxLength) addError(errors, name, `Must contain at most ${definition.options.maxLength} characters.`)
-  if (definition.options.regex && !definition.options.regex.test(value)) addError(errors, name, 'Has an invalid format.')
+  if (mode === 'publish' && definition.options.minLength !== undefined && value.length < definition.options.minLength) addError(errors, name, t('field.minLength', { min: definition.options.minLength }))
+  if (definition.options.maxLength !== undefined && value.length > definition.options.maxLength) addError(errors, name, t('field.maxLength', { max: definition.options.maxLength }))
+  if (definition.options.regex && !definition.options.regex.test(value)) addError(errors, name, t('field.pattern'))
   const [localPart, domain, ...extraParts] = normalized.split('@')
-  if (definition.type === 'email' && normalized && (!localPart || !domain?.includes('.') || extraParts.length)) addError(errors, name, 'Must be a valid email address.')
+  if (definition.type === 'email' && normalized && (!localPart || !domain?.includes('.') || extraParts.length)) addError(errors, name, t('field.email'))
 }
 
 const DEFAULT_URL_PROTOCOLS = ['http', 'https']
@@ -322,16 +343,23 @@ function isAllowedProtocol(href: string, protocols: readonly string[] | undefine
   return Boolean(scheme) && normalizeProtocols(protocols).includes(scheme!)
 }
 
-const MEDIA_PLAYER_LABELS: Record<MediaPlayerProvider, string> = {
-  youtube: 'a YouTube link',
-  vimeo: 'a Vimeo link',
-  url: 'a direct video URL',
+const MEDIA_PLAYER_LABELS: Record<MediaPlayerProvider, EponymeMessageKey> = {
+  youtube: 'field.videoYoutube',
+  vimeo: 'field.videoVimeo',
+  url: 'field.videoUrl',
+}
+
+/**
+ * "a, b or c" — the joining word belongs to the language, not to the message, so it comes
+ * from `Intl` rather than from a hardcoded ` or `.
+ */
+function listDisjunction(items: string[]): string {
+  return new Intl.ListFormat(locale.code, { type: 'disjunction' }).format(items)
 }
 
 function mediaPlayerError(options: MediaPlayerFieldOptions) {
-  const accepted = mediaPlayerProviders(options).map(provider => MEDIA_PLAYER_LABELS[provider])
-  const last = accepted.pop()
-  return `Must be ${accepted.length ? `${accepted.join(', ')} or ${last}` : last}.`
+  const accepted = mediaPlayerProviders(options).map(provider => t(MEDIA_PLAYER_LABELS[provider]))
+  return t('field.videoProviders', { providers: listDisjunction(accepted) })
 }
 
 function getRichTextContent(value: string) {

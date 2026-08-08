@@ -2,7 +2,7 @@ export { defineEponymeConfig } from './config/config'
 export { collection } from './config/collection'
 export { form } from './config/form'
 export { defineEponymeVariables } from './config/variables'
-export { field, today } from './runtime/fields'
+export { field, today, toMs } from './runtime/fields'
 export { EPONYME_ROLES, canEditEponyme, isEponymeRole } from './runtime/types/auth'
 export { eponymeMediaEmbedUrl, eponymeMediaThumbnailUrl, parseEponymeMediaUrl } from './runtime/utils/media-player'
 
@@ -45,6 +45,12 @@ export type {
   DateFieldDefinition,
   DateFieldOptions,
   TodayDateDefault,
+  DateTimeFieldDefinition,
+  DateTimeFieldOptions,
+  DurationFieldDefinition,
+  DurationFieldOptions,
+  DurationInput,
+  NormalizedDurationFieldOptions,
   ColorFieldDefinition,
   ColorFieldOptions,
   ArrayFieldDefinition,

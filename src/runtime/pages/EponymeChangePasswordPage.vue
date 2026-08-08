@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { navigateTo, useRuntimeConfig, useSeoMeta } from '#app'
 import type { FetchError } from 'ofetch'
 import { computed, ref } from 'vue'
@@ -21,7 +22,7 @@ const dashboardPath = computed(() => (useRuntimeConfig().public.eponyme as { das
 async function submit() {
   error.value = ''
   if (newPassword.value !== confirmation.value) {
-    error.value = 'Password confirmation does not match.'
+    error.value = t('password.mismatch')
     return
   }
   try {
@@ -30,7 +31,7 @@ async function submit() {
   }
   catch (caught) {
     const fetchError = caught as FetchError
-    error.value = fetchError.statusMessage ?? 'Unable to change password.'
+    error.value = fetchError.statusMessage ?? t('server.passwordChangeFailed')
   }
 }
 

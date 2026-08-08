@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { computed } from 'vue'
 import EPFormField from '../ui/EPFormField.vue'
 import EPInputText from '../ui/EPInputText.vue'
@@ -21,17 +22,17 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{ 'update:modelValue': [value: MediaPlayerValue] }>()
 
 const PROVIDER_LABELS: Record<MediaPlayerProvider, { label: string, icon: string }> = {
-  youtube: { label: 'YouTube', icon: 'mingcute:youtube-line' },
+  youtube: { label: t('media.youtube'), icon: 'mingcute:youtube-line' },
   // mingcute has no Vimeo mark, so the generic video icon stands in for it.
-  vimeo: { label: 'Vimeo', icon: 'mingcute:movie-line' },
-  url: { label: 'Direct video', icon: 'mingcute:film-line' },
+  vimeo: { label: t('media.vimeo'), icon: 'mingcute:movie-line' },
+  url: { label: t('media.direct'), icon: 'mingcute:film-line' },
 }
 
 const value = computed(() => toMediaPlayerValue(props.modelValue))
 const providers = computed(() => mediaPlayerProviders({ providers: props.providers }))
 const detected = computed(() => value.value.provider ? PROVIDER_LABELS[value.value.provider] : undefined)
 
-const placeholder = computed(() => props.placeholder ?? `${providers.value.map(provider => PROVIDER_LABELS[provider]?.label).join(', ')} address`)
+const placeholder = computed(() => props.placeholder ?? t('media.placeholder', { providers: providers.value.map(provider => PROVIDER_LABELS[provider]?.label).join(', ') }))
 
 // The provider is read from the address on every keystroke, so the preview and the badge
 // describe what is actually stored rather than what was picked in a separate control.
@@ -67,7 +68,7 @@ function update(url: string | number) {
         size="14"
         aria-hidden="true"
       />
-      {{ detected ? detected.label : 'Unrecognized address' }}
+      {{ detected ? detected.label : t('media.unknown') }}
     </p>
     <EPMediaPreview
       v-if="detected"

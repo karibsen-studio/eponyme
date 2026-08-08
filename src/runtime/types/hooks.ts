@@ -8,6 +8,8 @@ export interface EponymeEntryContext {
   action: EponymeAction | 'restore'
   status: EponymeStatus
   publishedAt: string | null
+  scheduledPublishAt: string | null
+  scheduledUnpublishAt: string | null
   data: Record<string, unknown>
   /** Author of the write, absent for an unattended one. */
   userId?: string
@@ -48,6 +50,12 @@ export interface EponymeHooks {
   'eponyme:entry:saved': (context: EponymeEntryContext) => void | Promise<void>
   /** After a publication: the usual place to purge a cache or ping a webhook. */
   'eponyme:entry:published': (context: EponymeEntryContext) => void | Promise<void>
+  /** After a publication was removed while retaining its published content. */
+  'eponyme:entry:unpublished': (context: EponymeEntryContext) => void | Promise<void>
+  /** After one or both publication dates were scheduled. */
+  'eponyme:entry:scheduled': (context: EponymeEntryContext) => void | Promise<void>
+  /** After the pending publication dates were cleared. */
+  'eponyme:entry:unscheduled': (context: EponymeEntryContext) => void | Promise<void>
   /** After a history version was restored as the current draft. */
   'eponyme:entry:restored': (context: EponymeEntryContext) => void | Promise<void>
   /** After a collection entry was moved to the trash. It is recoverable, nothing was destroyed. */

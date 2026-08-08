@@ -1,3 +1,4 @@
+import { t } from '#eponyme/locale'
 import { createError, defineEventHandler, getRequestURL } from 'h3'
 import { useEponymeService } from '../../services/eponyme-service'
 import { assertEponymeMutationOrigin, requireEponymeUser } from '../../utils/auth'
@@ -13,7 +14,7 @@ export default defineEventHandler(async (event) => {
   // The entry moves to the trash: its content and its history are kept, and
   // `/api/eponyme-trash` can bring it back.
   if (!collection || !(await service.deleteCollectionEntry(name)))
-    throw createError({ statusCode: 404, statusMessage: 'Eponyme collection entry not found.' })
+    throw createError({ statusCode: 404, statusMessage: t('server.collectionEntryNotFound') })
 
   await callEponymeHook('eponyme:entry:trashed', { name, collection, userId: user.id })
 

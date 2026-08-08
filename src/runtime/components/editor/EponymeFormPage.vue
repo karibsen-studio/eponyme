@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { useAsyncData, useRequestFetch } from '#app'
 import { FlexRender, createColumnHelper, getCoreRowModel, getSortedRowModel, useVueTable } from '@tanstack/vue-table'
 import type { ColumnDef, SortingState } from '@tanstack/vue-table'
@@ -49,12 +50,12 @@ const columns = computed<Array<ColumnDef<EponymeFormSubmission, string>>>(() => 
       // Never empty: SSR emits nothing for an empty string while the client still
       // builds a text node, which hydrates as a missing child. The dash also makes
       // an unanswered optional field readable instead of looking like a broken cell.
-      cell: info => truncate(info.getValue()) || '—',
+      cell: info => truncate(info.getValue()) || t('action.empty'),
     },
   )),
   columnHelper.accessor(row => row.createdAt, {
     id: 'createdAt',
-    header: 'Received',
+    header: t('submissions.received'),
     cell: info => formatDate(info.getValue()),
   }),
 ] as Array<ColumnDef<EponymeFormSubmission, string>>)
@@ -81,7 +82,7 @@ watch(() => props.name, () => {
 function formatValue(value: unknown): string {
   if (value == null) return ''
   if (Array.isArray(value)) return value.map(item => formatValue(item)).join(', ')
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  if (typeof value === 'boolean') return value ? t('action.yes') : t('action.no')
   if (typeof value === 'object') return JSON.stringify(value)
   return String(value)
 }
@@ -203,7 +204,7 @@ async function deleteSubmission(submission: EponymeFormSubmission) {
                 scope="col"
                 class="ep:relative ep:border-b ep:border-border-ep ep:p-3"
               >
-                <span class="ep:sr-only">Actions</span>
+                <span class="ep:sr-only">{{ t('action.actions') }}</span>
               </th>
             </tr>
           </thead>
@@ -247,7 +248,7 @@ async function deleteSubmission(submission: EponymeFormSubmission) {
 
       <div class="ep:mt-4 ep:flex ep:flex-wrap ep:items-center ep:justify-between ep:gap-3">
         <p class="ep:m-0 ep:text-xs ep:text-muted-ep">
-          {{ total }} submission{{ total === 1 ? '' : 's' }} · page {{ page }} of {{ pageCount }}
+          {{ t('submissions.pager', { count: total, page, pages: pageCount }) }}
         </p>
         <div class="ep:flex ep:gap-2">
           <EPButton

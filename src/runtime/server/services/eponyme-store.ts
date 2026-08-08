@@ -1,3 +1,4 @@
+import { t } from '#eponyme/locale'
 import { createHash } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 import type { EponymeCollectionDefinitionBase, EponymeConfig, EponymeSchema } from '../../types'
@@ -9,17 +10,25 @@ import { normalizeSlug } from '../../utils/normalize-slug'
 import { applyPreviewSlug } from '../../utils/preview'
 import { validateEponymeData, validateEponymePatch, type ValidationErrors, type ValidationMode } from '../../utils/validate-eponyme-data'
 import { normalizeEponymeValues } from '../../utils/normalize-eponyme-values'
+import { eponymeRichTextRejections } from '../../utils/sanitize-rich-text'
 import { buildEponymeIndexRows, describeEponymeIndexSchema, eponymeIndexKeys, foldEponymeIndexValue, type EponymeIndexRow } from '../../utils/eponyme-entry-index'
+import { EponymeCache, type EponymeSharedCacheStorage } from './eponyme-cache-store'
 
-export type EponymeAction = 'draft' | 'publish'
+export type EponymeAction = 'draft' | 'publish' | 'unpublish' | 'revertToDraft' | 'schedule' | 'unschedule'
 export type EponymeVersion = 'draft' | 'published'
 /** Either the live draft/published content, or a numeric id from the version history. */
 export type EponymeVersionSelector = EponymeVersion | number
-export type EponymeStatus = 'draft' | 'published'
+export type EponymeStatus = 'draft' | 'published' | 'unpublished'
+export interface EponymeSchedule {
+  scheduledPublishAt?: string | null
+  scheduledUnpublishAt?: string | null
+}
 export interface EponymeResult {
   data: Record<string, unknown>
   status: EponymeStatus
   publishedAt: string | null
+  scheduledPublishAt: string | null
+  scheduledUnpublishAt: string | null
 }
 export interface EponymeVersionAuthor {
   id: string
@@ -37,12 +46,18 @@ export interface EponymeConflict {
   conflict: true
   errors?: never
 }
+export interface EponymeScheduleTransition extends EponymeResult {
+  name: string
+  action: 'publish' | 'unpublish'
+}
 export interface EponymeCollectionEntry<Data extends Record<string, unknown> = Record<string, unknown>> {
   slug: string
   title: string
   data: Data
   status: EponymeStatus
   publishedAt: string | null
+  scheduledPublishAt: string | null
+  scheduledUnpublishAt: string | null
   updatedAt: string | null
   /** Only set for entries read from the trash. */
   deletedAt?: string | null
@@ -62,6 +77,8 @@ export interface EponymeExportEntry {
   published: Record<string, unknown>
   status: EponymeStatus
   publishedAt: string | null
+  scheduledPublishAt: string | null
+  scheduledUnpublishAt: string | null
 }
 
 export interface EponymeExportFile {
@@ -145,6 +162,8 @@ export type PrismaEponymeRow = {
   published?: unknown
   status?: string
   publishedAt?: Date | string | null
+  scheduledPublishAt?: Date | string | null
+  scheduledUnpublishAt?: Date | string | null
   updatedAt?: Date | string
   deletedAt?: Date | string | null
 }
@@ -154,6 +173,8 @@ export type EponymeRowWrite = {
   published: Record<string, unknown>
   status: EponymeStatus
   publishedAt: Date | null
+  scheduledPublishAt: Date | null
+  scheduledUnpublishAt: Date | null
 }
 
 export type PrismaEponymeSelect = {
@@ -162,16 +183,25 @@ export type PrismaEponymeSelect = {
   published?: true
   status?: true
   publishedAt?: true
+  scheduledPublishAt?: true
+  scheduledUnpublishAt?: true
   updatedAt?: true
 }
 
+export type PrismaEponymeWhere = {
+  /** `in` is what a filtered listing uses: the index resolves the names first. */
+  name?: string | { startsWith: string } | { in: string[] }
+  deletedAt?: PrismaDeletedAtFilter
+  publishedAt?: { not: null }
+  status?: EponymeStatus
+  scheduledPublishAt?: null | { lte: Date }
+  scheduledUnpublishAt?: null | { gt: Date } | { lte: Date }
+  AND?: PrismaEponymeWhere[]
+  OR?: PrismaEponymeWhere[]
+}
+
 export type PrismaEponymeQuery = {
-  where: {
-    /** `in` is what a filtered listing uses: the index resolves the names first. */
-    name: { startsWith: string } | { in: string[] }
-    deletedAt?: PrismaDeletedAtFilter
-    publishedAt?: { not: null }
-  }
+  where: PrismaEponymeWhere
   orderBy?: PrismaEponymeOrderBy[]
   take?: number
   skip?: number
@@ -287,6 +317,8 @@ interface StoredEponymeState {
     published: Record<string, unknown>
     status: EponymeStatus
     publishedAt: string | null
+    scheduledPublishAt: string | null
+    scheduledUnpublishAt: string | null
   }
 }
 
@@ -301,41 +333,44 @@ export class EponymeService {
    * Writers never read from it, so the `updatedAt` they lock on always comes from the
    * database and a stale key can never turn into a spurious conflict.
    */
-  private readonly cache = new Map<string, { value: unknown, expires: number }>()
-  private readonly cacheMs: number
+  private readonly cache: EponymeCache
 
-  constructor(config: EponymeConfig, private readonly client: PrismaEponymeClient, options: { cacheSeconds?: number } = {}) {
+  constructor(
+    config: EponymeConfig,
+    private readonly client: PrismaEponymeClient,
+    options: {
+      cacheSeconds?: number
+      cacheStorage?: string
+      resolveCacheStorage?: (mount: string) => EponymeSharedCacheStorage
+    } = {},
+  ) {
     this.schemas = getEponymeSchemas(config)
     this.collections = getEponymeCollections(config)
-    this.cacheMs = Math.max(0, options.cacheSeconds ?? 5) * 1000
+    const mount = options.cacheStorage?.trim()
+    this.cache = new EponymeCache({
+      cacheSeconds: options.cacheSeconds,
+      storage: mount && options.resolveCacheStorage
+        ? () => options.resolveCacheStorage?.(mount)
+        : undefined,
+    })
   }
 
   private cached<T>(key: string, load: () => Promise<T>): Promise<T> {
-    if (!this.cacheMs) return load()
-    const hit = this.cache.get(key)
-    if (hit && hit.expires > Date.now()) return hit.value as Promise<T>
-    // The promise itself is stored, so concurrent readers of a cold key share one query
-    // rather than each starting their own.
-    const pending = load().catch((error) => {
-      this.cache.delete(key)
-      throw error
-    })
-    this.cache.set(key, { value: pending, expires: Date.now() + this.cacheMs })
-    return pending
+    return this.cache.get(key, load)
   }
 
   /**
    * Drops what a write to `name` invalidates: the entry itself, and the listing of the
    * collection that contains it, whose row set just changed.
    */
-  private invalidate(name: string) {
-    this.cache.delete(`row:${name}`)
+  private async invalidate(name: string) {
     const collection = this.getCollectionEntry(name)?.name
-    // A prefix rather than an exact key: a listing is cached per version, and after the
-    // column split per selected shape, so one write has to drop all of them.
-    if (collection) {
-      for (const key of this.cache.keys()) if (key.startsWith(`rows:${collection}:`)) this.cache.delete(key)
-    }
+    await Promise.all([
+      this.cache.drop(`row:${name}`),
+      // A prefix rather than an exact key: a listing is cached per version, and after the
+      // column split per selected shape, so one write has to drop all of them.
+      collection ? this.cache.dropPrefix(`rows:${collection}`) : undefined,
+    ])
   }
 
   /**
@@ -486,8 +521,23 @@ export class EponymeService {
   }
 
   /** Reconcile every configured eponyme at application startup. This is the one place that heals. */
+  /** Reconcile and normalise every stored row at startup, including trashed collection entries. */
   async syncAll() {
     await Promise.all(Object.keys(this.schemas).map(name => this.loadState(name, { heal: true })))
+
+    for (const [collectionName, definition] of Object.entries(this.collections)) {
+      const rows = await this.client.eponyme.findMany({
+        where: { name: { startsWith: `${collectionName}/` } },
+      })
+      for (const row of rows) {
+        const slug = row.name.slice(collectionName.length + 1)
+        if (!slug || slug.includes('/')) continue
+        const state = this.rowToState(definition.fields, row)
+        if (sameRow(state, row)) continue
+        await this.client.eponyme.update({ where: { name: row.name }, data: stateToColumns(state) })
+        this.invalidate(row.name)
+      }
+    }
   }
 
   /**
@@ -546,6 +596,8 @@ export class EponymeService {
         published: data,
         status: 'published',
         publishedAt: null,
+        scheduledPublishAt: null,
+        scheduledUnpublishAt: null,
       },
     }
   }
@@ -559,25 +611,35 @@ export class EponymeService {
   private normalizeState(schema: EponymeSchema, value: unknown): StoredEponymeState {
     const stored = getStoredState(value)
     if (!stored) return this.createState(schema, value)
+    // Normalised as well as reconciled: an import and a restore write content this server
+    // never validated on the way in, and they must land under the same rules as a save.
     return {
       __eponyme: {
         version: 1,
-        draft: this.reconcile(schema, stored.draft, 'draft'),
-        published: this.reconcile(schema, stored.published, 'publish'),
+        draft: normalizeEponymeValues(schema, this.reconcile(schema, stored.draft, 'draft')),
+        published: shouldKeepEmptyPublished(stored) ? {} : normalizeEponymeValues(schema, this.reconcile(schema, stored.published, 'publish')),
         status: stored.status,
         publishedAt: stored.publishedAt,
+        scheduledPublishAt: stored.scheduledPublishAt,
+        scheduledUnpublishAt: stored.scheduledUnpublishAt,
       },
     }
   }
 
   private rowToState(schema: EponymeSchema, row: PrismaEponymeRow): StoredEponymeState {
+    const status = toEponymeStatus(row.status)
+    const publishedAt = toIsoOrNull(row.publishedAt)
     return {
       __eponyme: {
         version: 1,
-        draft: this.reconcile(schema, row.draft, 'draft'),
-        published: this.reconcile(schema, row.published, 'publish'),
-        status: row.status === 'draft' ? 'draft' : 'published',
-        publishedAt: toIsoOrNull(row.publishedAt),
+        draft: normalizeEponymeValues(schema, this.reconcile(schema, row.draft, 'draft')),
+        published: status === 'draft' && publishedAt === null && isEmptyPlainObject(row.published)
+          ? {}
+          : normalizeEponymeValues(schema, this.reconcile(schema, row.published, 'publish')),
+        status,
+        publishedAt,
+        scheduledPublishAt: toIsoOrNull(row.scheduledPublishAt),
+        scheduledUnpublishAt: toIsoOrNull(row.scheduledUnpublishAt),
       },
     }
   }
@@ -770,11 +832,13 @@ export class EponymeService {
     if (typeof version === 'number') return this.getVersionResult(name, version)
     const state = await this.loadState(name, { cache: version === 'published' })
     if (!state) return undefined
-    if (version === 'published' && this.getCollectionEntry(name) && !state.__eponyme.publishedAt) return undefined
+    if (version === 'published' && !isEponymeLive(state.__eponyme, new Date())) return undefined
     return {
       data: state.__eponyme[version],
       status: state.__eponyme.status,
       publishedAt: state.__eponyme.publishedAt,
+      scheduledPublishAt: state.__eponyme.scheduledPublishAt,
+      scheduledUnpublishAt: state.__eponyme.scheduledUnpublishAt,
     }
   }
 
@@ -789,6 +853,8 @@ export class EponymeService {
       data: state.__eponyme.draft,
       status: state.__eponyme.status,
       publishedAt: state.__eponyme.publishedAt,
+      scheduledPublishAt: state.__eponyme.scheduledPublishAt,
+      scheduledUnpublishAt: state.__eponyme.scheduledUnpublishAt,
     }
   }
 
@@ -825,18 +891,16 @@ export class EponymeService {
       if (!names.size) return { entries: [], total: 0 }
     }
 
-    const where = {
+    const where: PrismaEponymeWhere = {
       name: names ? { in: [...names] } : { startsWith: `${name}/` },
       deletedAt: null,
-      // The predicate that used to force everything into memory. It is a column now, so the
-      // database can apply it before counting, ordering and paginating.
-      ...(version === 'published' ? { publishedAt: { not: null } as const } : {}),
+      ...(version === 'published' ? eponymeLiveWhere(new Date()) : {}),
     }
     // Draft content is never read for a public listing — not filtered out of the response,
     // simply not selected.
     const select: PrismaEponymeSelect = version === 'published'
-      ? { name: true, published: true, publishedAt: true, updatedAt: true }
-      : { name: true, draft: true, status: true, publishedAt: true, updatedAt: true }
+      ? { name: true, published: true, status: true, publishedAt: true, scheduledPublishAt: true, scheduledUnpublishAt: true, updatedAt: true }
+      : { name: true, draft: true, status: true, publishedAt: true, scheduledPublishAt: true, scheduledUnpublishAt: true, updatedAt: true }
 
     const pushdown = pushdownOrderBy(query.orderBy, query.order ?? 'desc')
     if (pushdown) {
@@ -907,8 +971,10 @@ export class EponymeService {
         slug,
         title: String(state.__eponyme[version][definition.titleField] || slug),
         data: state.__eponyme[version],
-        status: version === 'published' ? 'published' as const : state.__eponyme.status,
+        status: state.__eponyme.status,
         publishedAt: state.__eponyme.publishedAt,
+        scheduledPublishAt: state.__eponyme.scheduledPublishAt,
+        scheduledUnpublishAt: state.__eponyme.scheduledUnpublishAt,
         updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : null,
       }]
     })
@@ -937,9 +1003,9 @@ export class EponymeService {
       // Its own cache key rather than the listing's: the two select different columns, so
       // they cannot share a result. The `rows:<collection>:` prefix is what a write drops.
       const rows = await this.cached(`rows:${name}:sitemap`, () => this.client.eponyme.findMany({
-        where: { name: { startsWith: `${name}/` }, deletedAt: null, publishedAt: { not: null } },
+        where: { name: { startsWith: `${name}/` }, deletedAt: null, ...eponymeLiveWhere(new Date()) },
         orderBy: [{ name: 'asc' }],
-        select: { name: true, publishedAt: true },
+        select: { name: true, publishedAt: true, scheduledPublishAt: true, scheduledUnpublishAt: true, status: true },
       }))
       return rows.flatMap((row) => {
         const slug = row.name.slice(name.length + 1)
@@ -1050,13 +1116,13 @@ export class EponymeService {
       const collectionEntry = this.getCollectionEntry(entry.name)
       const schema = this.schemas[entry.name] ?? collectionEntry?.definition.fields
       if (!schema) {
-        result.skipped.push({ name: entry.name, reason: 'No schema is configured for this entry.' })
+        result.skipped.push({ name: entry.name, reason: t('server.importNoSchema') })
         continue
       }
 
       const row = await db.eponyme.findUnique({ where: { name: entry.name } })
       if (row?.deletedAt) {
-        result.skipped.push({ name: entry.name, reason: 'An entry with this name is in the trash. Restore it or delete it permanently first.' })
+        result.skipped.push({ name: entry.name, reason: t('server.importInTrash') })
         continue
       }
 
@@ -1069,6 +1135,8 @@ export class EponymeService {
           published: entry.published,
           status: entry.status,
           publishedAt: entry.publishedAt,
+          scheduledPublishAt: entry.scheduledPublishAt,
+          scheduledUnpublishAt: entry.scheduledUnpublishAt,
         },
       })
       if (collectionEntry) {
@@ -1123,7 +1191,10 @@ export class EponymeService {
 
     const defaults = createDefaultEponymeData(definition.fields) as Record<string, unknown>
     const data = normalizeEponymeValues(definition.fields, { ...defaults, ...input, [definition.slugField]: slug })
-    const errors = validateEponymePatch(definition.fields, data, data, 'draft')
+    const errors = mergeErrors(
+      validateEponymePatch(definition.fields, data, data, 'draft'),
+      eponymeRichTextRejections(definition.fields, input),
+    )
     if (Object.keys(errors).length) return { errors }
 
     const state: StoredEponymeState = {
@@ -1133,6 +1204,8 @@ export class EponymeService {
         published: defaults,
         status: 'draft',
         publishedAt: null,
+        scheduledPublishAt: null,
+        scheduledUnpublishAt: null,
       },
     }
     const stored = state as unknown as Record<string, unknown>
@@ -1149,10 +1222,10 @@ export class EponymeService {
     }
     catch (error) {
       // Another request created the same slug between our check and this insert.
-      if (isPrismaError(error, 'P2002')) return await this.slugTakenError(definition, entryName) ?? { errors: { [definition.slugField]: ['This slug is already in use.'] } }
+      if (isPrismaError(error, 'P2002')) return await this.slugTakenError(definition, entryName) ?? { errors: { [definition.slugField]: [t('server.slugTaken')] } }
       throw error
     }
-    return { slug, data, status: 'draft', publishedAt: null }
+    return { slug, data, status: 'draft', publishedAt: null, scheduledPublishAt: null, scheduledUnpublishAt: null }
   }
 
   /**
@@ -1168,8 +1241,8 @@ export class EponymeService {
     return {
       errors: {
         [definition.slugField]: [row.deletedAt
-          ? 'An entry with this slug is in the trash. Restore it or delete it permanently first.'
-          : 'This slug is already in use.'],
+          ? t('server.slugInTrash')
+          : t('server.slugTaken')],
       },
     }
   }
@@ -1236,6 +1309,8 @@ export class EponymeService {
         data: state.__eponyme.draft,
         status: state.__eponyme.status,
         publishedAt: state.__eponyme.publishedAt,
+        scheduledPublishAt: state.__eponyme.scheduledPublishAt,
+        scheduledUnpublishAt: state.__eponyme.scheduledUnpublishAt,
         updatedAt: row.updatedAt ? new Date(row.updatedAt).toISOString() : null,
         deletedAt: row.deletedAt ? new Date(row.deletedAt).toISOString() : null,
       }]
@@ -1248,6 +1323,7 @@ export class EponymeService {
     payload: unknown,
     action: EponymeAction = 'publish',
     actorId?: string,
+    schedule: EponymeSchedule = {},
   ): Promise<(EponymeResult & { errors?: never, conflict?: never }) | { errors: ValidationErrors, conflict?: never } | EponymeConflict | undefined> {
     const schema = this.getSchema(name)
     if (!schema) return undefined
@@ -1266,22 +1342,20 @@ export class EponymeService {
     // Normalised before validation, so both the errors and the stored value are computed on
     // the canonical form rather than on whatever the client happened to send.
     const data = normalizeEponymeValues(schema, { ...state.__eponyme.draft, ...(payload as Record<string, unknown>) })
-    const patchErrors = validateEponymePatch(schema, normalizeEponymeValues(schema, payload as Record<string, unknown>), data, action)
-    const errors = action === 'publish'
-      ? mergeErrors(patchErrors, validateEponymeData(schema, data, 'publish'))
-      : patchErrors
+    const validationMode: ValidationMode = action === 'publish' || action === 'schedule' ? 'publish' : 'draft'
+    const patchErrors = validateEponymePatch(schema, normalizeEponymeValues(schema, payload as Record<string, unknown>), data, validationMode)
+    // Read from the payload, not from `data`: the normalisation above has already removed
+    // whatever there was to complain about.
+    const stripped = eponymeRichTextRejections(schema, payload as Record<string, unknown>)
+    const errors = validationMode === 'publish'
+      ? mergeErrors(patchErrors, stripped, validateEponymeData(schema, data, 'publish'))
+      : mergeErrors(patchErrors, stripped)
+    const parsedSchedule = action === 'schedule' ? normalizeSchedule(schedule) : schedule
+    if (action === 'schedule' && !parsedSchedule)
+      errors._form = [t('server.invalidSchedule')]
     if (Object.keys(errors).length) return { errors }
 
-    const publishedAt = action === 'publish' ? new Date().toISOString() : state.__eponyme.publishedAt
-    const next: StoredEponymeState = {
-      __eponyme: {
-        version: 1,
-        draft: data,
-        published: action === 'publish' ? data : state.__eponyme.published,
-        status: action === 'publish' ? 'published' : 'draft',
-        publishedAt,
-      },
-    }
+    const next = applyEponymeAction(state, data, action, parsedSchedule ?? {}, new Date())
     // The entry and the version it produces land as a unit, so the timeline can never
     // gain an entry the content never took, nor miss one it did.
     const written = await this.transaction(async (tx, invalidate) => {
@@ -1300,7 +1374,78 @@ export class EponymeService {
       return true
     })
     if (!written) return { conflict: true }
-    return { data, status: next.__eponyme.status, publishedAt }
+    return toResult(next, next.__eponyme.draft)
+  }
+
+  /**
+   * Materializes due dates for history, hooks and cache/CDN invalidation. Public reads do not
+   * depend on this method: `isEponymeLive` and `eponymeLiveWhere` remain authoritative.
+   */
+  async runSchedule(now = new Date()): Promise<EponymeScheduleTransition[]> {
+    const dueRows = await this.client.eponyme.findMany({
+      where: {
+        deletedAt: null,
+        OR: [
+          { scheduledPublishAt: { lte: now } },
+          { scheduledUnpublishAt: { lte: now } },
+        ],
+      },
+      orderBy: [{ name: 'asc' }],
+    })
+    const transitions: EponymeScheduleTransition[] = []
+
+    for (const dueRow of dueRows) {
+      const schema = this.getSchema(dueRow.name)
+      if (!schema) continue
+      const row = await this.loadRow(dueRow.name, { heal: true })
+      if (!row) continue
+      const current = row.state.__eponyme
+      const publishDue = Boolean(current.scheduledPublishAt && new Date(current.scheduledPublishAt) <= now)
+      const unpublishDue = Boolean(current.scheduledUnpublishAt && new Date(current.scheduledUnpublishAt) <= now)
+      if (!publishDue && !unpublishDue) continue
+
+      const states: Array<{ action: 'publish' | 'unpublish', state: StoredEponymeState }> = []
+      let next = row.state
+      if (publishDue) {
+        next = wrapState(
+          current.draft,
+          current.published,
+          'published',
+          current.publishedAt,
+          null,
+          current.scheduledUnpublishAt,
+        )
+        states.push({ action: 'publish', state: next })
+      }
+      if (unpublishDue) {
+        const before = next.__eponyme
+        next = wrapState(before.draft, before.published, 'unpublished', before.publishedAt, before.scheduledPublishAt, null)
+        states.push({ action: 'unpublish', state: next })
+      }
+
+      const written = await this.transaction(async (tx, invalidate) => {
+        invalidate(dueRow.name)
+        if (!await this.writeState(dueRow.name, next, row.updatedAt, tx)) return false
+        await this.reindexEntry(tx, dueRow.name, next)
+        for (const transition of states) {
+          await tx.eponymeVersion.create({
+            data: {
+              entryName: dueRow.name,
+              data: transition.state as unknown as Record<string, unknown>,
+              action: transition.action,
+              status: transition.state.__eponyme.status,
+            },
+          })
+        }
+        return true
+      })
+      if (!written) continue
+      for (const transition of states) {
+        transitions.push({ name: dueRow.name, action: transition.action, ...toResult(transition.state, transition.state.__eponyme.published) })
+      }
+    }
+
+    return transitions
   }
 
   async history(name: string, limit = 50): Promise<EponymeHistoryEntry[] | undefined> {
@@ -1348,6 +1493,8 @@ export class EponymeService {
       data: state.__eponyme.draft,
       status: state.__eponyme.status,
       publishedAt: state.__eponyme.publishedAt,
+      scheduledPublishAt: state.__eponyme.scheduledPublishAt,
+      scheduledUnpublishAt: state.__eponyme.scheduledUnpublishAt,
     }
   }
 }
@@ -1361,14 +1508,24 @@ function getStoredState(value: unknown): StoredEponymeState['__eponyme'] | undef
     && state.version === 1
     && state.draft && typeof state.draft === 'object' && !Array.isArray(state.draft)
     && state.published && typeof state.published === 'object' && !Array.isArray(state.published)
-    && (state.status === 'draft' || state.status === 'published')
-    && (state.publishedAt === null || typeof state.publishedAt === 'string'),
+    && isEponymeStatus(state.status)
+    && (state.publishedAt === null || typeof state.publishedAt === 'string')
+    && (state.scheduledPublishAt == null || typeof state.scheduledPublishAt === 'string')
+    && (state.scheduledUnpublishAt == null || typeof state.scheduledUnpublishAt === 'string'),
   )
-  return valid ? state : undefined
+  if (!valid) return undefined
+  const stored = state as StoredEponymeState['__eponyme']
+  return {
+    ...stored,
+    scheduledPublishAt: toIsoOrNull(stored.scheduledPublishAt),
+    scheduledUnpublishAt: toIsoOrNull(stored.scheduledUnpublishAt),
+  }
 }
 
 function isHistoryAction(action: string): action is EponymeHistoryEntry['action'] {
-  return action === 'draft' || action === 'publish' || action === 'import'
+  return action === 'draft' || action === 'publish' || action === 'unpublish'
+    || action === 'revertToDraft' || action === 'schedule' || action === 'unschedule'
+    || action === 'restore' || action === 'import'
 }
 
 function toExportEntry(state: StoredEponymeState): Omit<EponymeExportEntry, 'name' | 'collection'> {
@@ -1377,11 +1534,25 @@ function toExportEntry(state: StoredEponymeState): Omit<EponymeExportEntry, 'nam
     published: state.__eponyme.published,
     status: state.__eponyme.status,
     publishedAt: state.__eponyme.publishedAt,
+    scheduledPublishAt: state.__eponyme.scheduledPublishAt,
+    scheduledUnpublishAt: state.__eponyme.scheduledUnpublishAt,
   }
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isEmptyPlainObject(value: unknown): value is Record<string, never> {
+  return isPlainObject(value) && Object.keys(value).length === 0
+}
+
+/**
+ * An entry that has never been published keeps an empty public version rather than a copy of
+ * its draft, so `revertToDraft` stays distinguishable from "published, then emptied".
+ */
+function shouldKeepEmptyPublished(state: StoredEponymeState['__eponyme']): boolean {
+  return state.status === 'draft' && state.publishedAt === null && isEmptyPlainObject(state.published)
 }
 
 /**
@@ -1430,14 +1601,25 @@ function parseExportFile(value: unknown): EponymeExportFile | undefined {
   const entries: EponymeExportEntry[] = []
   for (const entry of value.entries) {
     if (!isPlainObject(entry)) return undefined
-    const { name, collection, draft, published, status, publishedAt } = entry
+    const { name, collection, draft, published, status, publishedAt, scheduledPublishAt, scheduledUnpublishAt } = entry
     const valid = typeof name === 'string' && name.length > 0
       && isPlainObject(draft) && isPlainObject(published)
-      && (status === 'draft' || status === 'published')
+      && isEponymeStatus(status)
       && (publishedAt === null || typeof publishedAt === 'string')
+      && (scheduledPublishAt == null || typeof scheduledPublishAt === 'string')
+      && (scheduledUnpublishAt == null || typeof scheduledUnpublishAt === 'string')
       && (collection === undefined || typeof collection === 'string')
     if (!valid) return undefined
-    entries.push({ name, collection, draft, published, status, publishedAt } as EponymeExportEntry)
+    entries.push({
+      name,
+      collection,
+      draft,
+      published,
+      status,
+      publishedAt,
+      scheduledPublishAt: toIsoOrNull(scheduledPublishAt as string | null | undefined),
+      scheduledUnpublishAt: toIsoOrNull(scheduledUnpublishAt as string | null | undefined),
+    } as EponymeExportEntry)
   }
 
   return {
@@ -1463,9 +1645,116 @@ export function isPrismaError(error: unknown, code: string) {
   return Boolean(error && typeof error === 'object' && (error as { code?: unknown }).code === code)
 }
 
+function isEponymeStatus(value: unknown): value is EponymeStatus {
+  return value === 'draft' || value === 'published' || value === 'unpublished'
+}
+
+function toEponymeStatus(value: unknown): EponymeStatus {
+  return isEponymeStatus(value) ? value : 'published'
+}
+
+/** The only in-memory definition of public visibility. */
+export function isEponymeLive(
+  state: Pick<StoredEponymeState['__eponyme'], 'status' | 'scheduledPublishAt' | 'scheduledUnpublishAt'>,
+  now: Date,
+): boolean {
+  const time = now.getTime()
+  const publishAt = state.scheduledPublishAt ? new Date(state.scheduledPublishAt).getTime() : null
+  const unpublishAt = state.scheduledUnpublishAt ? new Date(state.scheduledUnpublishAt).getTime() : null
+  return state.status === 'published'
+    && (publishAt === null || publishAt <= time)
+    && (unpublishAt === null || unpublishAt > time)
+}
+
+/** SQL translation of `isEponymeLive`; keep both changes together. */
+export function eponymeLiveWhere(now: Date): PrismaEponymeWhere {
+  return {
+    status: 'published',
+    AND: [
+      { OR: [{ scheduledPublishAt: null }, { scheduledPublishAt: { lte: now } }] },
+      { OR: [{ scheduledUnpublishAt: null }, { scheduledUnpublishAt: { gt: now } }] },
+    ],
+  }
+}
+
+function normalizeSchedule(schedule: EponymeSchedule): Required<EponymeSchedule> | undefined {
+  const scheduledPublishAt = schedule.scheduledPublishAt ? toIsoOrNull(schedule.scheduledPublishAt) : null
+  const scheduledUnpublishAt = schedule.scheduledUnpublishAt ? toIsoOrNull(schedule.scheduledUnpublishAt) : null
+  if ((schedule.scheduledPublishAt && !scheduledPublishAt) || (schedule.scheduledUnpublishAt && !scheduledUnpublishAt)) return undefined
+  if (!scheduledPublishAt && !scheduledUnpublishAt) return undefined
+  return { scheduledPublishAt, scheduledUnpublishAt }
+}
+
+function applyEponymeAction(
+  current: StoredEponymeState,
+  draft: Record<string, unknown>,
+  action: EponymeAction,
+  schedule: EponymeSchedule,
+  now: Date,
+): StoredEponymeState {
+  const previous = current.__eponyme
+  const scheduledPublishAt = schedule.scheduledPublishAt ?? null
+  const scheduledUnpublishAt = schedule.scheduledUnpublishAt ?? null
+  const schedulesPublication = action === 'schedule' && Boolean(scheduledPublishAt)
+  const updatesPublishedContent = schedulesPublication || (action === 'schedule' && previous.status === 'published')
+
+  if (action === 'publish') {
+    return wrapState(draft, draft, 'published', now.toISOString(), null, null)
+  }
+  if (action === 'unpublish') {
+    return wrapState(draft, previous.published, 'unpublished', previous.publishedAt, null, null)
+  }
+  if (action === 'revertToDraft') {
+    return wrapState(draft, {}, 'draft', null, null, null)
+  }
+  if (action === 'schedule') {
+    return wrapState(
+      draft,
+      updatesPublishedContent ? draft : previous.published,
+      schedulesPublication ? 'published' : previous.status,
+      schedulesPublication ? now.toISOString() : previous.publishedAt,
+      scheduledPublishAt,
+      scheduledUnpublishAt,
+    )
+  }
+  if (action === 'unschedule') {
+    return wrapState(draft, previous.published, previous.status, previous.publishedAt, null, null)
+  }
+  // A draft-only save must not make the currently published version disappear.
+  return wrapState(draft, previous.published, previous.status, previous.publishedAt, previous.scheduledPublishAt, previous.scheduledUnpublishAt)
+}
+
+function wrapState(
+  draft: Record<string, unknown>,
+  published: Record<string, unknown>,
+  status: EponymeStatus,
+  publishedAt: string | null,
+  scheduledPublishAt: string | null,
+  scheduledUnpublishAt: string | null,
+): StoredEponymeState {
+  return { __eponyme: { version: 1, draft, published, status, publishedAt, scheduledPublishAt, scheduledUnpublishAt } }
+}
+
+function toResult(state: StoredEponymeState, data: Record<string, unknown>): EponymeResult {
+  return {
+    data,
+    status: state.__eponyme.status,
+    publishedAt: state.__eponyme.publishedAt,
+    scheduledPublishAt: state.__eponyme.scheduledPublishAt,
+    scheduledUnpublishAt: state.__eponyme.scheduledUnpublishAt,
+  }
+}
+
 function stateToColumns(state: StoredEponymeState): EponymeRowWrite {
-  const { draft, published, status, publishedAt } = state.__eponyme
-  return { draft, published, status, publishedAt: publishedAt ? new Date(publishedAt) : null }
+  const { draft, published, status, publishedAt, scheduledPublishAt, scheduledUnpublishAt } = state.__eponyme
+  return {
+    draft,
+    published,
+    status,
+    publishedAt: publishedAt ? new Date(publishedAt) : null,
+    scheduledPublishAt: scheduledPublishAt ? new Date(scheduledPublishAt) : null,
+    scheduledUnpublishAt: scheduledUnpublishAt ? new Date(scheduledUnpublishAt) : null,
+  }
 }
 
 function toIsoOrNull(value: Date | string | null | undefined): string | null {
@@ -1488,6 +1777,8 @@ function sameRow(state: StoredEponymeState, row: PrismaEponymeRow): boolean {
     && isDeepStrictEqual(stored.published, row.published)
     && stored.status === row.status
     && stored.publishedAt === toIsoOrNull(row.publishedAt)
+    && stored.scheduledPublishAt === toIsoOrNull(row.scheduledPublishAt)
+    && stored.scheduledUnpublishAt === toIsoOrNull(row.scheduledUnpublishAt)
 }
 
 /**

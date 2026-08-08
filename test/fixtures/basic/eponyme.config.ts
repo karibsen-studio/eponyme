@@ -30,6 +30,12 @@ export default defineEponymeConfig({
   newsletter: form({
     fields: { email: field.email({ required: true }) },
   }),
+  // Its own form name, so its rate-limit window is its own: exhausting it cannot make
+  // another test's submissions start failing.
+  throttled: form({
+    fields: { email: field.email({ required: true }) },
+    submission: { mode: 'custom', store: false },
+  }),
   articles: collection({
     label: 'Articles',
     titleField: 'title',

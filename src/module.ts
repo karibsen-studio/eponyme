@@ -1,10 +1,13 @@
 import {
+  addComponent,
+  addPlugin,
   addImports,
   addImportsDir,
   addRouteMiddleware,
   addServerHandler,
   addServerImports,
   addServerPlugin,
+  addTemplate,
   addTypeTemplate,
   createResolver,
   defineNuxtModule,
@@ -18,11 +21,14 @@ import {
 import type { Nuxt } from '@nuxt/schema'
 import pc from 'picocolors'
 import tailwindcss from '@tailwindcss/vite'
+import { renderEponymeLocaleModule, resolveEponymeLocale } from './locale-build'
+import type { EponymeLocaleDefinition } from './runtime/locales'
 import { resolve } from 'pathe'
 import { tagPreviewPathRoutes } from './runtime/utils/cache-tags'
+import { EPONYME_THEME_BOOTSTRAP } from './runtime/utils/eponyme-theme'
 
-// The runtime helpers (`field`, `collection`, `defineEponymeConfig`) live at
-// `@karibsen/eponyme/config`, since the package root has to stay the Nuxt module itself.
+export type { EponymeLocaleDefinition, EponymeMessageKey } from './runtime/locales'
+
 export type * from './eponyme'
 
 /**
@@ -109,16 +115,65 @@ export interface ModuleOptions {
     sessionDurationDays?: number
   }
 
+  rateLimits?: {
+    /** Login attempts per client address and minute. @default 10 */
+    loginPerIp?: number
+    /** Login attempts across the deployment and minute. @default 300 */
+    loginGlobal?: number
+    /** Failed login attempts per account and 15 minutes. @default 5 */
+    loginAccountFailures?: number
+    /** Managed-form submissions per client address, form and minute. @default 5 */
+    formPerIp?: number
+    /** Managed-form submissions per form across the deployment and minute. @default 100 */
+    formGlobal?: number
+  }
+
   /**
-   * How long a server instance may reuse content it has already read, in seconds. `0` disables it.
+   * How long content already read may be reused, in seconds. `0` disables it.
    *
    * @remarks
-   * A save only clears the instance that served it, so this bounds how long another instance can
-   * still answer with the previous content.
+   * Without `cacheStorage`, the cache is per instance and a save only clears the instance that
+   * served it — so this also bounds how long another instance can still answer with the previous
+   * content. With `cacheStorage`, an invalidation reaches every instance and this is simply how
+   * long a cached read lives.
    *
    * @default 5
    */
   cacheSeconds?: number
+
+  /**
+   * Name of a Nitro storage mount the content cache is shared through, typically Redis.
+   * Left out, the cache stays in the memory of each instance.
+   *
+   * @remarks
+   * This is what makes a publication visible everywhere at once: a shared mount is a cache a
+   * write can actually invalidate across instances, which an in-process map cannot be.
+   *
+   * A small in-process tier is kept in front of it either way — it coalesces the concurrent
+   * reads of one render and answers repeats without a network hop — so an instance can still
+   * miss an invalidation for up to a second.
+   *
+   * The mount is declared by the application, and the driver's `base` is what the keys are
+   * prefixed with:
+   *
+   * ```ts
+   * // nuxt.config.ts
+   * nitro: {
+   *   storage: {
+   *     eponyme: { driver: 'redis', url: process.env.REDIS_URL, base: 'eponyme' },
+   *   },
+   * },
+   * eponyme: { cacheStorage: 'eponyme', cacheSeconds: 60 },
+   * ```
+   *
+   * Keys then read `eponyme:row:<name>` and `eponyme:rows:<collection>:<version>`.
+   *
+   * `unstorage` ships the Redis driver; the application adds `ioredis` itself, so a deployment
+   * that caches in memory does not carry a Redis client it never builds.
+   *
+   * @see https://nitro.build/guide/storage
+   */
+  cacheStorage?: string
 
   /**
    * Whether the filterable index is rebuilt at startup when the configuration that produced
@@ -159,6 +214,32 @@ export interface ModuleOptions {
    * @see https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Cache-Control
    */
   cdnCacheSeconds?: number
+
+  /**
+   * Language of the dashboard interface, resolved once at build time.
+   *
+   * @remarks
+   * One language per build: the catalogue is merged over English and inlined, so a key the
+   * locale does not carry falls back to English rather than showing raw. This never touches
+   * content, schema labels, or a host's own `@nuxtjs/i18n` setup.
+   *
+   * Catalogues live in `@eponyme/locale`, one subpath per language, and each export is a
+   * function so it can take overrides. Passing the function itself instead of calling it is
+   * refused at setup with a message saying so.
+   *
+   * @default undefined — English
+   * @example
+   * ```ts
+   * import { fr } from '@eponyme/locale/fr'
+   *
+   * export default defineNuxtConfig({
+   *   eponyme: {
+   *     locale: fr({ 'array.add': 'Ajouter un bloc' }),
+   *   },
+   * })
+   * ```
+   */
+  locale?: EponymeLocaleDefinition
 }
 
 const MINIMUM_NUXT_UI = '4.10.0'
@@ -207,6 +288,13 @@ async function warnOnIncompatibleNuxtUi(nuxt: Nuxt, logger: ReturnType<typeof us
   )
 }
 
+function positiveInteger(value: number | undefined, fallback: number, name: string): number {
+  const resolved = value ?? fallback
+  if (!Number.isSafeInteger(resolved) || resolved < 1)
+    throw new TypeError(`${pc.red('[Eponyme]')} ${name} must be a positive integer.`)
+  return resolved
+}
+
 export default defineNuxtModule<ModuleOptions>({
   meta: {
     name: '@karibsen/eponyme',
@@ -223,6 +311,13 @@ export default defineNuxtModule<ModuleOptions>({
     colorPresets: [],
     auth: {
       sessionDurationDays: 7,
+    },
+    rateLimits: {
+      loginPerIp: 10,
+      loginGlobal: 300,
+      loginAccountFailures: 5,
+      formPerIp: 5,
+      formGlobal: 100,
     },
     cacheSeconds: 5,
     autoReindex: true,
@@ -289,12 +384,54 @@ export default defineNuxtModule<ModuleOptions>({
     nuxt.options.runtimeConfig.eponymeAuth = {
       sessionDurationDays: options.auth?.sessionDurationDays ?? 7,
     }
-    nuxt.options.runtimeConfig.eponymeContent = {
+    nuxt.options.runtimeConfig.eponymeRateLimits = {
+      loginPerIp: positiveInteger(options.rateLimits?.loginPerIp, 10, 'eponyme.rateLimits.loginPerIp'),
+      loginGlobal: positiveInteger(options.rateLimits?.loginGlobal, 300, 'eponyme.rateLimits.loginGlobal'),
+      loginAccountFailures: positiveInteger(options.rateLimits?.loginAccountFailures, 5, 'eponyme.rateLimits.loginAccountFailures'),
+      formPerIp: positiveInteger(options.rateLimits?.formPerIp, 5, 'eponyme.rateLimits.formPerIp'),
+      formGlobal: positiveInteger(options.rateLimits?.formGlobal, 100, 'eponyme.rateLimits.formGlobal'),
+    }
+    const eponymeContent = {
       cacheSeconds: options.cacheSeconds ?? 5,
+      cacheStorage: options.cacheStorage?.trim() || '',
       autoReindex: options.autoReindex ?? true,
       browserCacheSeconds: options.browserCacheSeconds ?? 30,
       cdnCacheSeconds: options.cdnCacheSeconds ?? 300,
     }
+    nuxt.options.runtimeConfig.eponymeContent = eponymeContent
+
+    const locale = resolveEponymeLocale(options.locale, pc.red('[Eponyme]'))
+    if (locale.missing.length) {
+      logger.warn(
+        `The \`${locale.code}\` catalogue is missing ${locale.missing.length} key${locale.missing.length > 1 ? 's' : ''}, which fall back to English:\n`
+        + locale.missing.map(key => `  - ${key}`).join('\n'),
+      )
+    }
+
+    const translatorPath = await resolver.resolvePath('./runtime/utils/translate')
+    const localeTemplate = addTemplate({
+      filename: 'eponyme-locale.mjs',
+      write: true,
+      getContents: () => renderEponymeLocaleModule(locale, translatorPath),
+    })
+
+    nuxt.options.alias['#eponyme/locale'] = localeTemplate.dst
+    addTypeTemplate({
+      filename: 'types/eponyme-locale.d.ts',
+      getContents: () => `declare module '#eponyme/locale' {\n`
+        + `  import type { EponymeLocaleDefinition, EponymeMessageKey } from ${JSON.stringify(resolver.resolve('./runtime/locales'))}\n`
+        + `  import type { EponymeTranslateParams } from ${JSON.stringify(resolver.resolve('./runtime/utils/translate'))}\n`
+        + `  export const locale: EponymeLocaleDefinition\n`
+        + `  export function t(key: EponymeMessageKey, params?: EponymeTranslateParams): string\n`
+        + `}\n`,
+    })
+
+    nuxt.options.app.head.script ??= []
+    nuxt.options.app.head.script.unshift({
+      key: 'eponyme-theme',
+      innerHTML: EPONYME_THEME_BOOTSTRAP,
+    })
+    addPlugin(resolver.resolve('./runtime/plugins/eponyme-theme'))
 
     const tagged = tagPreviewPathRoutes(options.previewPaths ?? {}, nuxt.options.routeRules ??= {})
     if (tagged.length) {
@@ -340,10 +477,13 @@ export default defineNuxtModule<ModuleOptions>({
       { name: 'eponymeMediaThumbnailUrl', from: resolver.resolve('./runtime/utils/media-player') },
     ])
     addImportsDir(resolver.resolve('./runtime/composables'))
+    addComponent({ name: 'EponymeRichText', filePath: resolver.resolve('./runtime/components/EponymeRichText') })
     addServerImports([
       { name: 'getEponymeSitemapEntries', from: resolver.resolve('./runtime/server/utils/eponyme-sitemap') },
       { name: 'reindexEponymeEntries', from: resolver.resolve('./runtime/server/utils/eponyme-reindex') },
+      { name: 'runEponymeSchedule', from: resolver.resolve('./runtime/server/utils/eponyme-schedule') },
       { name: 'validateEponymeForm', from: resolver.resolve('./runtime/server/utils/eponyme-form') },
+      { name: 'assertEponymeFormRateLimit', from: resolver.resolve('./runtime/server/utils/eponyme-form') },
       { name: 'getEponymeCacheTags', from: resolver.resolve('./runtime/server/utils/eponyme-cache') },
     ])
     addRouteMiddleware({

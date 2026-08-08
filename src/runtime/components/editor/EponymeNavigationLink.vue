@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { computed } from 'vue'
 import EPButton from '../ui/EPButton.vue'
 
@@ -55,8 +56,8 @@ const sidebarLabel = computed(() => {
         <span
           v-if="draft"
           class="ep:h-1.5 ep:w-1.5 ep:shrink-0 ep:rounded-full ep:bg-warning-ep"
-          title="Draft"
-          aria-label="Draft"
+          :title="t('entry.draft')"
+          :aria-label="t('entry.draft')"
         />
       </span>
     </NuxtLink>

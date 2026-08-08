@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { computed, ref, watch } from 'vue'
 import EPButton from '../ui/EPButton.vue'
 import EPSelect from '../ui/EPSelect.vue'
@@ -27,10 +28,10 @@ function newToken() {
 const previewToken = ref(newToken())
 
 const options = computed(() => [
-  { label: 'Draft (last saved)', value: 'draft' },
-  { label: 'Published', value: 'published' },
+  { label: t('preview.draft'), value: 'draft' },
+  { label: t('preview.published'), value: 'published' },
   ...history.value.map(version => ({
-    label: `${formatVersionDate(version.createdAt)} · ${version.action}${version.user ? ` · ${version.user.username}` : ''}`,
+    label: `${formatVersionDate(version.createdAt)} · ${t(`history.action.${version.action}`)}${version.user ? ` · ${version.user.username}` : ''}`,
     value: String(version.id),
   })),
 ])
@@ -77,7 +78,7 @@ watch(() => props.name, () => {
   <aside
     v-if="open"
     class="ep:fixed ep:z-100 ep:top-0 ep:right-0 ep:bottom-0 ep:flex ep:w-full ep:flex-col ep:border-l ep:border-border-ep ep:bg-theme-ep ep:shadow-2xl ep:md:w-[45vw] ep:lg:w-[40vw]"
-    aria-label="Preview"
+    :aria-label="t('preview.label')"
   >
     <div class="ep:flex ep:flex-wrap ep:items-center ep:gap-2 ep:border-b ep:border-border-ep ep:p-3">
       <EPSelect

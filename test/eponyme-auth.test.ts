@@ -149,7 +149,7 @@ describe('EponymeAuthService', () => {
     expect(secondOwner.result?.user.role).toBe('owner')
   })
 
-  it('locks an account after repeated invalid passwords', async () => {
+  it('never lets failed passwords lock out the legitimate account', async () => {
     const { client, users } = createAuthClient()
     const service = new EponymeAuthService(client)
     const logs: string[] = []

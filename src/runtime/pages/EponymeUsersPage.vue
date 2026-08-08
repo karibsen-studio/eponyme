@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { useRequestFetch, useRoute, useSeoMeta } from '#app'
 import type { FetchError } from 'ofetch'
 import { computed, ref } from 'vue'
@@ -61,7 +62,7 @@ async function createUser() {
     role.value = 'editor'
   }
   catch (caught) {
-    error.value = (caught as FetchError).statusMessage ?? 'Unable to create user.'
+    error.value = (caught as FetchError).statusMessage ?? t('server.userCreateFailed')
   }
 }
 
@@ -186,8 +187,8 @@ function replaceUser(user: EponymeAuthUser) {
 
     <EPDialog
       :open="createOpen"
-      title="Add user"
-      description="A temporary password will be generated and shown once."
+      :title="t('users.add')"
+      :description="t('users.addDescription')"
       @update:open="createOpen = $event"
     >
       <form
@@ -196,8 +197,8 @@ function replaceUser(user: EponymeAuthUser) {
       >
         <EPFormField
           id="eponyme-user-username"
-          label="Username"
-          description="3 to 50 letters, numbers, dots, underscores or hyphens."
+          :label="t('users.username')"
+          :description="t('users.usernameHint')"
           required
         >
           <EPInputText
@@ -209,7 +210,7 @@ function replaceUser(user: EponymeAuthUser) {
         </EPFormField>
         <EPFormField
           id="eponyme-user-role"
-          label="Role"
+          :label="t('users.role')"
           required
         >
           <EPSelect

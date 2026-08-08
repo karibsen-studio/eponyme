@@ -64,9 +64,9 @@ useSeoMeta({
           allowfullscreen
         />
       </div>
-      <div
+      <EponymeRichText
         class="body"
-        v-html="article.body"
+        :html="article.body"
       />
     </article>
   </main>
