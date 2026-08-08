@@ -3,7 +3,7 @@ import { useEponymeService } from '../../services/eponyme-service'
 import { requireEponymeUser } from '../../utils/auth'
 import { getEponymeCacheTags, setEponymePublicCache } from '../../utils/eponyme-cache'
 import { splitEponymeCollectionEntry } from '../../utils/eponyme-entry'
-import { interpolateEponymeContent } from '../../utils/eponyme-variables'
+import { interpolateEponymeEntry } from '../../utils/eponyme-variables'
 import type { EponymeVersionSelector } from '../../services/eponyme-store'
 
 /** `draft`, `published`, or a numeric version id taken from the history. */
@@ -31,6 +31,6 @@ export default defineEventHandler(async (event) => {
   if (!result) throw createError({ statusCode: 404, statusMessage: 'Eponyme entry not found.' })
   // `raw=1` is what the dashboard editor asks for: it must show `{{ currentYear }}`
   // so the variable stays editable instead of being replaced by its value.
-  const data = raw ? result.data : interpolateEponymeContent(result.data)
+  const data = raw ? result.data : interpolateEponymeEntry(useEponymeService().getSchema(name), result.data)
   return requestedVersion ? { ...result, data } : { data }
 })

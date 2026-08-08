@@ -1,4 +1,6 @@
+import type { EponymeSchema } from '../types'
 import type { EponymeVariableDefinition, EponymeVariableValue, EponymeVariables } from '../types/variables'
+import { mapEponymeRichText } from './rich-text-fields'
 
 /**
  * `{{ name }}` — the name is a plain identifier, never an expression. Content is
@@ -69,6 +71,32 @@ export function summariseEponymeVariables(custom: EponymeVariables = {}): Array<
 export function interpolateEponymeText(text: string, variables: Record<string, string>): string {
   if (!text.includes('{{')) return text
   return text.replace(VARIABLE_PATTERN, (match, name: string) => variables[name] ?? match)
+}
+
+/**
+ * Same substitution, but a variable landing inside rich text is HTML-escaped first.
+ *
+ * A variable's value is a string, not markup — and a host may well compute it from data it
+ * does not control. Substituted raw into stored HTML it would be parsed as markup, which is
+ * exactly the hole the write-time sanitisation closes everywhere else.
+ *
+ * Rich text is resolved first so the general pass below, which knows nothing of HTML, finds
+ * no `{{ name }}` left to replace there.
+ */
+export function interpolateEponymeEntryData<T>(schema: EponymeSchema | undefined, data: T, variables: Record<string, string>): T {
+  if (!schema || !data || typeof data !== 'object' || Array.isArray(data)) return interpolateEponymeValue(data, variables)
+  const escaped = Object.fromEntries(Object.entries(variables).map(([name, value]) => [name, escapeHtml(value)]))
+  const resolved = mapEponymeRichText(schema, data as Record<string, unknown>, html => interpolateEponymeText(html, escaped))
+  return interpolateEponymeValue(resolved, variables) as T
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
 
 /**

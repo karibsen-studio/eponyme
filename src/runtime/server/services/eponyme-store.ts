@@ -9,6 +9,7 @@ import { normalizeSlug } from '../../utils/normalize-slug'
 import { applyPreviewSlug } from '../../utils/preview'
 import { validateEponymeData, validateEponymePatch, type ValidationErrors, type ValidationMode } from '../../utils/validate-eponyme-data'
 import { normalizeEponymeValues } from '../../utils/normalize-eponyme-values'
+import { eponymeRichTextRejections } from '../../utils/sanitize-rich-text'
 import { buildEponymeIndexRows, describeEponymeIndexSchema, eponymeIndexKeys, foldEponymeIndexValue, type EponymeIndexRow } from '../../utils/eponyme-entry-index'
 
 export type EponymeAction = 'draft' | 'publish'
@@ -559,11 +560,13 @@ export class EponymeService {
   private normalizeState(schema: EponymeSchema, value: unknown): StoredEponymeState {
     const stored = getStoredState(value)
     if (!stored) return this.createState(schema, value)
+    // Normalised as well as reconciled: an import and a restore write content this server
+    // never validated on the way in, and they must land under the same rules as a save.
     return {
       __eponyme: {
         version: 1,
-        draft: this.reconcile(schema, stored.draft, 'draft'),
-        published: this.reconcile(schema, stored.published, 'publish'),
+        draft: normalizeEponymeValues(schema, this.reconcile(schema, stored.draft, 'draft')),
+        published: normalizeEponymeValues(schema, this.reconcile(schema, stored.published, 'publish')),
         status: stored.status,
         publishedAt: stored.publishedAt,
       },
@@ -1123,7 +1126,10 @@ export class EponymeService {
 
     const defaults = createDefaultEponymeData(definition.fields) as Record<string, unknown>
     const data = normalizeEponymeValues(definition.fields, { ...defaults, ...input, [definition.slugField]: slug })
-    const errors = validateEponymePatch(definition.fields, data, data, 'draft')
+    const errors = mergeErrors(
+      validateEponymePatch(definition.fields, data, data, 'draft'),
+      eponymeRichTextRejections(definition.fields, input),
+    )
     if (Object.keys(errors).length) return { errors }
 
     const state: StoredEponymeState = {
@@ -1267,9 +1273,12 @@ export class EponymeService {
     // the canonical form rather than on whatever the client happened to send.
     const data = normalizeEponymeValues(schema, { ...state.__eponyme.draft, ...(payload as Record<string, unknown>) })
     const patchErrors = validateEponymePatch(schema, normalizeEponymeValues(schema, payload as Record<string, unknown>), data, action)
+    // Read from the payload, not from `data`: the normalisation above has already removed
+    // whatever there was to complain about.
+    const stripped = eponymeRichTextRejections(schema, payload as Record<string, unknown>)
     const errors = action === 'publish'
-      ? mergeErrors(patchErrors, validateEponymeData(schema, data, 'publish'))
-      : patchErrors
+      ? mergeErrors(patchErrors, stripped, validateEponymeData(schema, data, 'publish'))
+      : mergeErrors(patchErrors, stripped)
     if (Object.keys(errors).length) return { errors }
 
     const publishedAt = action === 'publish' ? new Date().toISOString() : state.__eponyme.publishedAt
