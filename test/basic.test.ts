@@ -614,6 +614,45 @@ describe('ssr', async () => {
       .rejects.toMatchObject({ statusCode: 422, data: { errors: { email: expect.any(Array) } } })
   })
 
+  it('collects submissions a custom route stored itself', async () => {
+    // Still no public endpoint: storing is the host route's decision, not a visitor's.
+    await expect($fetch('/api/eponyme-forms/partnership', {
+      method: 'POST',
+      body: { company: 'Acme', email: 'ada@example.com' },
+    })).rejects.toMatchObject({ statusCode: 404 })
+
+    await expect($fetch('/partnership', { method: 'POST', body: { company: 'Spam Inc', email: 'bot@example.com' } }))
+      .rejects.toMatchObject({ statusCode: 403 })
+
+    // Validation still applies to what the route hands over.
+    await expect($fetch('/partnership', { method: 'POST', body: { company: 'Acme', email: 'nope' } }))
+      .rejects.toMatchObject({ statusCode: 422, data: { errors: { email: expect.any(Array) } } })
+
+    await expect($fetch('/partnership', { method: 'POST', body: { company: 'Acme', email: 'ada@example.com' } }))
+      .resolves.toMatchObject({ stored: true, id: expect.any(String) })
+
+    const listed = await $fetch<{ submissions: Array<{ data: { company: string } }>, total: number }>(
+      '/api/eponyme-forms/partnership/submissions',
+      authenticated(),
+    )
+    expect(listed.total).toBe(1)
+    expect(listed.submissions[0]!.data).toMatchObject({ company: 'Acme', email: 'ada@example.com' })
+
+    // And the dashboard shows the table rather than the "does not store" notice.
+    const page = String(await $fetch('/__eponyme/partnership', authenticated()))
+    expect(page).not.toContain('does not store its submissions')
+    expect(page).toContain('Acme')
+  })
+
+  it('refuses to store a submission for a form that does not declare it', async () => {
+    await expect($fetch('/newsletter-store', { method: 'POST', body: { email: 'ada@example.com' } }))
+      .rejects.toMatchObject({ statusCode: 500 })
+
+    // Nothing was collected on the way out.
+    await expect($fetch('/api/eponyme-forms/newsletter/submissions', authenticated()))
+      .rejects.toMatchObject({ statusCode: 404 })
+  })
+
   it('rate-limits a custom route that opts in, the way the managed endpoint does', async () => {
     const limit = 20
     const post = () => $fetch('/throttled', { method: 'POST', body: { email: 'ada@example.com' } })

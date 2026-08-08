@@ -483,6 +483,8 @@ export default defineNuxtModule<ModuleOptions>({
       { name: 'reindexEponymeEntries', from: resolver.resolve('./runtime/server/utils/eponyme-reindex') },
       { name: 'runEponymeSchedule', from: resolver.resolve('./runtime/server/utils/eponyme-schedule') },
       { name: 'validateEponymeForm', from: resolver.resolve('./runtime/server/utils/eponyme-form') },
+      // Lets a route Eponyme does not own feed the dashboard's submission list.
+      { name: 'storeEponymeFormSubmission', from: resolver.resolve('./runtime/server/utils/eponyme-form') },
       { name: 'assertEponymeFormRateLimit', from: resolver.resolve('./runtime/server/utils/eponyme-form') },
       { name: 'getEponymeCacheTags', from: resolver.resolve('./runtime/server/utils/eponyme-cache') },
     ])

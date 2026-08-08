@@ -3,11 +3,13 @@ import { t } from '#eponyme/locale'
 import { useAsyncData, useRequestFetch } from '#app'
 import { FlexRender, createColumnHelper, getCoreRowModel, getSortedRowModel, useVueTable } from '@tanstack/vue-table'
 import type { ColumnDef, SortingState } from '@tanstack/vue-table'
+import type { FetchError } from 'ofetch'
 import { computed, ref, watch } from 'vue'
 import type { EponymeFormDefinitionBase } from '../../types'
 import type { EponymeFormSubmission, EponymeFormSubmissionPage } from '../../server/services/eponyme-form-store'
 import { humanizeLabel } from '../../utils/humanize-label'
 import { useEponymeAuth } from '../../composables/useEponymeAuth'
+import EPAlertDialog from '../ui/EPAlertDialog.vue'
 import EPBadge from '../ui/EPBadge.vue'
 import EPButton from '../ui/EPButton.vue'
 import EPDialog from '../ui/EPDialog.vue'
@@ -17,17 +19,19 @@ const props = defineProps<{ name: string, definition: EponymeFormDefinitionBase 
 
 const requestFetch = useRequestFetch()
 const auth = useEponymeAuth()
-const managed = computed(() => props.definition.submission.mode === 'managed')
+const collects = computed(() => props.definition.submission.store)
 const page = ref(1)
 const sorting = ref<SortingState>([{ id: 'createdAt', desc: true }])
 const selected = ref<EponymeFormSubmission>()
-const clearing = ref(false)
+const submissionAction = ref<{ type: 'clear' } | { type: 'delete', submission: EponymeFormSubmission }>()
+const submissionActionPending = ref(false)
+const submissionActionError = ref('')
 
 const label = computed(() => props.definition.label || humanizeLabel(props.name.split('/').at(-1) || props.name))
 
 const { data: response, pending, refresh } = useAsyncData(
   () => `eponyme:form:${props.name}:${page.value}`,
-  () => managed.value
+  () => collects.value
     ? requestFetch<EponymeFormSubmissionPage>(`/api/eponyme-forms/${props.name}/submissions`, { query: { page: page.value } })
     : Promise.resolve(undefined),
   { watch: [page, () => props.name] },
@@ -96,27 +100,50 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat(EPONYME_DATE_LOCALE, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
 }
 
-async function clearAll() {
-  if (!confirm(`Delete all ${total.value} submissions of “${label.value}”? This cannot be undone.`)) return
-  clearing.value = true
-  try {
-    await requestFetch(`/api/eponyme-forms/${props.name}/submissions`, { method: 'DELETE' })
-    selected.value = undefined
-    page.value = 1
-    await refresh()
-  }
-  finally {
-    clearing.value = false
-  }
+function requestClearAll() {
+  submissionAction.value = { type: 'clear' }
+  submissionActionError.value = ''
 }
 
-async function deleteSubmission(submission: EponymeFormSubmission) {
-  if (!confirm('Delete this submission? This cannot be undone.')) return
-  await requestFetch(`/api/eponyme-forms/${props.name}/submissions/${submission.id}`, { method: 'DELETE' })
-  if (selected.value?.id === submission.id) selected.value = undefined
-  // Deleting the last row of a page would otherwise leave an empty view.
-  if (submissions.value.length === 1 && page.value > 1) page.value -= 1
-  else await refresh()
+function requestDeleteSubmission(submission: EponymeFormSubmission) {
+  submissionAction.value = { type: 'delete', submission }
+  submissionActionError.value = ''
+}
+
+function setSubmissionActionOpen(open: boolean) {
+  if (open || submissionActionPending.value) return
+  submissionAction.value = undefined
+  submissionActionError.value = ''
+}
+
+async function confirmSubmissionAction() {
+  const action = submissionAction.value
+  if (!action || submissionActionPending.value) return
+  submissionActionPending.value = true
+  submissionActionError.value = ''
+  try {
+    if (action.type === 'clear') {
+      await requestFetch(`/api/eponyme-forms/${props.name}/submissions`, { method: 'DELETE' })
+      selected.value = undefined
+      page.value = 1
+      await refresh()
+    }
+    else {
+      await requestFetch(`/api/eponyme-forms/${props.name}/submissions/${action.submission.id}`, { method: 'DELETE' })
+      if (selected.value?.id === action.submission.id) selected.value = undefined
+      // Deleting the last row of a page would otherwise leave an empty view.
+      if (submissions.value.length === 1 && page.value > 1) page.value -= 1
+      else await refresh()
+    }
+    submissionAction.value = undefined
+  }
+  catch (caught) {
+    submissionActionError.value = (caught as FetchError).statusMessage
+      ?? t(action.type === 'clear' ? 'submissions.clearFailed' : 'submissions.deleteFailed')
+  }
+  finally {
+    submissionActionPending.value = false
+  }
 }
 </script>
 
@@ -125,7 +152,7 @@ async function deleteSubmission(submission: EponymeFormSubmission) {
     <header class="ep:flex ep:flex-wrap ep:items-start ep:justify-between ep:gap-4">
       <div>
         <p class="ep:m-0 ep:text-[11px] ep:font-semibold ep:tracking-widest ep:text-muted-ep ep:uppercase">
-          Form
+          {{ t('submissions.mode') }}
         </p>
         <h1 class="ep:mt-2 ep:mb-0 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-white">
           {{ label }}
@@ -138,37 +165,37 @@ async function deleteSubmission(submission: EponymeFormSubmission) {
         </p>
       </div>
       <div class="ep:flex ep:items-center ep:gap-3">
-        <EPBadge :variant="managed ? 'success' : 'neutral'">
+        <EPBadge :variant="collects ? 'success' : 'neutral'">
           {{ definition.submission.mode }}
         </EPBadge>
         <EPButton
-          v-if="managed && auth.canEdit.value && total > 0"
+          v-if="collects && auth.canEdit.value && total > 0"
           size="sm"
           variant="danger"
-          :loading="clearing"
-          @click="clearAll"
+          @click="requestClearAll"
         >
-          Clear all
+          {{ t('action.clearAll') }}
         </EPButton>
       </div>
     </header>
 
     <div
-      v-if="!managed"
+      v-if="!collects"
       class="ep:mt-8 ep:rounded-xl ep:border ep:border-dashed ep:border-border-ep ep:p-8 ep:text-center"
     >
       <p class="ep:m-0 ep:text-sm ep:text-muted-ep">
-        This form uses the custom submission mode, so Eponyme does not store its submissions.
+        {{ t('submissions.customTitle') }}
       </p>
       <p class="ep:mt-2 ep:mb-0 ep:text-xs ep:text-muted-ep">
-        Switch it to <code>submission: {{ '{' }} mode: 'managed' {{ '}' }}</code> to collect them here.
+        Switch it to <code>submission: {{ '{' }} mode: 'managed' {{ '}' }}</code> to collect them here,
+        or add <code>store: true</code> and call <code>storeEponymeFormSubmission()</code> from your own route.
       </p>
     </div>
     <p
       v-else-if="pending"
       class="ep:mt-8 ep:text-sm ep:text-muted-ep"
     >
-      Loading…
+      {{ t('action.loading') }}
     </p>
     <div
       v-else-if="submissions.length"
@@ -236,9 +263,9 @@ async function deleteSubmission(submission: EponymeFormSubmission) {
                   size="sm"
                   variant="danger"
                   class="ep:opacity-0 ep:group-hover:opacity-100 ep:focus-visible:opacity-100"
-                  @click="deleteSubmission(row.original)"
+                  @click="requestDeleteSubmission(row.original)"
                 >
-                  Delete
+                  {{ t('action.delete') }}
                 </EPButton>
               </td>
             </tr>
@@ -256,14 +283,14 @@ async function deleteSubmission(submission: EponymeFormSubmission) {
             :disabled="page <= 1"
             @click="page -= 1"
           >
-            Previous
+            {{ t('action.previous') }}
           </EPButton>
           <EPButton
             size="sm"
             :disabled="page >= pageCount"
             @click="page += 1"
           >
-            Next
+            {{ t('action.next') }}
           </EPButton>
         </div>
       </div>
@@ -273,13 +300,13 @@ async function deleteSubmission(submission: EponymeFormSubmission) {
       class="ep:mt-8 ep:rounded-xl ep:border ep:border-dashed ep:border-border-ep ep:p-8 ep:text-center"
     >
       <p class="ep:m-0 ep:text-sm ep:text-muted-ep">
-        No submissions yet.
+        {{ t('submissions.empty') }}
       </p>
     </div>
 
     <EPDialog
       :open="Boolean(selected)"
-      title="Submission"
+      :title="t('submissions.detail')"
       :description="selected ? formatDate(selected.createdAt) : ''"
       @update:open="value => { if (!value) selected = undefined }"
     >
@@ -295,10 +322,30 @@ async function deleteSubmission(submission: EponymeFormSubmission) {
             {{ humanizeLabel(String(fieldName), field.options.label) }}
           </dt>
           <dd class="ep:m-0 ep:mt-1 ep:whitespace-pre-wrap ep:text-sm ep:text-white">
-            {{ formatValue(selected.data[fieldName]) || '—' }}
+            {{ formatValue(selected.data[fieldName]) || t('action.empty') }}
           </dd>
         </div>
       </dl>
     </EPDialog>
+
+    <EPAlertDialog
+      :open="Boolean(submissionAction)"
+      :label="submissionAction ? t(submissionAction.type === 'clear' ? 'submissions.clearTitle' : 'submissions.deleteTitle') : ''"
+      :description="submissionAction ? t(submissionAction.type === 'clear' ? 'submissions.clearDescription' : 'submissions.deleteDescription', submissionAction.type === 'clear' ? { count: total, form: label } : undefined) : ''"
+      :confirm-label="submissionAction ? t(submissionAction.type === 'clear' ? 'submissions.clearAction' : 'submissions.deleteAction') : ''"
+      confirm-variant="danger"
+      :confirm-loading="submissionActionPending"
+      :close-on-confirm="false"
+      @update:open="setSubmissionActionOpen"
+      @confirm="confirmSubmissionAction"
+    >
+      <p
+        v-show="submissionActionError"
+        role="alert"
+        class="ep:m-0 ep:rounded-lg ep:bg-danger-ep/10 ep:p-3 ep:text-sm ep:text-danger-ep"
+      >
+        {{ submissionActionError }}
+      </p>
+    </EPAlertDialog>
   </section>
 </template>

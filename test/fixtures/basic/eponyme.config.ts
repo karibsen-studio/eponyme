@@ -23,12 +23,23 @@ export default defineEponymeConfig({
       phone: field.phone({ defaultCountry: 'FR', countries: ['FR', 'BE'] }),
       message: field.textarea({ required: true }),
     },
-    submission: { mode: 'managed' },
+    submission: { mode: 'managed', maxStored: 100, retentionDays: 30 },
     maxBodyBytes: 512,
+  }),
+  limited: form({
+    fields: { value: field.string({ required: true }) },
+    submission: { mode: 'managed', maxStored: 2, retentionDays: false },
   }),
   // No `submission` key: this must default to `custom`, so it has no POST route.
   newsletter: form({
     fields: { email: field.email({ required: true }) },
+  }),
+  partnership: form({
+    fields: {
+      company: field.string({ required: true }),
+      email: field.email({ required: true }),
+    },
+    submission: { mode: 'custom', store: true },
   }),
   // Its own form name, so its rate-limit window is its own: exhausting it cannot make
   // another test's submissions start failing.
