@@ -196,19 +196,19 @@ watch(() => route.path, () => {
       </div>
       <EponymeNavigationLink
         :to="normalizedBasePath"
-        label="All entries"
+        :label="t('sidebar.allEntries')"
         :active="route.path === normalizedBasePath"
       />
       <EponymeNavigationLink
         v-if="auth.isOwner.value"
         :to="`${normalizedBasePath}/users`"
-        label="Users"
+        :label="t('sidebar.users')"
         :active="route.path === `${normalizedBasePath}/users`"
       />
       <div
         class="ep:my-3 ep:px-3 ep:text-[11px] ep:font-semibold ep:tracking-widest ep:text-muted-ep ep:uppercase"
       >
-        Editables
+        {{ t('sidebar.editables') }}
       </div>
       <EponymeSidebarTree
         :nodes="filteredTree"
@@ -224,7 +224,7 @@ watch(() => route.path, () => {
         v-if="isFiltering && !filteredTree.length"
         class="ep:m-0 ep:px-3 ep:py-2 ep:text-xs ep:text-muted-ep"
       >
-        No match for “{{ searchQuery }}”.
+        {{ t('sidebar.noMatch', { query: searchQuery }) }}
       </p>
     </nav>
     <div
@@ -233,20 +233,20 @@ watch(() => route.path, () => {
     >
       <EPAvatar
         size="sm"
-        :fallback="auth.user.value.username"
+        :username="auth.user.value.username"
       />
       <div class="ep:min-w-0 ep:flex-1">
         <p class="ep:m-0 ep:truncate ep:text-xs ep:font-semibold ep:text-white">
           {{ auth.user.value.username }}
         </p>
-        <p class="ep:mt-0.5 ep:mb-0 ep:text-[11px] ep:text-muted-ep ep:capitalize">
-          {{ auth.user.value.role }}
+        <p class="ep:mt-0.5 ep:mb-0 ep:text-[11px] ep:text-muted-ep">
+          {{ t(`role.${auth.user.value.role}`) }}
         </p>
       </div>
       <EPButton
         variant="ghost"
         icon="mingcute:align-arrow-right-line"
-        aria-label="Log out"
+        :aria-label="t('sidebar.logout')"
         @click="logout"
       />
     </div>
@@ -254,6 +254,17 @@ watch(() => route.path, () => {
 </template>
 
 <style scoped>
+@media (max-width: 767px) {
+  .eponyme-sidebar:not(.is-collapsed) {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-bottom: 0;
+  }
+}
+
 @media (min-width: 768px) {
   .eponyme-sidebar {
     width: 350px;

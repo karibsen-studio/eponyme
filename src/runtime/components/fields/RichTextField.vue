@@ -8,11 +8,12 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
 import { EditorContent, Extension, useEditor } from '@tiptap/vue-3'
 import type { UrlValue } from '../../types'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useEponymeVariables } from '../../composables/useEponymeVariables'
 import { findEponymeVariableRanges } from '../../utils/variables'
 import EPDropdownMenu from '../ui/EPDropdownMenu.vue'
 import EPFormField from '../ui/EPFormField.vue'
+import EPImageDialog from '../ui/EPImageDialog.vue'
 import EPLinkDialog from '../ui/EPLinkDialog.vue'
 
 const DownloadableLinkAttribute = Extension.create({
@@ -82,13 +83,16 @@ const props = withDefaults(defineProps<{
   disabled?: boolean
 }>(), {
   errors: () => [],
-  placeholder: 'Start writing…',
+  placeholder: t('richText.placeholder'),
 })
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 const revision = ref(0)
 const linkDialogOpen = ref(false)
+const imageDialogOpen = ref(false)
 const linkValue = ref<UrlValue>({ href: '', type: 'external', openInNewTab: false, download: false })
+const imageValue = ref({ src: '', alt: '' })
+const editingImage = ref(false)
 const initialContent = typeof props.modelValue === 'string' ? props.modelValue : ''
 const editor = useEditor({
   content: initialContent,
@@ -169,15 +173,22 @@ function applyLink(value: UrlValue) {
 function setImage() {
   const instance = editor.value
   if (!instance) return
-  const src = window.prompt('Image URL', 'https://')
-  if (src === null || !src.trim()) return
-  // Same rule and wording as the image field validator, so both reject the same inputs.
-  if (!/^https?:\/\//i.test(src.trim())) {
-    window.alert('Must be an HTTP(S) URL.')
-    return
+  editingImage.value = instance.isActive('image')
+  const attributes = editingImage.value ? instance.getAttributes('image') : {}
+  imageValue.value = {
+    src: typeof attributes.src === 'string' ? attributes.src : '',
+    alt: typeof attributes.alt === 'string' ? attributes.alt : '',
   }
-  const alt = window.prompt('Alt text (describe the image)', '') ?? ''
-  instance.chain().focus().setImage({ src: src.trim(), alt: alt.trim() }).run()
+  imageDialogOpen.value = true
+}
+
+function insertImage(image: { src: string, alt: string }) {
+  const instance = editor.value
+  if (!instance) return
+  const chain = instance.chain().focus()
+  if (editingImage.value) chain.updateAttributes('image', image).run()
+  else chain.setImage(image).run()
+  void nextTick(() => instance.commands.focus())
 }
 
 interface Tool {
@@ -300,7 +311,7 @@ const tools = computed<Tool[]>(() => {
         v-else
         class="ep:min-h-72 ep:p-5 ep:text-sm ep:text-muted-ep"
       >
-        Loading editor…
+        {{ t('richText.loading') }}
       </div>
     </div>
     <p
@@ -314,6 +325,13 @@ const tools = computed<Tool[]>(() => {
       :model-value="linkValue"
       @update:open="linkDialogOpen = $event"
       @update:model-value="applyLink"
+    />
+    <EPImageDialog
+      :open="imageDialogOpen"
+      :model-value="imageValue"
+      :editing="editingImage"
+      @update:open="imageDialogOpen = $event"
+      @insert="insertImage"
     />
   </EPFormField>
 </template>

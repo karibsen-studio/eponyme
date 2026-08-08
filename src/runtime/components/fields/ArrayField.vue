@@ -48,6 +48,18 @@ function itemLabel(index: number) {
   return (props.definition.options.itemLabel || 'Item $i').replaceAll('$i', String(index + 1))
 }
 
+/**
+ * One key per shape rather than fragments glued in the template: `3 / 5 items · min 1` is a
+ * sentence, and nothing guarantees another language keeps that order.
+ */
+const counter = computed(() => {
+  const { minItems, maxItems } = props.definition.options
+  const params = { count: items.value.length, min: minItems ?? 0, max: maxItems ?? 0 }
+  if (minItems !== undefined && maxItems !== undefined) return t('array.counterMinMax', params)
+  if (maxItems !== undefined) return t('array.counterMax', params)
+  return t('array.counterMin', params)
+})
+
 function itemPath(index: number, fieldName?: string) {
   const path = joinFieldPath(basePath.value, index)
   return fieldName ? joinFieldPath(path, fieldName) : path
@@ -107,15 +119,15 @@ async function handleObjectEnter(index: number, fieldName: string) {
         v-for="(item, index) in items"
         :key="index"
         class="eponyme-sortable-item"
-        :class="isSimple ? 'ep:grid ep:min-w-0 ep:grid-cols-[2rem_minmax(0,1fr)_3rem] ep:items-start ep:gap-2' : 'ep:min-w-0 ep:max-w-full ep:rounded-xl ep:bg-selected-ep/30 ep:p-4'"
+        :class="isSimple ? 'ep:grid ep:min-w-0 ep:grid-cols-[2rem_minmax(0,1fr)] ep:items-start ep:gap-2 ep:md:grid-cols-[2rem_minmax(0,1fr)_3rem]' : 'ep:min-w-0 ep:max-w-full ep:rounded-xl ep:bg-selected-ep/30 ep:p-4'"
       >
         <template v-if="isSimple">
           <button
             type="button"
             class="eponyme-drag-handle ep:flex ep:h-12 ep:w-8 ep:cursor-grab ep:items-center ep:justify-center ep:border-0 ep:bg-transparent ep:text-base ep:tracking-tighter ep:text-muted-ep ep:active:cursor-grabbing ep:hover:text-white"
             :disabled="disabled"
-            :aria-label="`Move ${itemLabel(index)}`"
-            title="Drag to reorder"
+            :aria-label="t('array.move', { item: itemLabel(index) })"
+            :title="t('array.drag')"
           >
             ⠿
           </button>
@@ -134,10 +146,21 @@ async function handleObjectEnter(index: number, fieldName: string) {
           </div>
           <EPButton
             icon="mingcute:close-line"
+            class="ep:max-md:hidden"
             :disabled="disabled"
-            :aria-label="`Remove ${itemLabel(index)}`"
+            :aria-label="t('array.remove', { item: itemLabel(index) })"
             @click="removeItem(index)"
           />
+          <EPButton
+            size="sm"
+            variant="danger"
+            class="ep:col-start-2 ep:justify-self-start ep:md:hidden"
+            :disabled="disabled"
+            :aria-label="t('array.delete', { item: itemLabel(index) })"
+            @click="removeItem(index)"
+          >
+            {{ t('action.delete') }}
+          </EPButton>
         </template>
 
         <template v-else>
@@ -156,7 +179,8 @@ async function handleObjectEnter(index: number, fieldName: string) {
             </div>
             <EPButton
               icon="mingcute:close-line"
-              :aria-label="`Remove ${itemLabel(index)}`"
+              class="ep:max-md:hidden"
+              :aria-label="t('array.remove', { item: itemLabel(index) })"
               :disabled="disabled"
               @click="removeItem(index)"
             />
@@ -188,6 +212,16 @@ async function handleObjectEnter(index: number, fieldName: string) {
           >
             {{ error }}
           </p>
+          <EPButton
+            size="sm"
+            variant="danger"
+            class="ep:mt-4 ep:w-full ep:md:hidden"
+            :disabled="disabled"
+            :aria-label="t('array.delete', { item: itemLabel(index) })"
+            @click="removeItem(index)"
+          >
+            {{ t('action.delete') }}
+          </EPButton>
         </template>
       </div>
     </div>
@@ -199,14 +233,13 @@ async function handleObjectEnter(index: number, fieldName: string) {
         :disabled="disabled || (definition.options.maxItems !== undefined && items.length >= definition.options.maxItems)"
         @click="addItem"
       >
-        {{ definition.options.addLabel || 'Add item' }}
+        {{ definition.options.addLabel || t('array.add') }}
       </EPButton>
       <span
         v-if="definition.options.showCounter !== false && (definition.options.minItems !== undefined || definition.options.maxItems !== undefined)"
         class="ep:text-[11px] ep:text-muted-ep"
       >
-        {{ items.length }}<template v-if="definition.options.maxItems !== undefined"> / {{ definition.options.maxItems }}</template>
-        items<template v-if="definition.options.minItems !== undefined"> · min {{ definition.options.minItems }}</template>
+        {{ counter }}
       </span>
     </div>
   </div>

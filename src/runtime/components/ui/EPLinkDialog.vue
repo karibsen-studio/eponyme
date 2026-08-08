@@ -76,14 +76,14 @@ function apply() {
 <template>
   <EPDialog
     :open="open"
-    title="Configure link"
-    description="Choose where the link points and how it should open."
+    :title="t('link.configure')"
+    :description="t('link.configureDescription')"
     @update:open="emit('update:open', $event)"
   >
     <div class="ep:grid ep:gap-5">
       <div>
         <p class="ep:mt-0 ep:mb-2 ep:text-sm ep:font-medium ep:text-white">
-          Link type
+          {{ t('link.type') }}
         </p>
         <EPRadioButton
           :model-value="draftType"
@@ -111,10 +111,10 @@ function apply() {
       >
         <div>
           <p class="ep:m-0 ep:text-sm ep:font-medium ep:text-white">
-            Download file
+            {{ t('link.download') }}
           </p>
           <p class="ep:mt-1 ep:mb-0 ep:text-xs ep:text-muted-ep">
-            A .{{ downloadableExtension }} file was detected. Ask the browser to download it instead of opening it.
+            {{ t('link.downloadHint', { extension: downloadableExtension ?? '' }) }}
           </p>
         </div>
         <EPSwitch
@@ -126,10 +126,10 @@ function apply() {
       <div class="ep:flex ep:items-center ep:justify-between ep:gap-4 ep:rounded-xl ep:bg-selected-ep/40 ep:px-4 ep:py-3">
         <div>
           <p class="ep:m-0 ep:text-sm ep:font-medium ep:text-white">
-            Open in new tab
+            {{ t('link.newTab') }}
           </p>
           <p class="ep:mt-1 ep:mb-0 ep:text-xs ep:text-muted-ep">
-            Keep the current page open when visitors follow this link.
+            {{ t('link.newTabHint') }}
           </p>
         </div>
         <EPSwitch
@@ -143,13 +143,13 @@ function apply() {
           variant="ghost"
           @click="emit('update:open', false)"
         >
-          Cancel
+          {{ t('action.cancel') }}
         </EPButton>
         <EPButton
           variant="primary"
           @click="apply"
         >
-          Apply link
+          {{ t('link.apply') }}
         </EPButton>
       </div>
     </div>
