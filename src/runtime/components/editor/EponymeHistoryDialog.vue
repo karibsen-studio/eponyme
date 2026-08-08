@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { useRequestFetch } from '#app'
+import type { FetchError } from 'ofetch'
 import { ref, watch } from 'vue'
 import EPBadge from '../ui/EPBadge.vue'
+import EPAlertDialog from '../ui/EPAlertDialog.vue'
 import EPButton from '../ui/EPButton.vue'
 import EPDialog from '../ui/EPDialog.vue'
 import type { EponymeHistoryEntry } from '../../server/services/eponyme-store'
@@ -11,22 +14,37 @@ const props = withDefaults(defineProps<{ open: boolean, name: string, canRestore
 const emit = defineEmits<{ 'update:open': [value: boolean], 'restored': [] }>()
 const requestFetch = useRequestFetch()
 const { history, pending, error, load } = useEponymeHistory(() => props.name)
-const restoring = ref<number>()
+const restoreTarget = ref<EponymeHistoryEntry>()
+const restorePending = ref(false)
+const restoreError = ref('')
 
-async function restore(version: EponymeHistoryEntry) {
-  if (!confirm(`Restore the version from ${formatVersionDate(version.createdAt)}?`)) return
-  restoring.value = version.id
-  error.value = ''
+function requestRestore(version: EponymeHistoryEntry) {
+  restoreTarget.value = version
+  restoreError.value = ''
+}
+
+function setRestoreOpen(open: boolean) {
+  if (open || restorePending.value) return
+  restoreTarget.value = undefined
+  restoreError.value = ''
+}
+
+async function restore() {
+  const version = restoreTarget.value
+  if (!version || restorePending.value) return
+  restorePending.value = true
+  restoreError.value = ''
   try {
     await requestFetch(`/api/eponyme-history/${props.name}/${version.id}`, { method: 'PATCH' })
     emit('restored')
+    restoreTarget.value = undefined
     emit('update:open', false)
   }
-  catch {
-    error.value = 'Unable to restore this version.'
+  catch (caught) {
+    restoreError.value = (caught as FetchError).statusMessage ?? t('history.restoreFailed')
   }
   finally {
-    restoring.value = undefined
+    restorePending.value = false
   }
 }
 
@@ -36,15 +54,15 @@ watch(() => props.open, open => open && void load())
 <template>
   <EPDialog
     :open="open"
-    title="Version history"
-    description="Restore an earlier draft or published version of this entry."
+    :title="t('history.title')"
+    :description="t('history.description')"
     @update:open="emit('update:open', $event)"
   >
     <p
       v-if="pending"
       class="ep:text-sm ep:text-muted-ep"
     >
-      Loading versions…
+      {{ t('history.loading') }}
     </p>
     <p
       v-else-if="error"
@@ -56,7 +74,7 @@ watch(() => props.open, open => open && void load())
       v-else-if="!history.length"
       class="ep:text-sm ep:text-muted-ep"
     >
-      No saved versions yet.
+      {{ t('history.empty') }}
     </p>
     <ol
       v-else
@@ -69,31 +87,49 @@ watch(() => props.open, open => open && void load())
       >
         <div class="ep:min-w-0">
           <div class="ep:flex ep:flex-wrap ep:items-center ep:gap-2">
-            <EPBadge :variant="version.status === 'published' ? 'success' : 'warning'">
-              {{ version.action }}
+            <EPBadge :variant="version.status === 'published' ? 'success' : version.status === 'draft' ? 'warning' : 'neutral'">
+              {{ t(`history.action.${version.action}`) }}
             </EPBadge>
             <span class="ep:text-sm ep:font-medium ep:text-white">{{ formatVersionDate(version.createdAt) }}</span>
           </div>
           <p class="ep:mt-1 ep:mb-0 ep:text-xs ep:text-muted-ep">
-            Version #{{ version.id }} ·
+            {{ t('history.version', { id: version.id }) }}
             <template v-if="version.user">
-              by {{ version.user.username }}
+              {{ t('history.by', { user: version.user.username }) }}
             </template>
             <template v-else>
-              author unknown
+              {{ t('history.unknownAuthor') }}
             </template>
           </p>
         </div>
         <EPButton
           v-if="canRestore"
           size="sm"
-          :loading="restoring === version.id"
-          :disabled="restoring !== undefined"
-          @click="restore(version)"
+          @click="requestRestore(version)"
         >
-          Restore
+          {{ t('action.restore') }}
         </EPButton>
       </li>
     </ol>
+
+    <EPAlertDialog
+      :open="Boolean(restoreTarget)"
+      :label="t('history.restoreTitle')"
+      :description="restoreTarget ? t('history.restoreDescription', { date: formatVersionDate(restoreTarget.createdAt) }) : ''"
+      :confirm-label="t('history.restoreAction')"
+      confirm-variant="primary"
+      :confirm-loading="restorePending"
+      :close-on-confirm="false"
+      @update:open="setRestoreOpen"
+      @confirm="restore"
+    >
+      <p
+        v-show="restoreError"
+        role="alert"
+        class="ep:m-0 ep:rounded-lg ep:bg-danger-ep/10 ep:p-3 ep:text-sm ep:text-danger-ep"
+      >
+        {{ restoreError }}
+      </p>
+    </EPAlertDialog>
   </EPDialog>
 </template>

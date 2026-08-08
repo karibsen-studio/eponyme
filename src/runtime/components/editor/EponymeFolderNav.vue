@@ -117,7 +117,7 @@ watch(() => hiddenBreadcrumbs.value.map(breadcrumb => breadcrumb.path).join('|')
                   class="eponyme-breadcrumb-scroll-hint ep:pointer-events-none ep:absolute ep:right-2 ep:bottom-2 ep:left-2 ep:flex ep:h-14 ep:items-end ep:justify-center ep:pb-1 ep:text-center ep:text-[10px] ep:font-semibold ep:tracking-widest ep:text-muted-ep ep:uppercase"
                   aria-hidden="true"
                 >
-                  Scroll ↓
+                  {{ t('nav.scroll') }}
                 </div>
               </Transition>
             </div>

@@ -5,6 +5,7 @@ export interface EponymeCollectionDefinitionBase {
   __eponymeCollection: true
   label?: string
   description?: string
+  addLabel?: string
   fields: EponymeSchema
   slugField: string
   titleField: string
@@ -13,6 +14,8 @@ export interface EponymeCollectionDefinitionBase {
 export interface EponymeCollectionOptions<T extends EponymeSchema = EponymeSchema> {
   label?: string
   description?: string
+  /** Replaces the whole text of the create button. Defaults to `+ New <singular label>`. */
+  addLabel?: string
   fields: T
   slugField: keyof T & string
   titleField: keyof T & string

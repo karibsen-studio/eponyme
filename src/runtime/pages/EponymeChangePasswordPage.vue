@@ -7,10 +7,11 @@ import { useEponymeAuth } from '../composables/useEponymeAuth'
 import { useEponymeFavicon } from '../composables/useEponymeFavicon'
 import EPButton from '../components/ui/EPButton.vue'
 import EPFormField from '../components/ui/EPFormField.vue'
-import EPInputText from '../components/ui/EPInputText.vue'
+import EPInputPassword from '../components/ui/EPInputPassword.vue'
+import '../assets/dashboard.css'
 
 useEponymeFavicon()
-useSeoMeta({ title: 'Change password · Eponyme' })
+useSeoMeta({ title: t('password.title') })
 
 const auth = useEponymeAuth()
 const currentPassword = ref('')
@@ -45,13 +46,13 @@ async function logout() {
   <main class="eponyme-root ep:flex ep:min-h-screen ep:items-center ep:justify-center ep:bg-theme-ep ep:px-6 ep:py-12 ep:font-sans ep:text-text-ep">
     <section class="ep:w-full ep:max-w-md">
       <p class="ep:m-0 ep:text-[11px] ep:font-semibold ep:tracking-widest ep:text-muted-ep ep:uppercase">
-        Eponyme
+        {{ t('sidebar.logo') }}
       </p>
       <h1 class="ep:mt-2 ep:mb-2 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-white">
-        Choose a new password
+        {{ t('password.heading') }}
       </h1>
       <p class="ep:mt-0 ep:mb-8 ep:text-sm ep:leading-relaxed ep:text-muted-ep">
-        Your temporary password must be replaced before you can use the dashboard. Use at least 12 characters.
+        {{ t('password.subheading') }}
       </p>
       <form
         class="ep:grid ep:gap-5"
@@ -59,40 +60,37 @@ async function logout() {
       >
         <EPFormField
           id="eponyme-current-password"
-          label="Current password"
+          :label="t('password.current')"
           required
         >
-          <EPInputText
+          <EPInputPassword
             id="eponyme-current-password"
             v-model="currentPassword"
-            type="password"
             autocomplete="current-password"
             required
           />
         </EPFormField>
         <EPFormField
           id="eponyme-new-password"
-          label="New password"
-          description="12 to 128 characters, different from the current password."
+          :label="t('password.new')"
+          :description="t('password.newHint')"
           required
         >
-          <EPInputText
+          <EPInputPassword
             id="eponyme-new-password"
             v-model="newPassword"
-            type="password"
             autocomplete="new-password"
             required
           />
         </EPFormField>
         <EPFormField
           id="eponyme-confirm-password"
-          label="Confirm new password"
+          :label="t('password.confirm')"
           required
         >
-          <EPInputText
+          <EPInputPassword
             id="eponyme-confirm-password"
             v-model="confirmation"
-            type="password"
             autocomplete="new-password"
             required
           />
@@ -111,10 +109,10 @@ async function logout() {
             :loading="auth.pending.value"
             :disabled="!currentPassword || !newPassword || !confirmation"
           >
-            Change password
+            {{ t('password.submit') }}
           </EPButton>
           <EPButton @click="logout">
-            Sign out
+            {{ t('password.signOut') }}
           </EPButton>
         </div>
       </form>

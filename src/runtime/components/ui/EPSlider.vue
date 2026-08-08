@@ -9,6 +9,8 @@ const props = defineProps<{
   min?: number
   max?: number
   step?: number
+  prefix?: string
+  suffix?: string
   disabled?: boolean
 }>()
 
@@ -48,7 +50,7 @@ function update(values?: number[]) {
       :for="id"
       class="ep:min-w-12 ep:rounded-lg ep:bg-selected-ep ep:px-2.5 ep:py-1.5 ep:text-center ep:font-sans ep:text-sm ep:font-medium ep:text-white"
     >
-      {{ value }}
+      {{ prefix }}{{ value }}{{ suffix }}
     </output>
   </div>
 </template>

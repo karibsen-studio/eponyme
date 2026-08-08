@@ -87,36 +87,36 @@ watch(() => props.name, () => {
         :model-value="selected"
         :options="options"
         content-class="ep:z-110"
-        aria-label="Version to preview"
+        :aria-label="t('preview.version')"
         @update:model-value="selected = $event"
       />
       <EPButton
         icon="mingcute:refresh-2-line"
         variant="ghost"
-        aria-label="Reload preview"
+        :aria-label="t('preview.reload')"
         @click="reload"
       />
       <EPButton
         icon="mingcute:external-link-line"
         variant="ghost"
-        aria-label="Open preview in a new tab"
+        :aria-label="t('preview.openTab')"
         @click="openInNewTab"
       />
       <EPButton
         icon="mingcute:close-line"
         variant="ghost"
-        aria-label="Close preview"
+        :aria-label="t('preview.close')"
         @click="emit('update:open', false)"
       />
     </div>
     <p class="ep:m-0 ep:px-3 ep:py-2 ep:text-[11px] ep:text-muted-ep">
-      Shows saved content — unsaved edits appear after you save.
+      {{ t('preview.hint') }}
     </p>
     <iframe
       :key="previewUrl"
       :src="previewUrl"
-      title="Entry preview"
-      class="ep:min-h-0 ep:w-full ep:flex-1 ep:border-0 ep:bg-white"
+      :title="t('preview.frame')"
+      class="ep:min-h-0 ep:w-full ep:flex-1 ep:border-0 ep:bg-canvas-ep"
     />
   </aside>
 </template>
