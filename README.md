@@ -226,6 +226,43 @@ A phone field is also allowed in a public `form()`.
 
 Eponyme uses the Prisma client owned by your application. It does not create the connection or run migrations.
 
+Install Prisma 7 and its PostgreSQL driver adapter:
+
+```bash
+pnpm add @prisma/client@latest @prisma/adapter-pg@latest
+pnpm add --save-dev prisma@latest dotenv@latest
+```
+
+Generate the client outside `node_modules` and keep the connection URL in Prisma Config:
+
+```prisma
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+```
+
+```ts
+// prisma.config.ts
+import 'dotenv/config'
+import { defineConfig, env } from 'prisma/config'
+
+export default defineConfig({
+  schema: 'prisma/schema.prisma',
+  migrations: {
+    path: 'prisma/migrations',
+  },
+  datasource: {
+    url: env('DATABASE_URL'),
+  },
+})
+```
+
 Export an initialized client from the path configured in `nuxt.config.ts`. Note the
 double tilde: `~~/` points at the project root, where `server/` lives, while `~/` points
 at the source directory (`app/` in Nuxt 4). A relative path such as
@@ -233,14 +270,44 @@ at the source directory (`app/` in Nuxt 4). A relative path such as
 
 ```ts
 // server/utils/prisma.ts
-import { PrismaClient } from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
+import { PrismaClient } from '../../generated/prisma/client'
 
-const prisma = new PrismaClient()
+const prismaGlobal = globalThis as typeof globalThis & { prisma?: PrismaClient }
+
+function createPrismaClient() {
+  const connectionString = process.env.DATABASE_URL
+
+  if (!connectionString)
+    throw new Error('DATABASE_URL is required to initialise Prisma.')
+
+  return new PrismaClient({
+    adapter: new PrismaPg({ connectionString }),
+  })
+}
+
+const prisma = prismaGlobal.prisma ?? createPrismaClient()
+
+if (process.env.NODE_ENV !== 'production')
+  prismaGlobal.prisma = prisma
 
 export default prisma
 ```
 
-Add the required models to your Prisma schema:
+Install the published Eponyme CLI, then let it add the required models and immutable migration
+history to your application:
+
+```bash
+pnpm add --save-dev @eponyme/cli
+pnpm exec eponyme init
+pnpm prisma migrate deploy
+pnpm prisma generate
+pnpm exec eponyme check --client server/utils/prisma.ts
+```
+
+`eponyme init` only writes the host Prisma schema and migration files; it never connects to the
+database. `eponyme check` is read-only and verifies the generated PrismaClient, PostgreSQL tables,
+columns and the Eponyme schema version. The generated models are shown below for reference:
 
 ```prisma
 model Eponyme {
@@ -344,12 +411,27 @@ model EponymeFormSubmission {
   @@index([formName, createdAt])
   @@map("eponyme_form_submissions")
 }
+
+model EponymeRateLimit {
+  key       String   @id
+  count     Int
+  expiresAt DateTime
+
+  @@index([expiresAt])
+  @@map("eponyme_rate_limits")
+}
+
+model EponymeSchema {
+  key       String   @id @default("eponyme")
+  version   Int
+  updatedAt DateTime @updatedAt
+
+  @@map("_eponyme_schema")
+}
 ```
 
-Run the migration with the workflow used by your application.
-
-Upgrading from 0.1.1 requires one migration: `Eponyme.deletedAt`, which backs the trash.
-Deleting a collection entry no longer destroys it.
+Keep the generated migrations in source control. On an upgrade, run `eponyme init` again, inspect
+the newly copied migrations, deploy them, regenerate Prisma and finish with `eponyme check`.
 
 The playground includes the same models in `playground/prisma/schema.prisma`. Copy `playground/.env.example` to `playground/.env`, set `DATABASE_URL`, then run:
 
