@@ -300,7 +300,7 @@ export default defineNuxtModule<ModuleOptions>({
     name: '@karibsen/eponyme',
     configKey: 'eponyme',
     compatibility: {
-      nuxt: '>=4.5.1',
+      nuxt: '>=4.0.0',
     },
   },
 
