@@ -2,7 +2,7 @@ import { createError, defineEventHandler, getQuery, getRequestURL } from 'h3'
 import { useEponymeService } from '../../services/eponyme-service'
 import { requireEponymeUser } from '../../utils/auth'
 import { getEponymeCacheTags, setEponymePublicCache } from '../../utils/eponyme-cache'
-import { interpolateEponymeContent } from '../../utils/eponyme-variables'
+import { interpolateEponymeContent, interpolateEponymeEntry } from '../../utils/eponyme-variables'
 import type { EponymeFilterCondition, EponymeFilterOperators, EponymeFilterRange } from '../../services/eponyme-store'
 
 const MAX_TAKE = 200
@@ -98,5 +98,12 @@ export default defineEventHandler(async (event) => {
     where: readFilter(query, service.collectionFilterKeys(name)),
   })
   if (!page) throw createError({ statusCode: 404, statusMessage: 'Eponyme collection not found.' })
-  return query.raw ? page : interpolateEponymeContent(page)
+  if (query.raw) return page
+  // The entry's own schema is what tells rich text apart from plain text; the envelope
+  // around it — a title carrying a variable — goes through the general pass as before.
+  const fields = service.getCollection(name)?.fields
+  return {
+    ...page,
+    entries: page.entries.map(entry => interpolateEponymeContent({ ...entry, data: interpolateEponymeEntry(fields, entry.data) })),
+  }
 })
