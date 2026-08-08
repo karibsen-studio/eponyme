@@ -499,7 +499,9 @@ export class EponymeService {
       return await this.client.$transaction(tx => fn(tx, name => touched.add(name)), options)
     }
     finally {
-      for (const name of touched) this.invalidate(name)
+      // Awaited, so the shared tier has actually dropped the keys before the caller, and the
+      // response it is about to send, lets a reader repopulate them.
+      await Promise.all([...touched].map(name => this.invalidate(name)))
     }
   }
 
@@ -535,7 +537,7 @@ export class EponymeService {
         const state = this.rowToState(definition.fields, row)
         if (sameRow(state, row)) continue
         await this.client.eponyme.update({ where: { name: row.name }, data: stateToColumns(state) })
-        this.invalidate(row.name)
+        await this.invalidate(row.name)
       }
     }
   }
@@ -698,7 +700,7 @@ export class EponymeService {
     if (!heal && this.healedByRead.has(name)) return { state, updatedAt: row.updatedAt }
     this.healedByRead.add(name)
     const healed = await this.client.eponyme.update({ where: { name }, data: stateToColumns(state) })
-    this.invalidate(name)
+    await this.invalidate(name)
     return { state, updatedAt: healed.updatedAt ?? row.updatedAt }
   }
 
@@ -1256,7 +1258,7 @@ export class EponymeService {
       where: { name, deletedAt: null },
       data: { deletedAt: new Date() },
     })
-    this.invalidate(name)
+    await this.invalidate(name)
     return count > 0
   }
 
@@ -1266,7 +1268,7 @@ export class EponymeService {
       where: { name, deletedAt: { not: null } },
       data: { deletedAt: null },
     })
-    this.invalidate(name)
+    await this.invalidate(name)
     return count > 0
   }
 
@@ -1277,7 +1279,7 @@ export class EponymeService {
     if (!row?.deletedAt) return false
     try {
       await this.client.eponyme.delete({ where: { name } })
-      this.invalidate(name)
+      await this.invalidate(name)
     }
     catch (error) {
       // Already gone, or purged by a concurrent request.
