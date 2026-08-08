@@ -1,8 +1,10 @@
 import { t } from '#eponyme/locale'
-import { createError, defineEventHandler, getRequestHeader, readRawBody, setResponseHeader, setResponseStatus } from 'h3'
+import { createError, defineEventHandler, setResponseHeader, setResponseStatus } from 'h3'
 import { useEponymeFormService } from '../../services/eponyme-form-service'
 import { readEponymeFormRoute } from '../../utils/form-route'
 import { callEponymeBlockingHook, callEponymeHook } from '../../utils/eponyme-hooks'
+import { readEponymeRawBody } from '../../utils/body'
+import { assertEponymeFormRateLimit } from '../../utils/eponyme-form'
 
 /**
  * The only unauthenticated write route in the module. Order matters: reject an
@@ -15,17 +17,15 @@ export default defineEventHandler(async (event) => {
   const definition = route && !route.submissions ? service.getForm(route.name) : undefined
   // A `custom` form stores nothing, so it has no submission endpoint at all.
   if (!route || !definition || definition.submission.mode !== 'managed')
-    throw createError({ statusCode: 404, statusMessage: 'Eponyme form not found.' })
+    throw createError({ statusCode: 404, statusMessage: t('server.formNotFound') })
 
   setResponseHeader(event, 'Cache-Control', 'no-store')
 
-  const declaredLength = Number(getRequestHeader(event, 'content-length'))
-  if (Number.isFinite(declaredLength) && declaredLength > definition.maxBodyBytes)
-    throw createError({ statusCode: 413, statusMessage: 'Submission is too large.' })
+  // The same helper a `custom` route calls, so the two paths cannot drift into applying
+  // different limits under the same configuration.
+  await assertEponymeFormRateLimit(event, route.name)
 
-  const raw = await readRawBody(event, 'utf8')
-  if (raw && Buffer.byteLength(raw, 'utf8') > definition.maxBodyBytes)
-    throw createError({ statusCode: 413, statusMessage: 'Submission is too large.' })
+  const raw = await readEponymeRawBody(event, definition.maxBodyBytes, t('server.submissionTooLarge'))
 
   let payload: unknown
   try {

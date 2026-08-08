@@ -601,6 +601,22 @@ describe('ssr', async () => {
       .rejects.toMatchObject({ statusCode: 422, data: { errors: { email: expect.any(Array) } } })
   })
 
+  it('rate-limits a custom route that opts in, the way the managed endpoint does', async () => {
+    const limit = 20
+    const post = () => $fetch('/throttled', { method: 'POST', body: { email: 'ada@example.com' } })
+
+    for (let attempt = 0; attempt < limit; attempt++)
+      await expect(post()).resolves.toMatchObject({ accepted: true })
+
+    // Refused rather than merely counted, and carrying what a client needs to back off.
+    const refused = await post().catch((error: { statusCode: number, response: Response }) => error)
+    expect(refused).toMatchObject({ statusCode: 429 })
+    const { response } = refused as { response: Response }
+    expect(Number(response.headers.get('retry-after'))).toBeGreaterThan(0)
+    expect(response.headers.get('x-ratelimit-limit')).toBe(String(limit))
+    expect(response.headers.get('x-ratelimit-remaining')).toBe('0')
+  })
+
   it('renders a public form from the composable alone', async () => {
     const html = String(await $fetch('/contact'))
     // Labels and the honeypot come from the config, the markup from the host app.

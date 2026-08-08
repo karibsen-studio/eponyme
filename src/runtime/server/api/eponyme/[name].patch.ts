@@ -1,8 +1,9 @@
 import { t } from '#eponyme/locale'
-import { createError, defineEventHandler, getQuery, getRequestURL, readBody, setResponseStatus } from 'h3'
+import { createError, defineEventHandler, getQuery, getRequestURL, setResponseStatus } from 'h3'
 import { useEponymeService } from '../../services/eponyme-service'
 import { assertEponymeMutationOrigin, requireEponymeUser } from '../../utils/auth'
 import { callEponymeBlockingHook, callEponymeHook } from '../../utils/eponyme-hooks'
+import { readEponymeBody } from '../../utils/body'
 import { splitEponymeCollectionEntry } from '../../utils/eponyme-entry'
 import type { EponymeAction } from '../../services/eponyme-store'
 
@@ -29,7 +30,7 @@ export default defineEventHandler(async (event) => {
   const service = useEponymeService()
   const collection = splitEponymeCollectionEntry(service, name)
 
-  const body = await readBody(event)
+  const body = await readEponymeBody(event)
   const scheduleBody = action === 'schedule' && isObject(body) ? body : undefined
   const data = scheduleBody && isObject(scheduleBody.data) ? scheduleBody.data : body
   // Listeners may amend `data` here, so the hook runs on the payload that will be
