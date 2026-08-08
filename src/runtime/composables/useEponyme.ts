@@ -4,7 +4,7 @@ import { computed, ref } from 'vue'
 import type { ComputedRef, Ref } from 'vue'
 import type eponymeConfig from '#eponyme/config'
 import type { EponymeDataByName, EponymeName } from '../types'
-import type { EponymeAction, EponymeStatus, EponymeVersionSelector } from '../server/services/eponyme-store'
+import type { EponymeAction, EponymeSchedule, EponymeStatus, EponymeVersionSelector } from '../server/services/eponyme-store'
 import { readPreviewQuery, readPreviewVersion } from '../utils/preview'
 import { cacheForPublicRead } from '../utils/hydration-cache'
 import type { ValidationErrors } from '../utils/validate-eponyme-data'
@@ -14,6 +14,8 @@ type EponymeResponse<Name extends ConfigEponymeName> = {
   data: EponymeDataByName<typeof eponymeConfig, Name>
   status: EponymeStatus
   publishedAt: string | null
+  scheduledPublishAt: string | null
+  scheduledUnpublishAt: string | null
 }
 
 export interface UseEponymeOptions {
@@ -35,12 +37,14 @@ export interface UseEponymeResult<Data extends Record<string, unknown>> {
   data: Ref<Data | undefined>
   status: ComputedRef<EponymeStatus>
   publishedAt: ComputedRef<string | null>
+  scheduledPublishAt: ComputedRef<string | null>
+  scheduledUnpublishAt: ComputedRef<string | null>
   pending: ComputedRef<boolean>
   error: Ref<Error | null | undefined>
   errors: Ref<ValidationErrors>
   refresh: () => Promise<void>
   /** Without a patch, saves the data currently held. Publishes unless told otherwise. */
-  save: (patch?: Partial<Data>, action?: EponymeAction) => Promise<Data | undefined>
+  save: (patch?: Partial<Data>, action?: EponymeAction, schedule?: EponymeSchedule) => Promise<Data | undefined>
 }
 
 /** Read and save a configured eponyme through the public or draft API. */
@@ -83,6 +87,8 @@ export function useEponyme<const Name extends ConfigEponymeName>(
   const data = computed(() => response.value?.data)
   const status = computed(() => response.value?.status ?? 'published')
   const publishedAt = computed(() => response.value?.publishedAt ?? null)
+  const scheduledPublishAt = computed(() => response.value?.scheduledPublishAt ?? null)
+  const scheduledUnpublishAt = computed(() => response.value?.scheduledUnpublishAt ?? null)
 
   async function refresh() {
     errors.value = {}
@@ -90,18 +96,20 @@ export function useEponyme<const Name extends ConfigEponymeName>(
   }
 
   async function save(): Promise<Data | undefined>
-  async function save(patch: Partial<Data>, action?: EponymeAction): Promise<Data | undefined>
-  async function save(patch?: Partial<Data>, action: EponymeAction = 'publish') {
+  async function save(patch: Partial<Data>, action?: EponymeAction, schedule?: EponymeSchedule): Promise<Data | undefined>
+  async function save(patch?: Partial<Data>, action: EponymeAction = 'publish', schedule: EponymeSchedule = {}) {
     saving.value = true
     errors.value = {}
     try {
       const next = await requestFetch<EponymeResponse<Name>>(`/api/eponyme/${name}`, {
         method: 'PATCH',
         query: { action },
-        body: patch ?? data.value,
+        body: action === 'schedule'
+          ? { data: patch ?? data.value, ...schedule }
+          : patch ?? data.value,
       })
       response.value = next as typeof response.value
-      if (action === 'publish') {
+      if (action !== 'draft') {
         // Keys are versioned, so match by prefix to drop every cached version.
         clearNuxtData(key => key.startsWith(`eponyme:${name}:`) && key !== cacheKey)
         const parts = String(name).split('/')
@@ -129,6 +137,8 @@ export function useEponyme<const Name extends ConfigEponymeName>(
     data: data as Ref<Data | undefined>,
     status,
     publishedAt,
+    scheduledPublishAt,
+    scheduledUnpublishAt,
     pending: computed(() => loading.value || saving.value),
     error: error as Ref<Error | null | undefined>,
     errors,

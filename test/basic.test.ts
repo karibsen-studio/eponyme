@@ -78,7 +78,7 @@ describe('ssr', async () => {
       ...authenticated(),
     })
     await expect($fetch('/api/eponyme-statuses', authenticated())).resolves.toEqual({
-      statuses: { 'pages/homepage': 'draft' },
+      statuses: { 'pages/homepage': 'published' },
     })
   })
 
@@ -147,6 +147,25 @@ describe('ssr', async () => {
       body: { title: 'Hooked' },
       ...authenticated(),
     })
+    await $fetch('/api/eponyme/pages/homepage?action=schedule', {
+      method: 'PATCH',
+      body: {
+        data: { title: 'Hooked' },
+        scheduledUnpublishAt: '2099-01-01T00:00:00.000Z',
+      },
+      ...authenticated(),
+    })
+    await $fetch('/api/eponyme/pages/homepage?action=unschedule', {
+      method: 'PATCH',
+      body: { title: 'Hooked' },
+      ...authenticated(),
+    })
+    await $fetch('/api/eponyme/pages/homepage?action=unpublish', {
+      method: 'PATCH',
+      body: { title: 'Hooked' },
+      ...authenticated(),
+    })
+    await expect($fetch('/api/eponyme/pages/homepage')).rejects.toMatchObject({ statusCode: 404 })
     await $fetch('/api/eponyme-forms/contact', {
       method: 'POST',
       body: { name: 'Ada', email: 'ada@example.com', message: 'Hook me up.' },
@@ -156,6 +175,9 @@ describe('ssr', async () => {
     // A listener throwing on `saved` must not have failed the save itself.
     expect(seen).toContain('saved:pages/homepage')
     expect(seen).toContain('published:pages/homepage:-')
+    expect(seen).toContain('scheduled:pages/homepage')
+    expect(seen).toContain('unscheduled:pages/homepage')
+    expect(seen).toContain('unpublished:pages/homepage')
     expect(seen).toContain('submitted:contact:true')
 
     // Later tests share this fixture's database, so put it back as it was.
@@ -205,6 +227,12 @@ describe('ssr', async () => {
     expect(html).toContain('Welcome')
     expect(html).toContain('Add item')
     expect(html).toContain('Metadata')
+    expect(html).toContain('aria-label="Entry sections"')
+    expect(html).toContain('Publication')
+    expect(html).toContain('Save')
+    expect(html).toContain('Revert to draft')
+    expect(html).toContain('Unpublish')
+    expect(html).toContain('Schedule')
     expect(html).not.toContain('Loading…')
   })
 
@@ -697,7 +725,7 @@ describe('ssr', async () => {
       query: { version: 'draft' },
       headers: { cookie: viewerCookie },
     })).resolves.toMatchObject({ data: { title: 'Welcome' } })
-    const forbidden = await fetch(url('/api/eponyme/pages/homepage'), {
+    const forbidden = await fetch(url('/api/eponyme/pages/homepage?action=unpublish'), {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', 'cookie': viewerCookie },
       body: JSON.stringify({ title: 'Forbidden edit' }),

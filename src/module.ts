@@ -403,13 +403,14 @@ export default defineNuxtModule<ModuleOptions>({
       { name: 'eponymeMediaThumbnailUrl', from: resolver.resolve('./runtime/utils/media-player') },
     ])
     addImportsDir(resolver.resolve('./runtime/composables'))
-    // The one dashboard component a public page is meant to use: rendering stored HTML
-    // without handing `v-html` to the host application.
     addComponent({ name: 'EponymeRichText', filePath: resolver.resolve('./runtime/components/EponymeRichText') })
     addServerImports([
       { name: 'getEponymeSitemapEntries', from: resolver.resolve('./runtime/server/utils/eponyme-sitemap') },
       { name: 'reindexEponymeEntries', from: resolver.resolve('./runtime/server/utils/eponyme-reindex') },
+      { name: 'runEponymeSchedule', from: resolver.resolve('./runtime/server/utils/eponyme-schedule') },
       { name: 'validateEponymeForm', from: resolver.resolve('./runtime/server/utils/eponyme-form') },
+      { name: 'storeEponymeFormSubmission', from: resolver.resolve('./runtime/server/utils/eponyme-form') },
+      { name: 'assertEponymeFormRateLimit', from: resolver.resolve('./runtime/server/utils/eponyme-form') },
       { name: 'getEponymeCacheTags', from: resolver.resolve('./runtime/server/utils/eponyme-cache') },
     ])
     addRouteMiddleware({
