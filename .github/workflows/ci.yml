@@ -82,9 +82,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Generate the Prisma client
-        run: pnpm --dir ./playground run prisma:generate
-
       - name: Prepare
         run: pnpm dev:prepare
 
