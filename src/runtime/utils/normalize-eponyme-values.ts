@@ -5,6 +5,7 @@ import { normalizeEponymeMediaPlayer } from './media-player'
 import { toEponymePhoneValue } from './normalize-phone'
 import { normalizeEponymeTags } from './normalize-tags'
 import { sanitizeEponymeRichText } from './sanitize-rich-text'
+import { normalizeEponymeDateTime } from './datetime'
 
 /**
  * Rewrites every value that has a canonical form — a phone in E.164, a tag list deduplicated,
@@ -20,13 +21,16 @@ import { sanitizeEponymeRichText } from './sanitize-rich-text'
 export function normalizeEponymeValues(schema: EponymeSchema, data: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = { ...data }
   for (const [name, definition] of Object.entries(schema)) {
-    if (!(name in result)) continue
+    if (!Object.hasOwn(result, name)) continue
     result[name] = normalizeField(definition, result[name])
   }
   return result
 }
 
 function normalizeField(definition: FieldDefinition, value: unknown): unknown {
+  if (definition.type === 'datetime' && typeof value === 'string')
+    return normalizeEponymeDateTime(value) ?? value
+
   if (definition.type === 'richText') return typeof value === 'string' ? sanitizeEponymeRichText(value) : value
 
   if (definition.type === 'phone') return toEponymePhoneValue(value, definition.options)

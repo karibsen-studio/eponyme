@@ -27,7 +27,7 @@ export interface EponymeCollectionDefinition<T extends EponymeSchema = EponymeSc
 
 /**
  * A public form only accepts field types a visitor can meaningfully fill in.
- * `slug`, `richText`, `image`, `date`, `color`, `array`, `section` and `tabs` are
+ * `slug`, `richText`, `image`, `date`, `datetime`, `duration`, `color`, `array`, `section` and `tabs` are
  * authoring concerns and are rejected by `form()`.
  */
 export type EponymeFormFieldDefinition
@@ -85,7 +85,7 @@ export type CollectionSlugField<T extends EponymeSchema> = {
 }[keyof T & string]
 
 export type FieldValue<T extends FieldDefinition>
-  = T extends { type: 'number' } ? number
+  = T extends { type: 'number' | 'duration' } ? number
     : T extends { type: 'boolean' } ? boolean
       : T extends UrlFieldDefinition ? UrlValue
         : T extends MediaPlayerFieldDefinition ? MediaPlayerValue
@@ -127,17 +127,17 @@ export type EponymeCollectionDataByName<
  *
  * The two lists are separate because one runs on values and the other on types, but they
  * describe the same rule: a filterable field is one whose stored form compares correctly as
- * text. That is why `date` is here — validation pins it to `YYYY-MM-DD` — and `number` is
- * not, since `'10'` sorts before `'9'`.
+ * text. That is why `date` and canonical UTC `datetime` are here, while `number` and
+ * `duration` are not, since `'10'` sorts before `'9'`.
  */
-type FilterableFieldType = 'tags' | 'checkboxGroup' | 'select' | 'radio' | 'boolean' | 'date'
+type FilterableFieldType = 'tags' | 'checkboxGroup' | 'select' | 'radio' | 'boolean' | 'date' | 'datetime'
 
 /** A multi-valued field is filtered by one of its items, not by the whole list. */
 type FilterOperand<T extends FieldDefinition> = FieldValue<T> extends readonly (infer Item)[] ? Item : FieldValue<T>
 
 /**
  * Bounds, offered only where alphabetical order is the value's natural order — which is
- * `field.date()`, pinned by validation to `YYYY-MM-DD`. On a tag or a select, comparing
+ * `field.date()` and `field.datetime()`, both pinned to chronological strings. On a tag or a select, comparing
  * with `gte` would sort labels, which answers no question anyone asks.
  */
 export interface EponymeFilterBounds {
@@ -160,7 +160,7 @@ type FilterOperators<T extends FieldDefinition> = {
    * scale the way the others do.
    */
   contains?: string
-} & (T extends { type: 'date' } ? EponymeFilterBounds : unknown)
+} & (T extends { type: 'date' | 'datetime' } ? EponymeFilterBounds : unknown)
 
 /** The values of one key are ORed; the keys of a `where` are ANDed. */
 export type EponymeFieldFilter<T extends FieldDefinition>

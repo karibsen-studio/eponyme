@@ -120,3 +120,20 @@ model EponymeFormSubmission {
   @@index([formName, createdAt])
   @@map("eponyme_form_submissions")
 }
+
+model EponymeRateLimit {
+  key       String   @id
+  count     Int      @default(1)
+  expiresAt DateTime
+
+  @@index([expiresAt])
+  @@map("eponyme_rate_limits")
+}
+
+model EponymeSchema {
+  key       String   @id @default("eponyme")
+  version   Int
+  updatedAt DateTime @updatedAt
+
+  @@map("_eponyme_schema")
+}

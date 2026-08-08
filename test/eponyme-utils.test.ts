@@ -216,6 +216,10 @@ describe('form()', () => {
     expect(() => form({ fields: { cover: field.image() } })).toThrow(/field\.image\(\)/)
     // @ts-expect-error date is not a public form field
     expect(() => form({ fields: { day: field.date() } })).toThrow(/field\.date\(\)/)
+    // @ts-expect-error datetime is not a public form field
+    expect(() => form({ fields: { startsAt: field.datetime() } })).toThrow(/field\.datetime\(\)/)
+    // @ts-expect-error duration is not a public form field
+    expect(() => form({ fields: { runtime: field.duration() } })).toThrow(/field\.duration\(\)/)
     // @ts-expect-error color is not a public form field
     expect(() => form({ fields: { tint: field.color() } })).toThrow(/field\.color\(\)/)
     // @ts-expect-error array is not a public form field

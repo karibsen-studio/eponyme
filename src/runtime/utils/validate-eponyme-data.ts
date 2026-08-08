@@ -6,6 +6,7 @@ import { isFieldVisible } from './is-field-visible'
 import { MEDIA_PLAYER_PROVIDERS, mediaPlayerProviders, parseEponymeMediaUrl } from './media-player'
 import { normalizeEponymePhone } from './normalize-phone'
 import { normalizeEponymeTags } from './normalize-tags'
+import { normalizeEponymeDateTime } from './datetime'
 
 /**
  * Errors are keyed by the path of the field they belong to — `title`, `hero.title`,
@@ -174,22 +175,32 @@ function validateFieldRules(
 
   if (definition.type === 'number') {
     if (typeof value !== 'number' || Number.isNaN(value)) {
-      addError(errors, name, 'Must be a number.')
+      addError(errors, name, t('field.number'))
       return
     }
-    if (definition.options.min !== undefined && value < definition.options.min) addError(errors, name, `Must be at least ${definition.options.min}.`)
-    if (definition.options.max !== undefined && value > definition.options.max) addError(errors, name, `Must be at most ${definition.options.max}.`)
+    if (definition.options.min !== undefined && value < definition.options.min) addError(errors, name, t('field.min', { min: definition.options.min }))
+    if (definition.options.max !== undefined && value > definition.options.max) addError(errors, name, t('field.max', { max: definition.options.max }))
+    return
+  }
+
+  if (definition.type === 'duration') {
+    if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+      addError(errors, name, t('field.duration'))
+      return
+    }
+    if (definition.options.min !== undefined && value < definition.options.min) addError(errors, name, t('field.durationMin', { min: definition.options.min }))
+    if (definition.options.max !== undefined && value > definition.options.max) addError(errors, name, t('field.durationMax', { max: definition.options.max }))
     return
   }
 
   if (definition.type === 'boolean') {
-    if (typeof value !== 'boolean') addError(errors, name, 'Must be a boolean.')
+    if (typeof value !== 'boolean') addError(errors, name, t('field.boolean'))
     return
   }
 
   if (definition.type === 'url') {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
-      addError(errors, name, 'Must be a link.')
+      addError(errors, name, t('field.link'))
       return
     }
     const link = value as Record<string, unknown>
@@ -240,28 +251,36 @@ function validateFieldRules(
   }
 
   if (typeof value !== 'string') {
-    addError(errors, name, 'Must be a string.')
+    addError(errors, name, t('field.string'))
     return
   }
 
   const normalized = value.trim()
   const normalizedContent = definition.type === 'richText' ? getRichTextContent(normalized) : normalized
-  if (mode === 'publish' && options.required && !normalizedContent) addError(errors, name, 'This field is required.')
+  if (mode === 'publish' && options.required && !normalizedContent) addError(errors, name, t('field.required'))
   if (mode === 'draft' && !normalizedContent) return
-  if (definition.type === 'image' && normalized && !urlPattern.test(normalized)) addError(errors, name, 'Must be an HTTP(S) URL.')
+  if (definition.type === 'image' && normalized && !urlPattern.test(normalized)) addError(errors, name, t('field.image'))
   if (definition.type === 'image') return
 
   if (definition.type === 'select' || definition.type === 'radio') {
-    if (normalized && !definition.options.options.some(option => option.value === value)) addError(errors, name, 'Must be one of the available options.')
+    if (normalized && !definition.options.options.some(option => option.value === value)) addError(errors, name, t('field.option'))
     return
   }
 
   if (definition.type === 'date') {
     const timestamp = Date.parse(`${normalized}T00:00:00Z`)
     const isValid = datePattern.test(normalized) && !Number.isNaN(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === normalized
-    if (normalized && !isValid) addError(errors, name, 'Must be a valid date.')
-    if (definition.options.min && normalized < definition.options.min) addError(errors, name, `Must be on or after ${definition.options.min}.`)
-    if (definition.options.max && normalized > definition.options.max) addError(errors, name, `Must be on or before ${definition.options.max}.`)
+    if (normalized && !isValid) addError(errors, name, t('field.date'))
+    if (definition.options.min && normalized < definition.options.min) addError(errors, name, t('field.dateMin', { min: definition.options.min }))
+    if (definition.options.max && normalized > definition.options.max) addError(errors, name, t('field.dateMax', { max: definition.options.max }))
+    return
+  }
+
+  if (definition.type === 'datetime') {
+    const canonical = normalizeEponymeDateTime(normalized)
+    if (normalized && canonical === null) addError(errors, name, t('field.datetime'))
+    if (canonical && definition.options.min && canonical < definition.options.min) addError(errors, name, t('field.datetimeMin', { min: definition.options.min }))
+    if (canonical && definition.options.max && canonical > definition.options.max) addError(errors, name, t('field.datetimeMax', { max: definition.options.max }))
     return
   }
 
