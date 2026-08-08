@@ -46,7 +46,7 @@ function normalizeField(definition: FieldDefinition, value: unknown): unknown {
     if (!isRecord(value)) return value
     const tabs = { ...value }
     for (const [tabName, tab] of Object.entries(definition.options.tabs))
-      if (tabName in tabs) tabs[tabName] = normalizeNested(tab.fields, tabs[tabName])
+      if (Object.hasOwn(tabs, tabName)) tabs[tabName] = normalizeNested(tab.fields, tabs[tabName])
     return tabs
   }
 

@@ -379,3 +379,21 @@ describe('validateEponymePatch', () => {
     expect(validateEponymePatch(schema, [])).toEqual({ _form: ['Body must be an object.'] })
   })
 })
+
+describe('validateEponymePatch — inherited keys', () => {
+  const schema: EponymeSchema = { title: field.string() }
+
+  it('refuses a key that only exists on Object.prototype', () => {
+    // `schema['constructor']` resolves through the prototype chain and answers a function,
+    // which reads as a declared field and is then validated as one.
+    for (const key of ['constructor', 'toString', 'valueOf', 'hasOwnProperty']) {
+      expect(validateEponymePatch(schema, { [key]: 'x' })).toEqual({ [key]: ['Unknown field.'] })
+    }
+  })
+
+  it('refuses `__proto__` without letting it reach the error object', () => {
+    const errors = validateEponymePatch(schema, JSON.parse('{"__proto__": "x"}') as Record<string, unknown>)
+    expect(Object.keys(errors)).toEqual(['__proto__'])
+    expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+  })
+})

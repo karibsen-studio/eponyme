@@ -386,7 +386,7 @@ export function validateEponymePatch(
   const context = data ?? payload as Record<string, unknown>
 
   for (const [name, value] of Object.entries(payload)) {
-    const definition = schema[name]
+    const definition = Object.hasOwn(schema, name) ? schema[name] : undefined
     if (!definition) addError(errors, name, 'Unknown field.')
     else validateField(name, definition, value, errors, mode, context)
   }
