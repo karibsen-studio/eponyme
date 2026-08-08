@@ -160,8 +160,17 @@ describe('EponymeAuthService', () => {
       await expect(service.login('EponymeOwner', 'incorrect password')).resolves.toMatchObject({ ok: false })
 
     const owner = [...users.values()][0]!
-    expect(owner.lockedUntil).toBeInstanceOf(Date)
-    await expect(service.login('EponymeOwner', temporaryPassword)).resolves.toEqual({ ok: false, reason: 'locked' })
+    expect(owner.lockedUntil).toBeNull()
+    await expect(service.login('EponymeOwner', temporaryPassword)).resolves.toMatchObject({ ok: true })
+  })
+
+  it('bounds the password handed to scrypt even when the service is called directly', async () => {
+    const { client } = createAuthClient()
+    const service = new EponymeAuthService(client)
+    const logs: string[] = []
+    await service.bootstrapOwner(message => logs.push(message))
+
+    await expect(service.login('EponymeOwner', 'x'.repeat(10_000))).resolves.toEqual({ ok: false, reason: 'invalid' })
   })
 })
 
