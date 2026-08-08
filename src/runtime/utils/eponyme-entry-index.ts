@@ -31,7 +31,7 @@ const INDEXABLE_TYPES = new Set(['tags', 'checkboxGroup', 'select', 'radio', 'bo
  * every stored index row in every host application: no config changed, so nothing would
  * detect it, and filters would keep answering from rows built by the old rules.
  */
-const INDEX_ALGORITHM = 1
+const INDEX_ALGORITHM = 2
 
 /**
  * Option keys that describe how a field looks, never what it stores. They are stripped
