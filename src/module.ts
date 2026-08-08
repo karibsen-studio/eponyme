@@ -300,7 +300,7 @@ export default defineNuxtModule<ModuleOptions>({
     name: '@karibsen/eponyme',
     configKey: 'eponyme',
     compatibility: {
-      nuxt: '>=4.0.0',
+      nuxt: '>=4.5.1',
     },
   },
 
@@ -333,6 +333,7 @@ export default defineNuxtModule<ModuleOptions>({
           icons: [
             'mingcute:history-anticlockwise-line',
             'mingcute:eye-2-line',
+            'mingcute:eye-close-line',
             'mingcute:layout-leftbar-close-line',
             'mingcute:layout-leftbar-open-line',
             'mingcute:down-small-line',
