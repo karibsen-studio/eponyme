@@ -1,5 +1,6 @@
 import {
   addComponent,
+  addPlugin,
   addImports,
   addImportsDir,
   addRouteMiddleware,
@@ -20,17 +21,14 @@ import {
 import type { Nuxt } from '@nuxt/schema'
 import pc from 'picocolors'
 import tailwindcss from '@tailwindcss/vite'
-import { resolve } from 'pathe'
 import { renderEponymeLocaleModule, resolveEponymeLocale } from './locale-build'
 import type { EponymeLocaleDefinition } from './runtime/locales'
+import { resolve } from 'pathe'
 import { tagPreviewPathRoutes } from './runtime/utils/cache-tags'
+import { EPONYME_THEME_BOOTSTRAP } from './runtime/utils/eponyme-theme'
 
-// Re-exported from the package root so a catalogue in `@eponyme/locale` can type itself
-// against the contract it has to satisfy.
 export type { EponymeLocaleDefinition, EponymeMessageKey } from './runtime/locales'
 
-// The runtime helpers (`field`, `collection`, `defineEponymeConfig`) live at
-// `@karibsen/eponyme/config`, since the package root has to stay the Nuxt module itself.
 export type * from './eponyme'
 
 /**
@@ -427,6 +425,13 @@ export default defineNuxtModule<ModuleOptions>({
         + `  export function t(key: EponymeMessageKey, params?: EponymeTranslateParams): string\n`
         + `}\n`,
     })
+
+    nuxt.options.app.head.script ??= []
+    nuxt.options.app.head.script.unshift({
+      key: 'eponyme-theme',
+      innerHTML: EPONYME_THEME_BOOTSTRAP,
+    })
+    addPlugin(resolver.resolve('./runtime/plugins/eponyme-theme'))
 
     const tagged = tagPreviewPathRoutes(options.previewPaths ?? {}, nuxt.options.routeRules ??= {})
     if (tagged.length) {
