@@ -254,12 +254,25 @@ export default defineEponymeConfig({
   articles: collection({
     label: 'Articles',
     description: 'Create and publish articles displayed on the public playground.',
+    addLabel: 'Écrire un article',
     titleField: 'title',
     slugField: 'slug',
     fields: {
       title: field.string({ label: 'Title', required: true, maxLength: 100 }),
       slug: field.slug({ label: 'Slug', required: true, maxLength: 120 }),
       excerpt: field.textarea({ label: 'Excerpt', required: true, maxLength: 220 }),
+      category: field.select({
+        label: 'Category',
+        placeholder: 'Select a category',
+        options: [
+          { label: 'Business', value: 'business' },
+          { label: 'Design', value: 'design' },
+          { label: 'Engineering', value: 'engineering' },
+          { label: 'Guides', value: 'guides' },
+          { label: 'News', value: 'news' },
+          { label: 'Product', value: 'product' },
+        ],
+      }),
       cover: field.image({ label: 'Cover image' }),
       video: field.mediaPlayer({
         label: 'Video',
