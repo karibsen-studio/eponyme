@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import {
   ToastClose,
   ToastDescription,
@@ -26,7 +27,7 @@ const emit = defineEmits<{
 <template>
   <ToastProvider
     :duration="4000"
-    label="Notification"
+    :label="t('toast.label')"
     swipe-direction="right"
   >
     <ToastRoot
@@ -51,7 +52,7 @@ const emit = defineEmits<{
         </ToastDescription>
       </div>
       <ToastClose
-        aria-label="Close notification"
+        :aria-label="t('toast.close')"
         class="ep:-mt-1 ep:-mr-1 ep:inline-flex ep:h-7 ep:w-7 ep:cursor-pointer ep:items-center ep:justify-center ep:rounded-md ep:border-0 ep:bg-transparent ep:text-lg ep:leading-none ep:text-muted-ep ep:transition ep:hover:bg-white/5 ep:hover:text-white ep:focus-visible:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-white/20"
       >
         <span aria-hidden="true">&times;</span>

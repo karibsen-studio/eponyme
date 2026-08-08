@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { useRouter, useRuntimeConfig, useState } from '#app'
 import { onKeyStroke, useEventListener } from '@vueuse/core'
 import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
@@ -309,7 +310,7 @@ useEventListener('beforeunload', (event) => {
             :disabled="pending"
             @click="previewOpen = !previewOpen"
           >
-            {{ previewOpen ? 'Hide preview' : 'Preview' }}
+            {{ previewOpen ? t('form.hidePreview') : t('form.preview') }}
           </EPButton>
         </div>
       </div>

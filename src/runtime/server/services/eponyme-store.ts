@@ -1,3 +1,4 @@
+import { t } from '#eponyme/locale'
 import { createHash } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 import type { EponymeCollectionDefinitionBase, EponymeConfig, EponymeSchema } from '../../types'
@@ -1053,13 +1054,13 @@ export class EponymeService {
       const collectionEntry = this.getCollectionEntry(entry.name)
       const schema = this.schemas[entry.name] ?? collectionEntry?.definition.fields
       if (!schema) {
-        result.skipped.push({ name: entry.name, reason: 'No schema is configured for this entry.' })
+        result.skipped.push({ name: entry.name, reason: t('server.importNoSchema') })
         continue
       }
 
       const row = await db.eponyme.findUnique({ where: { name: entry.name } })
       if (row?.deletedAt) {
-        result.skipped.push({ name: entry.name, reason: 'An entry with this name is in the trash. Restore it or delete it permanently first.' })
+        result.skipped.push({ name: entry.name, reason: t('server.importInTrash') })
         continue
       }
 
@@ -1174,8 +1175,8 @@ export class EponymeService {
     return {
       errors: {
         [definition.slugField]: [row.deletedAt
-          ? 'An entry with this slug is in the trash. Restore it or delete it permanently first.'
-          : 'This slug is already in use.'],
+          ? t('server.slugInTrash')
+          : t('server.slugTaken')],
       },
     }
   }

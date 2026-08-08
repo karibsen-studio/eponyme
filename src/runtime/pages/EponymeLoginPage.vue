@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { navigateTo, useRoute, useRuntimeConfig, useSeoMeta } from '#app'
 import type { FetchError } from 'ofetch'
 import { computed, ref } from 'vue'
@@ -17,7 +18,7 @@ const error = ref('')
 const dashboardPath = computed(() => (useRuntimeConfig().public.eponyme as { dashboardPath?: string } | undefined)?.dashboardPath ?? '/__eponyme')
 
 useEponymeFavicon()
-useSeoMeta({ title: 'Sign in · Eponyme' })
+useSeoMeta({ title: t('login.title') })
 
 const existingUser = await auth.refresh()
 if (existingUser)
@@ -31,7 +32,7 @@ async function submit() {
   }
   catch (caught) {
     const fetchError = caught as FetchError
-    error.value = fetchError.statusMessage ?? 'Invalid username or password.'
+    error.value = fetchError.statusMessage ?? t('server.badCredentials')
   }
 }
 
@@ -66,7 +67,7 @@ async function navigateAfterLogin(mustChangePassword: boolean) {
       >
         <EPFormField
           id="eponyme-login-username"
-          label="Username"
+          :label="t('login.username')"
           required
         >
           <EPInputText

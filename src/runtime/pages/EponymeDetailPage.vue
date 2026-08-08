@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { createError, useRoute, useSeoMeta } from '#app'
 import { computed } from 'vue'
 import EponymeCollectionPage from '../components/editor/EponymeCollectionPage.vue'
@@ -35,10 +36,10 @@ function label(name: string) {
 
 useEponymeFavicon()
 useSeoMeta({
-  title: () => `${label(eponymeName.value.split('/').at(-1) ?? eponymeName.value)} · Eponyme`,
+  title: () => t('entry.title', { entry: label(eponymeName.value.split('/').at(-1) ?? eponymeName.value) }),
 })
 
-if (!schemas[eponymeName.value] && !collection.value && !form.value && !collectionEntry.value && !isFolder.value) throw createError({ statusCode: 404, statusMessage: 'Eponyme entry not found.' })
+if (!schemas[eponymeName.value] && !collection.value && !form.value && !collectionEntry.value && !isFolder.value) throw createError({ statusCode: 404, statusMessage: t('server.entryNotFound') })
 </script>
 
 <template>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { computed, ref, watch } from 'vue'
 import { middleEllipsis } from '../../utils/middle-ellipsis'
 
@@ -16,7 +17,7 @@ const visibleBreadcrumbs = computed(() => {
   if (!hiddenBreadcrumbs.value.length) return breadcrumbs.value.map(breadcrumb => ({ kind: 'link' as const, ...breadcrumb }))
   return [
     { kind: 'link' as const, ...breadcrumbs.value[0]! },
-    { kind: 'collapsed' as const, label: 'Hidden folders', path: '__collapsed__' },
+    { kind: 'collapsed' as const, label: t('nav.hiddenFolders'), path: '__collapsed__' },
     { kind: 'link' as const, ...breadcrumbs.value.at(-1)! },
   ]
 })
@@ -41,7 +42,7 @@ watch(() => hiddenBreadcrumbs.value.map(breadcrumb => breadcrumb.path).join('|')
   <nav
     v-if="folder"
     class="ep:relative ep:z-50 ep:flex ep:min-h-14 ep:min-w-0 ep:items-center ep:overflow-visible ep:border-b ep:border-border-ep ep:bg-theme-ep/95 ep:px-3 ep:text-xs ep:backdrop-blur"
-    aria-label="Eponyme navigation"
+    :aria-label="t('nav.label')"
   >
     <div class="eponyme-mobile-breadcrumbs ep:flex ep:min-w-0 ep:flex-1 ep:touch-pan-x ep:items-center ep:overflow-x-auto ep:overscroll-x-contain ep:sm:hidden">
       <template
@@ -87,7 +88,7 @@ watch(() => hiddenBreadcrumbs.value.map(breadcrumb => breadcrumb.path).join('|')
             type="button"
             class="ep:cursor-default ep:rounded-md ep:border-0 ep:bg-transparent ep:px-2 ep:py-1.5 ep:font-semibold ep:text-muted-ep ep:transition ep:hover:bg-selected-ep ep:hover:text-white ep:focus-visible:bg-selected-ep ep:focus-visible:text-white ep:focus-visible:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-white/20"
             aria-haspopup="menu"
-            :aria-label="`${hiddenBreadcrumbs.length} hidden folders`"
+            :aria-label="t('nav.hiddenFoldersCount', { count: hiddenBreadcrumbs.length })"
           >
             …
           </button>

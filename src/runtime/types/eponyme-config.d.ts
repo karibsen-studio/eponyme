@@ -16,3 +16,11 @@ declare module '#eponyme/variables' {
   const variables: EponymeVariables
   export default variables
 }
+
+declare module '#eponyme/locale' {
+  import type { EponymeLocaleDefinition, EponymeMessageKey } from '../locales'
+  import type { EponymeTranslateParams } from '../utils/translate'
+
+  export const locale: EponymeLocaleDefinition
+  export function t(key: EponymeMessageKey, params?: EponymeTranslateParams): string
+}

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { computed } from 'vue'
 
 const props = defineProps<{
@@ -24,7 +25,7 @@ function label(name: string) {
   <nav
     v-if="previous || next"
     class="ep:mx-auto ep:grid ep:max-w-3xl ep:grid-cols-1 ep:gap-3 ep:px-6 ep:pb-10 ep:md:grid-cols-2 ep:md:px-10 ep:md:pb-12"
-    aria-label="Entry pagination"
+    :aria-label="t('nav.entryPagination')"
   >
     <NuxtLink
       v-if="previous"
@@ -36,7 +37,7 @@ function label(name: string) {
         aria-hidden="true"
       >←</span>
       <span class="ep:min-w-0">
-        <span class="ep:block ep:text-[10px] ep:font-semibold ep:tracking-widest ep:text-muted-ep ep:uppercase">Previous</span>
+        <span class="ep:block ep:text-[10px] ep:font-semibold ep:tracking-widest ep:text-muted-ep ep:uppercase">{{ t('action.previous') }}</span>
         <span class="ep:mt-1 ep:block ep:truncate ep:text-sm ep:font-semibold ep:text-white">{{ label(previous) }}</span>
       </span>
     </NuxtLink>
@@ -50,7 +51,7 @@ function label(name: string) {
       class="ep:group ep:flex ep:min-w-0 ep:items-center ep:justify-end ep:gap-3 ep:rounded-xl ep:bg-selected-ep/40 ep:px-5 ep:py-4 ep:text-right ep:no-underline ep:transition ep:hover:border-muted-ep ep:hover:bg-selected-ep"
     >
       <span class="ep:min-w-0">
-        <span class="ep:block ep:text-[10px] ep:font-semibold ep:tracking-widest ep:text-muted-ep ep:uppercase">Next</span>
+        <span class="ep:block ep:text-[10px] ep:font-semibold ep:tracking-widest ep:text-muted-ep ep:uppercase">{{ t('action.next') }}</span>
         <span class="ep:mt-1 ep:block ep:truncate ep:text-sm ep:font-semibold ep:text-white">{{ label(next) }}</span>
       </span>
       <span

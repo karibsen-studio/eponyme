@@ -1,3 +1,4 @@
+import { t } from '#eponyme/locale'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import type { EponymeAuthUser, EponymeRole } from '../../types'
 import { isEponymeRole } from '../../types'
@@ -155,15 +156,15 @@ export class EponymeAuthService {
     newPassword: unknown,
   ): Promise<{ session?: CreatedSession, error?: string }> {
     const user = await this.client.eponymeUser.findUnique({ where: { id: userId } })
-    if (!user || !user.active) return { error: 'User account is unavailable.' }
+    if (!user || !user.active) return { error: t('server.userUnavailable') }
     if (typeof currentPassword !== 'string' || !(await verifyPassword(currentPassword, user.passwordHash)))
-      return { error: 'Current password is incorrect.' }
+      return { error: t('server.currentPasswordWrong') }
     const passwordError = validatePassword(newPassword)
     if (passwordError) return { error: passwordError }
     if (normalizeUsername(String(newPassword)).includes(user.usernameNormalized))
-      return { error: 'Password must not contain the username.' }
+      return { error: t('server.passwordContainsUsername') }
     if (await verifyPassword(String(newPassword), user.passwordHash))
-      return { error: 'New password must be different from the current password.' }
+      return { error: t('server.passwordUnchanged') }
 
     const updated = await this.client.eponymeUser.update({
       where: { id: userId },
@@ -186,7 +187,7 @@ export class EponymeAuthService {
   async createUser(username: unknown, role: unknown): Promise<{ result?: { user: EponymeAuthUser, temporaryPassword: string }, error?: string }> {
     const usernameError = validateUsername(username)
     if (usernameError) return { error: usernameError }
-    if (!isEponymeRole(role)) return { error: 'A valid role is required.' }
+    if (!isEponymeRole(role)) return { error: t('server.roleRequired') }
 
     const cleanUsername = String(username).trim()
     const temporaryPassword = generateTemporaryPassword()
@@ -207,7 +208,7 @@ export class EponymeAuthService {
     }
     catch (error) {
       // Only a unique-constraint violation means the username is taken; anything else is a real failure.
-      if (isUniqueConstraintViolation(error)) return { error: 'This username is already in use.' }
+      if (isUniqueConstraintViolation(error)) return { error: t('server.usernameTaken') }
       throw error
     }
   }
@@ -217,11 +218,11 @@ export class EponymeAuthService {
     changes: { role?: unknown, active?: unknown },
   ): Promise<{ user?: EponymeAuthUser, error?: string, notFound?: boolean }> {
     const user = await this.client.eponymeUser.findUnique({ where: { id } })
-    if (!user) return { error: 'User not found.', notFound: true }
+    if (!user) return { error: t('server.userNotFound'), notFound: true }
     if (changes.role !== undefined && !isEponymeRole(changes.role))
-      return { error: 'A valid role is required.' }
+      return { error: t('server.roleRequired') }
     if (changes.active !== undefined && typeof changes.active !== 'boolean')
-      return { error: 'Active must be a boolean.' }
+      return { error: t('server.activeMustBeBoolean') }
 
     const nextRole = (changes.role ?? user.role) as EponymeRole
     const nextActive = (changes.active ?? user.active) as boolean
@@ -232,7 +233,7 @@ export class EponymeAuthService {
     const apply = async (tx: PrismaEponymeAuthClient): Promise<{ user?: EponymeAuthUser, error?: string }> => {
       if (removesActiveOwner) {
         const activeOwnerCount = await tx.eponymeUser.count({ where: { role: 'owner', active: true } })
-        if (activeOwnerCount <= 1) return { error: 'The last active owner cannot be disabled or demoted.' }
+        if (activeOwnerCount <= 1) return { error: t('server.lastOwner') }
       }
       const updated = await tx.eponymeUser.update({
         where: { id },
@@ -244,7 +245,7 @@ export class EponymeAuthService {
     const result = removesActiveOwner && this.client.$transaction
       ? await this.client.$transaction(apply, { isolationLevel: 'Serializable' })
           .catch(error => isSerializationFailure(error)
-            ? { error: 'Another change was applied at the same time. Please try again.' }
+            ? { error: t('server.concurrentChange') }
             : Promise.reject(error))
       : await apply(this.client)
     if (result.error) return result
@@ -254,7 +255,7 @@ export class EponymeAuthService {
 
   async resetPassword(id: string): Promise<{ result?: { user: EponymeAuthUser, temporaryPassword: string }, error?: string }> {
     const user = await this.client.eponymeUser.findUnique({ where: { id } })
-    if (!user) return { error: 'User not found.' }
+    if (!user) return { error: t('server.userNotFound') }
     const temporaryPassword = generateTemporaryPassword()
     const updated = await this.client.eponymeUser.update({
       where: { id },

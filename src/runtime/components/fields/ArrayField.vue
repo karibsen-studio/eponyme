@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { useSortable } from '@vueuse/integrations/useSortable'
 import { computed, nextTick, ref } from 'vue'
 import FieldRenderer from './FieldRenderer.vue'
@@ -146,8 +147,8 @@ async function handleObjectEnter(index: number, fieldName: string) {
                 type="button"
                 class="eponyme-drag-handle ep:flex ep:h-8 ep:w-7 ep:cursor-grab ep:items-center ep:justify-center ep:border-0 ep:bg-transparent ep:text-base ep:tracking-tighter ep:text-muted-ep ep:active:cursor-grabbing ep:hover:text-white"
                 :disabled="disabled"
-                :aria-label="`Move ${itemLabel(index)}`"
-                title="Drag to reorder"
+                :aria-label="t('array.move', { item: itemLabel(index) })"
+                :title="t('array.drag')"
               >
                 ⠿
               </button>

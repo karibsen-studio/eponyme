@@ -1,3 +1,4 @@
+import { t } from '#eponyme/locale'
 import { createError, defineEventHandler, getQuery, getRequestHeader, readRawBody, setResponseHeader } from 'h3'
 import { useEponymeService } from '../services/eponyme-service'
 import { assertEponymeMutationOrigin, requireEponymeUser } from '../utils/auth'
@@ -34,7 +35,7 @@ export default defineEventHandler(async (event) => {
   if ('errors' in result) {
     throw createError({
       statusCode: result.schemaMismatch?.length ? 409 : 400,
-      statusMessage: result.errors[0] ?? 'This import could not be applied.',
+      statusMessage: result.errors[0] ?? t('server.importFailed'),
       data: { errors: result.errors, schemaMismatch: result.schemaMismatch ?? [] },
     })
   }

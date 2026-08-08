@@ -1,5 +1,6 @@
 import type { EponymeSchema } from '../types'
 import type { EponymeVariableDefinition, EponymeVariableValue, EponymeVariables } from '../types/variables'
+import { EPONYME_DATE_LOCALE } from './date-locale'
 import { mapEponymeRichText } from './rich-text-fields'
 
 /**
@@ -23,9 +24,9 @@ export function builtinEponymeVariables(now: Date = new Date()): Record<string, 
     currentYear: { label: 'Current year', description: 'The year at the time the page is served.', value: () => now.getFullYear() },
     nextYear: { label: 'Next year', description: 'Useful for a season spanning two years.', value: () => now.getFullYear() + 1 },
     previousYear: { label: 'Previous year', value: () => now.getFullYear() - 1 },
-    currentMonth: { label: 'Current month', value: () => now.toLocaleDateString(undefined, { month: 'long' }) },
+    currentMonth: { label: 'Current month', value: () => now.toLocaleDateString(EPONYME_DATE_LOCALE, { month: 'long' }) },
     currentDay: { label: 'Current day', value: () => String(now.getDate()) },
-    today: { label: 'Today', description: 'Localised date, for example 29 July 2026.', value: () => now.toLocaleDateString(undefined, { dateStyle: 'long' }) },
+    today: { label: 'Today', description: 'Localised date, for example 29 July 2026.', value: () => now.toLocaleDateString(EPONYME_DATE_LOCALE, { dateStyle: 'long' }) },
     currentDate: { label: 'Today (ISO)', description: 'Machine-readable date, for example 2026-07-29.', value: () => now.toISOString().slice(0, 10) },
   }
 }

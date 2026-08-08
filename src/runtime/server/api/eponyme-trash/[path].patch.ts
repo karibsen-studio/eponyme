@@ -1,3 +1,4 @@
+import { t } from '#eponyme/locale'
 import { createError, defineEventHandler, getRequestURL } from 'h3'
 import { useEponymeService } from '../../services/eponyme-service'
 import { assertEponymeMutationOrigin, requireEponymeUser } from '../../utils/auth'
@@ -11,7 +12,7 @@ export default defineEventHandler(async (event) => {
   const service = useEponymeService()
   const collection = name ? splitEponymeCollectionEntry(service, name) : undefined
   if (!collection || !(await service.restoreCollectionEntry(name)))
-    throw createError({ statusCode: 404, statusMessage: 'Eponyme trashed entry not found.' })
+    throw createError({ statusCode: 404, statusMessage: t('server.trashedNotFound') })
 
   await callEponymeHook('eponyme:entry:untrashed', { name, collection, userId: user.id })
 
