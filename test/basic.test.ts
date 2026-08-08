@@ -932,4 +932,28 @@ describe('ssr', async () => {
       expect(await cacheControl('/api/eponyme/pages/homepage?version=draft')).toBe('no-store')
     })
   })
+  it('rejects an unknown editorial action instead of publishing it', async () => {
+    const response = await fetch(url('/api/eponyme/pages/homepage?action=not-an-action'), {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', 'cookie': authCookie },
+      body: JSON.stringify({ title: 'Must not be published' }),
+    })
+    expect(response.status).toBe(400)
+    await expect($fetch('/api/eponyme/pages/homepage')).resolves.toMatchObject({ data: { title: 'Welcome' } })
+  })
+
+  it('keeps managed-form storage within its configured quota', async () => {
+    for (const value of ['first', 'second', 'third']) {
+      await $fetch('/api/eponyme-forms/limited', { method: 'POST', body: { value } })
+    }
+
+    const listed = await $fetch<{ submissions: Array<{ data: { value: string } }>, total: number }>(
+      '/api/eponyme-forms/limited/submissions',
+      authenticated(),
+    )
+    expect(listed.total).toBe(2)
+    expect(listed.submissions.map(item => item.data.value)).toEqual(['third', 'second'])
+    await $fetch('/api/eponyme-forms/limited/submissions', { method: 'DELETE', ...authenticated() })
+  })
+
 })
