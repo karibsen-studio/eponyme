@@ -302,6 +302,15 @@ const delegates = {
       return { count }
     },
   },
+  // A correctly migrated database, which is what the rest of this fixture represents.
+  // Written out rather than imported from the module: this file is bundled into the fixture's
+  // Nitro build, and reaching back into `src/` there hangs it. Raising `EPONYME_SCHEMA_VERSION`
+  // therefore fails these tests until this number follows, which is the reminder wanted.
+  eponymeSchema: {
+    async findUnique({ where }: { where: { key: string } }) {
+      return where.key === 'eponyme' ? { key: 'eponyme', version: 2, updatedAt: new Date() } : null
+    },
+  },
   eponymeRateLimit: {
     async upsert({ where, create, update }: {
       where: { key: string }
