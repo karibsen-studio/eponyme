@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { humanizeLabel } from '../src/runtime/utils/humanize-label'
 import { asRecord } from '../src/runtime/utils/as-record'
 import { childErrors, errorsAt, fieldPathId, hasErrorsUnder, joinFieldPath } from '../src/runtime/utils/field-path'
@@ -10,7 +10,7 @@ import { getEponymeCollections, getEponymeForms, getEponymeSchemas, isEponymeFor
 import { findEponymeVariableRanges, interpolateEponymeText, interpolateEponymeValue, resolveEponymeVariables, summariseEponymeVariables } from '../src/runtime/utils/variables'
 import { applyPreviewSlug, readPreviewQuery, readPreviewVersion, resolvePreviewPath } from '../src/runtime/utils/preview'
 import { buildEponymeNavigationTree } from '../src/runtime/utils/build-navigation-tree'
-import { filterEponymeNavigationTree } from '../src/runtime/utils/filter-navigation-tree'
+import { filterEponymeNavigationTree, preloadEponymeNavigationSearch } from '../src/runtime/utils/filter-navigation-tree'
 import { cacheDuringHydrationOnly, cacheForPublicRead } from '../src/runtime/utils/hydration-cache'
 import { getEponymeCacheTags, tagPreviewPathRoutes } from '../src/runtime/utils/cache-tags'
 import { normalizeEponymePhone, toEponymePhoneValue } from '../src/runtime/utils/normalize-phone'
@@ -406,6 +406,12 @@ describe('navigation tree', () => {
 })
 
 describe('filterEponymeNavigationTree', () => {
+  // Fuse is fetched on demand, so the fuzzy assertions below need it resolved first. Without
+  // this the filter answers by substring, which is deliberate but not what they check.
+  beforeAll(async () => {
+    await preloadEponymeNavigationSearch()
+  })
+
   const tree = () => buildEponymeNavigationTree({
     schemas: { 'pages/homepage': {}, 'pages/legal/terms': {} },
     collections: { articles: { label: 'Articles' } },

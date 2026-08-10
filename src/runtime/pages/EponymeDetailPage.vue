@@ -1,18 +1,24 @@
 <script setup lang="ts">
 import { t } from '#eponyme/locale'
 import { createError, useRoute, useSeoMeta } from '#app'
-import { computed } from 'vue'
-import EponymeCollectionPage from '../components/editor/EponymeCollectionPage.vue'
+import { computed, defineAsyncComponent } from 'vue'
+
 import EponymeForm from '../components/editor/EponymeForm.vue'
-import EponymeFormPage from '../components/editor/EponymeFormPage.vue'
 import EponymeFolderNav from '../components/editor/EponymeFolderNav.vue'
-import EponymeFolderPage from '../components/editor/EponymeFolderPage.vue'
 import EponymePageNavigation from '../components/editor/EponymePageNavigation.vue'
 import EponymeSidebar from '../components/editor/EponymeSidebar.vue'
 import { useEponymeConfig } from '../composables/useEponymeConfig'
 import { useEponymeFavicon } from '../composables/useEponymeFavicon'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas } from '../utils/get-eponyme-schemas'
 import '../assets/dashboard.css'
+/**
+ * One of these renders per route, so importing all three made every route pay for the other
+ * two. The submissions table alone brings `@tanstack/vue-table`, which a folder or a singleton
+ * has no use for. Declared at module scope so each keeps one identity and one chunk.
+ */
+const EponymeCollectionPage = defineAsyncComponent(() => import('../components/editor/EponymeCollectionPage.vue'))
+const EponymeFormPage = defineAsyncComponent(() => import('../components/editor/EponymeFormPage.vue'))
+const EponymeFolderPage = defineAsyncComponent(() => import('../components/editor/EponymeFolderPage.vue'))
 
 const route = useRoute()
 const config = useEponymeConfig()

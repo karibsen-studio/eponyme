@@ -9,7 +9,7 @@ import EponymeSidebarTree from './EponymeSidebarTree.vue'
 import { useEponymeConfig } from '../../composables/useEponymeConfig'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas } from '../../utils/get-eponyme-schemas'
 import { buildEponymeNavigationTree } from '../../utils/build-navigation-tree'
-import { filterEponymeNavigationTree } from '../../utils/filter-navigation-tree'
+import { filterEponymeNavigationTree, preloadEponymeNavigationSearch } from '../../utils/filter-navigation-tree'
 import { useEponymeAuth } from '../../composables/useEponymeAuth'
 import EPAvatar from '../ui/EPAvatar.vue'
 import EPButton from '../ui/EPButton.vue'
@@ -189,6 +189,7 @@ watch(() => route.path, () => {
           type="search"
           :placeholder="t('sidebar.search')"
           :aria-label="t('sidebar.searchLabel')"
+          @focus="preloadEponymeNavigationSearch"
         />
         <kbd class="ep:pointer-events-none ep:absolute ep:top-1/2 ep:right-2.5 ep:-translate-y-1/2 ep:rounded ep:border ep:border-border-ep ep:bg-theme-ep ep:px-1.5 ep:py-0.5 ep:font-sans ep:text-[10px] ep:font-medium ep:text-muted-ep">
           ⌘ K
