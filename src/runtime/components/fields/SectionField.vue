@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import ArrayField from './ArrayField.vue'
+import { LazyArrayField } from './lazy'
 import FieldRenderer from './FieldRenderer.vue'
 import type { SectionFieldDefinition } from '../../types'
 import type { ValidationErrors } from '../../utils/validate-eponyme-data'
@@ -102,7 +102,7 @@ function focusNextField(name: string) {
             >
               {{ sectionField.options.description }}
             </p>
-            <ArrayField
+            <LazyArrayField
               :field-name="sectionFieldName"
               :path="fieldPath(sectionFieldName)"
               :definition="sectionField"
