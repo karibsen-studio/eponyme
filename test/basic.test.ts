@@ -294,6 +294,9 @@ describe('ssr', async () => {
     })
     const html = String(await $fetch('/__eponyme/articles/first-article', authenticated()))
     expect(html).toContain('First article')
+    // The rich text field is loaded lazily, and Vue awaits an async component before rendering,
+    // so its label must still reach the server-rendered HTML rather than a loading placeholder.
+    expect(html).toContain('Body')
 
     await expect($fetch('/api/eponyme-collections/articles/first-article', { method: 'DELETE', ...authenticated() })).resolves.toEqual({ deleted: true })
     await $fetch('/api/eponyme-trash/articles/first-article', { method: 'DELETE', ...authenticated() })

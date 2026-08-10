@@ -1,4 +1,4 @@
-import Fuse from 'fuse.js'
+import type Fuse from 'fuse.js'
 import type { EponymeNavigationNode } from '../types/eponyme-navigation'
 
 interface SearchItem {
@@ -23,12 +23,25 @@ function collect(nodes: EponymeNavigationNode[], items: SearchItem[]) {
 // when the configuration or the loaded collection entries do.
 const indexes = new WeakMap<EponymeNavigationNode[], Fuse<SearchItem>>()
 
-function indexOf(nodes: EponymeNavigationNode[]) {
+/**
+ * Fuse is the sidebar's search engine and nothing else's, so it is fetched when a search
+ * actually happens rather than shipped with the dashboard. Until it lands, `matches()` below
+ * falls back to a substring test: the first keystroke answers a little more literally, then
+ * typo tolerance arrives and stays.
+ */
+type FuseConstructor = typeof Fuse
+let FuseCtor: FuseConstructor | undefined
+
+export async function preloadEponymeNavigationSearch(): Promise<void> {
+  FuseCtor ??= (await import('fuse.js')).default
+}
+
+function indexOf(nodes: EponymeNavigationNode[], Ctor: FuseConstructor) {
   const cached = indexes.get(nodes)
   if (cached) return cached
   const items: SearchItem[] = []
   collect(nodes, items)
-  const fuse = new Fuse(items, {
+  const fuse = new Ctor(items, {
     keys: ['label', 'searchPath'],
     // Tolerant enough for a typo, strict enough that a short query does not match everything.
     threshold: 0.35,
@@ -51,7 +64,7 @@ export function filterEponymeNavigationTree(
   const term = normalize(query.trim())
   if (!term) return nodes
 
-  const matched = new Set(indexOf(nodes).search(term).map(result => result.item.path))
+  const matched = matches(nodes, term)
 
   function keep(list: EponymeNavigationNode[]): EponymeNavigationNode[] {
     return list.flatMap((node) => {
@@ -62,4 +75,14 @@ export function filterEponymeNavigationTree(
   }
 
   return keep(nodes)
+}
+
+/** Paths matching `term`, fuzzily once Fuse has loaded and by substring until then. */
+function matches(nodes: EponymeNavigationNode[], term: string): Set<string> {
+  if (FuseCtor) return new Set(indexOf(nodes, FuseCtor).search(term).map(result => result.item.path))
+
+  void preloadEponymeNavigationSearch()
+  const items: SearchItem[] = []
+  collect(nodes, items)
+  return new Set(items.filter(item => item.label.includes(term) || item.searchPath.includes(term)).map(item => item.path))
 }

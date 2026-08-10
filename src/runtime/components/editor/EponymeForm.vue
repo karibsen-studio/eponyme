@@ -5,7 +5,7 @@ import { onKeyStroke, useEventListener } from '@vueuse/core'
 import { computed, nextTick, onScopeDispose, ref, useId, watch } from 'vue'
 import EponymeHistoryDialog from './EponymeHistoryDialog.vue'
 import EponymePreviewPanel from './EponymePreviewPanel.vue'
-import ArrayField from '../fields/ArrayField.vue'
+import { LazyArrayField } from '../fields/lazy'
 import SectionField from '../fields/SectionField.vue'
 import TabsField from '../fields/TabsField.vue'
 import FieldRenderer from '../fields/FieldRenderer.vue'
@@ -431,7 +431,7 @@ useEventListener('beforeunload', (event) => {
               >
                 {{ field.options.description }}
               </p>
-              <ArrayField
+              <LazyArrayField
                 v-model="data[fieldName]"
                 :field-name="fieldName"
                 :definition="field"

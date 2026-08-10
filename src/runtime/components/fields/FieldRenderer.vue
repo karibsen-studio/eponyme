@@ -10,13 +10,13 @@ import MediaPlayerField from './MediaPlayerField.vue'
 import NumberField from './NumberField.vue'
 import PhoneField from './PhoneField.vue'
 import RadioField from './RadioField.vue'
-import RichTextField from './RichTextField.vue'
 import SelectField from './SelectField.vue'
 import SlugField from './SlugField.vue'
 import TagsField from './TagsField.vue'
 import TextareaField from './TextareaField.vue'
 import TextField from './TextField.vue'
 import UrlField from './UrlField.vue'
+import { LazyRichTextField } from './lazy'
 import { formFieldContextKey } from '../ui/form-field-context'
 import type { FieldDefinition } from '../../types'
 import { humanizeLabel } from '../../utils/humanize-label'
@@ -53,7 +53,7 @@ const multiline = computed(() => props.field.type === 'textarea' || props.field.
 
 const component = computed(() => {
   switch (props.field.type) {
-    case 'richText': return RichTextField
+    case 'richText': return LazyRichTextField
     case 'textarea': return TextareaField
     case 'slug': return SlugField
     case 'boolean': return BooleanField

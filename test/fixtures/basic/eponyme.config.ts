@@ -55,6 +55,8 @@ export default defineEponymeConfig({
       title: field.string({ required: true }),
       slug: field.slug({ required: true }),
       excerpt: field.textarea(),
+      // Present so the dashboard's server render exercises the lazily loaded rich text field.
+      body: field.richText(),
       phone: field.phone({ defaultCountry: 'FR', countries: ['FR', 'BE'] }),
       tags: field.tags({ suggestions: ['Nuxt', 'Vue'], allowCustom: true, maxItems: 3 }),
     },
