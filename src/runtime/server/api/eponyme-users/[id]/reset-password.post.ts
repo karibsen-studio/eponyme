@@ -9,6 +9,6 @@ export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id', { decode: true })
   const result = id ? await useEponymeAuthService().resetPassword(id) : undefined
   if (!result?.result)
-    throw createError({ statusCode: 404, message: result?.error ?? t('server.userNotFound') })
+    throw createError({ statusCode: 404, statusMessage: result?.error ?? t('server.userNotFound') })
   return result.result
 })
