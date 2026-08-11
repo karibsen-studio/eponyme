@@ -62,7 +62,7 @@ function normalize() {
     />
     <p
       v-if="parsed.e164 && parsed.country"
-      class="ep:mt-1.5 ep:mb-0 ep:text-[11px] ep:text-muted-ep"
+      class="ep:mt-1.5 ep:mb-0 ep:text-[11px] ep:text-text-muted"
     >
       {{ parsed.country }} · {{ parsed.e164 }}
     </p>

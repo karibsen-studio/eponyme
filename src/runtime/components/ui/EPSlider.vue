@@ -37,18 +37,18 @@ function update(values?: number[]) {
       class="ep:relative ep:flex ep:h-10 ep:flex-1 ep:touch-none ep:items-center ep:select-none ep:data-[disabled]:cursor-not-allowed ep:data-[disabled]:opacity-50"
       @update:model-value="update"
     >
-      <SliderTrack class="ep:relative ep:h-2 ep:flex-1 ep:overflow-hidden ep:rounded-full ep:border ep:border-border-ep ep:bg-selected-ep">
-        <SliderRange class="ep:absolute ep:h-full ep:bg-white" />
+      <SliderTrack class="ep:relative ep:h-2 ep:flex-1 ep:overflow-hidden ep:rounded-full ep:border ep:border-border-default ep:bg-surface-input">
+        <SliderRange class="ep:absolute ep:h-full ep:bg-contrast" />
       </SliderTrack>
       <SliderThumb
         :id="id"
         :aria-label="label"
-        class="ep:block ep:h-5 ep:w-5 ep:cursor-grab ep:rounded-full ep:border-2 ep:border-white ep:bg-theme-ep ep:outline-none ep:transition-colors ep:hover:bg-text-ep ep:focus-visible:ring-2 ep:focus-visible:ring-white/30 ep:active:cursor-grabbing"
+        class="ep:block ep:h-5 ep:w-5 ep:cursor-grab ep:rounded-full ep:border-2 ep:border-contrast ep:bg-surface-raised ep:outline-none ep:transition-colors ep:hover:bg-text-default ep:focus-visible:ring-2 ep:focus-visible:ring-contrast/30 ep:active:cursor-grabbing"
       />
     </SliderRoot>
     <output
       :for="id"
-      class="ep:min-w-12 ep:rounded-lg ep:bg-selected-ep ep:px-2.5 ep:py-1.5 ep:text-center ep:font-sans ep:text-sm ep:font-medium ep:text-white"
+      class="ep:min-w-12 ep:rounded-lg ep:bg-surface-input ep:px-2.5 ep:py-1.5 ep:text-center ep:font-sans ep:text-sm ep:font-medium ep:text-text-strong"
     >
       {{ prefix }}{{ value }}{{ suffix }}
     </output>

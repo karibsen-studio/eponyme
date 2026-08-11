@@ -40,7 +40,7 @@ function updatePart(key: keyof DurationParts, value: string | number, max?: numb
     :aria-required="required || undefined"
   >
     <legend
-      class="ep:w-fit ep:font-medium ep:text-text-ep"
+      class="ep:w-fit ep:font-medium ep:text-text-default"
       :class="[
         hideLabel ? 'ep:sr-only' : 'ep:mb-1.5',
         compact ? 'ep:text-xs' : 'ep:text-sm',
@@ -48,13 +48,13 @@ function updatePart(key: keyof DurationParts, value: string | number, max?: numb
     >
       {{ label }}<span
         v-if="required"
-        class="ep:text-danger-ep"
+        class="ep:text-danger"
       > *</span>
     </legend>
     <p
       v-if="description && !hideLabel"
       :id="descriptionId"
-      class="ep:mt-0 ep:mb-2 ep:text-xs ep:leading-relaxed ep:text-muted-ep"
+      class="ep:mt-0 ep:mb-2 ep:text-xs ep:leading-relaxed ep:text-text-muted"
     >
       {{ description }}
     </p>
@@ -81,7 +81,7 @@ function updatePart(key: keyof DurationParts, value: string | number, max?: numb
         />
         <span
           aria-hidden="true"
-          class="ep:pointer-events-none ep:absolute ep:top-1/2 ep:right-4 ep:-translate-y-1/2 ep:text-xs ep:text-muted-ep"
+          class="ep:pointer-events-none ep:absolute ep:top-1/2 ep:right-4 ep:-translate-y-1/2 ep:text-xs ep:text-text-muted"
         >{{ unit.short }}</span>
       </label>
     </div>
@@ -90,7 +90,7 @@ function updatePart(key: keyof DurationParts, value: string | number, max?: numb
       :id="index === 0 ? errorId : undefined"
       :key="error"
       role="alert"
-      class="ep:mt-1.5 ep:text-xs ep:text-danger-ep"
+      class="ep:mt-1.5 ep:text-xs ep:text-danger"
     >
       {{ error }}
     </p>

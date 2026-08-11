@@ -41,7 +41,7 @@ const activeValue = computed(() => props.modelValue ? props.value : undefined)
       >
         <slot name="header" />
         <AccordionTrigger
-          class="ep:group ep:absolute ep:top-1/2 ep:right-1.5 ep:flex ep:h-7 ep:w-7 ep:-translate-y-1/2 ep:cursor-pointer ep:items-center ep:justify-center ep:rounded-md ep:border-0 ep:bg-transparent ep:text-muted-ep ep:transition ep:hover:bg-theme-ep ep:hover:text-white ep:focus-visible:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-white/20"
+          class="ep:group ep:absolute ep:top-1/2 ep:right-1.5 ep:flex ep:h-7 ep:w-7 ep:-translate-y-1/2 ep:cursor-pointer ep:items-center ep:justify-center ep:rounded-md ep:border-0 ep:bg-transparent ep:text-text-muted ep:transition ep:hover:bg-surface-raised ep:hover:text-text-strong ep:focus-visible:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-contrast/20"
           :aria-label="modelValue ? t('accordion.close') : t('accordion.open')"
         >
           <Icon
@@ -58,7 +58,7 @@ const activeValue = computed(() => props.modelValue ? props.value : undefined)
           <slot name="action" />
         </div>
       </AccordionHeader>
-      <AccordionContent class="eponyme-accordion-content ep:overflow-hidden ep:pt-1 ep:text-muted-ep">
+      <AccordionContent class="eponyme-accordion-content ep:overflow-hidden ep:pt-1 ep:text-text-muted">
         <slot />
       </AccordionContent>
     </AccordionItem>

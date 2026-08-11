@@ -245,12 +245,12 @@ const tools = computed<Tool[]>(() => {
     :errors="errors"
   >
     <div
-      class="eponyme-rich-text ep:overflow-hidden ep:rounded-xl ep:bg-selected-ep ep:ring-white/10 ep:focus-within:ring-2"
-      :class="{ 'ep:opacity-60': disabled, 'ep:ring-2 ep:ring-danger-ep/40': errors.length }"
+      class="eponyme-rich-text ep:overflow-hidden ep:rounded-xl ep:bg-surface-active ep:ring-contrast/10 ep:focus-within:ring-2"
+      :class="{ 'ep:opacity-60': disabled, 'ep:ring-2 ep:ring-danger/40': errors.length }"
     >
       <div
         v-if="editor"
-        class="ep:flex ep:flex-wrap ep:items-center ep:gap-1 ep:border-b ep:border-border-ep ep:p-2"
+        class="ep:flex ep:flex-wrap ep:items-center ep:gap-1 ep:border-b ep:border-border-default ep:p-2"
         role="toolbar"
         :aria-label="t('richText.toolbar', { field: label })"
       >
@@ -260,7 +260,7 @@ const tools = computed<Tool[]>(() => {
         >
           <span
             v-if="tool.separated"
-            class="ep:mx-1 ep:h-5 ep:w-px ep:bg-border-ep"
+            class="ep:mx-1 ep:h-5 ep:w-px ep:bg-border-default"
           />
           <button
             type="button"
@@ -309,14 +309,14 @@ const tools = computed<Tool[]>(() => {
       />
       <div
         v-else
-        class="ep:min-h-72 ep:p-5 ep:text-sm ep:text-muted-ep"
+        class="ep:min-h-72 ep:p-5 ep:text-sm ep:text-text-muted"
       >
         {{ t('richText.loading') }}
       </div>
     </div>
     <p
       v-if="maxLength !== undefined && showCounter !== false"
-      class="ep:mt-1.5 ep:mb-0 ep:text-right ep:text-[11px] ep:text-muted-ep"
+      class="ep:mt-1.5 ep:mb-0 ep:text-right ep:text-[11px] ep:text-text-muted"
     >
       {{ characterCount }} / {{ maxLength }}
     </p>
@@ -344,7 +344,7 @@ const tools = computed<Tool[]>(() => {
   border: 0;
   border-radius: .45rem;
   background: transparent;
-  color: var(--ep-color-muted-ep, #8d8d8d);
+  color: var(--ep-color-text-muted, #8d8d8d);
   cursor: pointer;
   font-family: inherit;
   font-size: .75rem;
@@ -357,8 +357,8 @@ const tools = computed<Tool[]>(() => {
 
 .rich-text-tool:hover,
 .rich-text-tool.is-active {
-  background: var(--ep-color-theme-ep, #1c1c1c);
-  color: white;
+  background: var(--ep-color-richtext-tool-active, #1c1c1c);
+  color: var(--ep-color-text-strong, #ffffff);
 }
 
 .rich-text-tool:disabled {
@@ -369,7 +369,7 @@ const tools = computed<Tool[]>(() => {
 .eponyme-rich-text :deep(.tiptap) {
   min-height: 18rem;
   padding: 1.25rem;
-  color: var(--ep-color-text-ep, #e7e7e7);
+  color: var(--ep-color-richtext-text, #e7e7e7);
   font-size: .925rem;
   line-height: 1.75;
   outline: none;
@@ -409,8 +409,8 @@ const tools = computed<Tool[]>(() => {
 
 .eponyme-rich-text :deep(.tiptap blockquote) {
   padding-left: 1rem;
-  border-left: 2px solid var(--ep-color-muted-ep, #8d8d8d);
-  color: var(--ep-color-muted-ep, #8d8d8d);
+  border-left: 2px solid var(--ep-color-text-muted, #8d8d8d);
+  color: var(--ep-color-text-muted, #8d8d8d);
 }
 
 .eponyme-rich-text :deep(.tiptap img) {
@@ -420,12 +420,12 @@ const tools = computed<Tool[]>(() => {
 }
 
 .eponyme-rich-text :deep(.tiptap img.ProseMirror-selectednode) {
-  outline: 2px solid white;
+  outline: 2px solid var(--ep-color-contrast, #ffffff);
   outline-offset: 2px;
 }
 
 .eponyme-rich-text :deep(.tiptap a) {
-  color: white;
+  color: var(--ep-color-text-strong, #ffffff);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -472,7 +472,7 @@ const tools = computed<Tool[]>(() => {
 
 .eponyme-rich-text :deep(.tiptap p.is-editor-empty:first-child::before) {
   height: 0;
-  color: var(--ep-color-muted-ep, #8d8d8d);
+  color: var(--ep-color-text-muted, #8d8d8d);
   content: attr(data-placeholder);
   float: left;
   pointer-events: none;

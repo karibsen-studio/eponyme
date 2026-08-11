@@ -4,6 +4,7 @@ import { computed } from 'vue'
 import EponymeNavigationLink from './EponymeNavigationLink.vue'
 import { useEponymeConfig } from '../../composables/useEponymeConfig'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas } from '../../utils/get-eponyme-schemas'
+import { humanizeLabel } from '../../utils/humanize-label'
 
 const props = defineProps<{ basePath: string, folder: string }>()
 const config = useEponymeConfig()
@@ -23,7 +24,7 @@ const children = computed(() => {
 })
 
 function label(name: string) {
-  return name.replace(/[-_]/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
+  return humanizeLabel(name)
 }
 
 function descriptionFor(kind: 'folder' | 'entry' | 'collection' | 'form') {
@@ -36,10 +37,10 @@ function descriptionFor(kind: 'folder' | 'entry' | 'collection' | 'form') {
 <template>
   <section class="ep:mx-auto ep:max-w-3xl ep:px-6 ep:py-8 ep:md:px-10 ep:md:py-12">
     <header class="ep:mb-8">
-      <h1 class="ep:mt-2 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-white">
+      <h1 class="ep:mt-2 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-text-strong">
         {{ label(folder.split('/').at(-1) ?? folder) }}
       </h1>
-      <p class="ep:mt-2 ep:text-sm ep:text-muted-ep">
+      <p class="ep:mt-2 ep:text-sm ep:text-text-muted">
         {{ t('folder.choose') }}
       </p>
     </header>

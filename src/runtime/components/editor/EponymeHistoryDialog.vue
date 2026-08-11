@@ -60,19 +60,19 @@ watch(() => props.open, open => open && void load())
   >
     <p
       v-if="pending"
-      class="ep:text-sm ep:text-muted-ep"
+      class="ep:text-sm ep:text-text-muted"
     >
       {{ t('history.loading') }}
     </p>
     <p
       v-else-if="error"
-      class="ep:text-sm ep:text-danger-ep"
+      class="ep:text-sm ep:text-danger"
     >
       {{ error }}
     </p>
     <p
       v-else-if="!history.length"
-      class="ep:text-sm ep:text-muted-ep"
+      class="ep:text-sm ep:text-text-muted"
     >
       {{ t('history.empty') }}
     </p>
@@ -83,16 +83,16 @@ watch(() => props.open, open => open && void load())
       <li
         v-for="version in history"
         :key="version.id"
-        class="ep:flex ep:items-center ep:justify-between ep:gap-4 ep:rounded-xl ep:bg-selected-ep/40 ep:p-3"
+        class="ep:flex ep:items-center ep:justify-between ep:gap-4 ep:rounded-xl ep:bg-surface-active/40 ep:p-3"
       >
         <div class="ep:min-w-0">
           <div class="ep:flex ep:flex-wrap ep:items-center ep:gap-2">
             <EPBadge :variant="version.status === 'published' ? 'success' : version.status === 'draft' ? 'warning' : 'neutral'">
               {{ t(`history.action.${version.action}`) }}
             </EPBadge>
-            <span class="ep:text-sm ep:font-medium ep:text-white">{{ formatVersionDate(version.createdAt) }}</span>
+            <span class="ep:text-sm ep:font-medium ep:text-text-strong">{{ formatVersionDate(version.createdAt) }}</span>
           </div>
-          <p class="ep:mt-1 ep:mb-0 ep:text-xs ep:text-muted-ep">
+          <p class="ep:mt-1 ep:mb-0 ep:text-xs ep:text-text-muted">
             {{ t('history.version', { id: version.id }) }}
             <template v-if="version.user">
               {{ t('history.by', { user: version.user.username }) }}
@@ -126,7 +126,7 @@ watch(() => props.open, open => open && void load())
       <p
         v-show="restoreError"
         role="alert"
-        class="ep:m-0 ep:rounded-lg ep:bg-danger-ep/10 ep:p-3 ep:text-sm ep:text-danger-ep"
+        class="ep:m-0 ep:rounded-lg ep:bg-danger/10 ep:p-3 ep:text-sm ep:text-danger"
       >
         {{ restoreError }}
       </p>

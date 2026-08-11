@@ -27,7 +27,7 @@ function update(value: string, enabled: boolean) {
       <label
         v-for="option in options"
         :key="option.value"
-        class="ep:flex ep:cursor-pointer ep:items-center ep:gap-3 ep:rounded-xl ep:bg-selected-ep/40 ep:px-4 ep:py-3 ep:text-sm ep:text-text-ep ep:transition ep:hover:border-muted-ep"
+        class="ep:flex ep:cursor-pointer ep:items-center ep:gap-3 ep:rounded-xl ep:bg-surface-active/40 ep:px-4 ep:py-3 ep:text-sm ep:text-text-default ep:transition ep:border ep:border-border-default"
       >
         <ClientOnly>
           <EPCheckbox
@@ -36,7 +36,7 @@ function update(value: string, enabled: boolean) {
             @update:model-value="update(option.value, $event)"
           />
           <template #fallback>
-            <span class="ep:h-5 ep:w-5 ep:rounded-md ep:border ep:border-border-ep ep:bg-selected-ep" />
+            <span class="ep:h-5 ep:w-5 ep:rounded-md ep:border ep:border-border-default ep:bg-surface-active" />
           </template>
         </ClientOnly>
         {{ option.label }}

@@ -3,6 +3,8 @@ export { collection } from './config/collection'
 export { form } from './config/form'
 export { defineEponymeVariables } from './config/variables'
 export { field, today, toMs } from './runtime/fields'
+export { resolveEponymeSeo } from './runtime/fields/seo'
+export type { EponymeSeoDefinition, EponymeSeoValue, SeoFieldOptions } from './runtime/fields/seo'
 export { EPONYME_ROLES, canEditEponyme, isEponymeRole } from './runtime/types/auth'
 export { eponymeMediaEmbedUrl, eponymeMediaThumbnailUrl, parseEponymeMediaUrl } from './runtime/utils/media-player'
 

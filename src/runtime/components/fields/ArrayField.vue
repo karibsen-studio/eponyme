@@ -119,12 +119,12 @@ async function handleObjectEnter(index: number, fieldName: string) {
         v-for="(item, index) in items"
         :key="index"
         class="eponyme-sortable-item"
-        :class="isSimple ? 'ep:grid ep:min-w-0 ep:grid-cols-[2rem_minmax(0,1fr)] ep:items-start ep:gap-2 ep:md:grid-cols-[2rem_minmax(0,1fr)_3rem]' : 'ep:min-w-0 ep:max-w-full ep:rounded-xl ep:bg-selected-ep/30 ep:p-4'"
+        :class="isSimple ? 'ep:grid ep:min-w-0 ep:grid-cols-[2rem_minmax(0,1fr)] ep:items-start ep:gap-2 ep:md:grid-cols-[2rem_minmax(0,1fr)_3rem]' : 'ep:min-w-0 ep:max-w-full ep:rounded-xl ep:bg-surface-active/30 ep:p-4'"
       >
         <template v-if="isSimple">
           <button
             type="button"
-            class="eponyme-drag-handle ep:flex ep:h-12 ep:w-8 ep:cursor-grab ep:items-center ep:justify-center ep:border-0 ep:bg-transparent ep:text-base ep:tracking-tighter ep:text-muted-ep ep:active:cursor-grabbing ep:hover:text-white"
+            class="eponyme-drag-handle ep:flex ep:h-12 ep:w-8 ep:cursor-grab ep:items-center ep:justify-center ep:border-0 ep:bg-transparent ep:text-base ep:tracking-tighter ep:text-text-muted ep:active:cursor-grabbing ep:hover:text-text-strong"
             :disabled="disabled"
             :aria-label="t('array.move', { item: itemLabel(index) })"
             :title="t('array.drag')"
@@ -168,14 +168,14 @@ async function handleObjectEnter(index: number, fieldName: string) {
             <div class="ep:flex ep:items-center ep:gap-2">
               <button
                 type="button"
-                class="eponyme-drag-handle ep:flex ep:h-8 ep:w-7 ep:cursor-grab ep:items-center ep:justify-center ep:border-0 ep:bg-transparent ep:text-base ep:tracking-tighter ep:text-muted-ep ep:active:cursor-grabbing ep:hover:text-white"
+                class="eponyme-drag-handle ep:flex ep:h-8 ep:w-7 ep:cursor-grab ep:items-center ep:justify-center ep:border-0 ep:bg-transparent ep:text-base ep:tracking-tighter ep:text-text-muted ep:active:cursor-grabbing ep:hover:text-text-strong"
                 :disabled="disabled"
                 :aria-label="t('array.move', { item: itemLabel(index) })"
                 :title="t('array.drag')"
               >
                 ⠿
               </button>
-              <span class="ep:text-xs ep:font-semibold ep:text-muted-ep">{{ itemLabel(index) }}</span>
+              <span class="ep:text-xs ep:font-semibold ep:text-text-muted">{{ itemLabel(index) }}</span>
             </div>
             <EPButton
               icon="mingcute:close-line"
@@ -208,7 +208,7 @@ async function handleObjectEnter(index: number, fieldName: string) {
             v-for="error in errorsAt(errors, itemErrorKey(index))"
             :key="error"
             role="alert"
-            class="ep:mt-2 ep:text-xs ep:text-danger-ep"
+            class="ep:mt-2 ep:text-xs ep:text-danger"
           >
             {{ error }}
           </p>
@@ -237,7 +237,7 @@ async function handleObjectEnter(index: number, fieldName: string) {
       </EPButton>
       <span
         v-if="definition.options.showCounter !== false && (definition.options.minItems !== undefined || definition.options.maxItems !== undefined)"
-        class="ep:text-[11px] ep:text-muted-ep"
+        class="ep:text-[11px] ep:text-text-muted"
       >
         {{ counter }}
       </span>

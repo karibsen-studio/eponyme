@@ -38,7 +38,7 @@ let mobileMediaQuery: MediaQueryList | undefined
 const selectedLabel = computed(() => props.options.find(option => option.value === props.modelValue)?.label ?? props.placeholder ?? '')
 const searchable = computed(() => props.options.length >= (mobile.value ? 3 : 5))
 const triggerClasses = computed(() => [
-  'ep:flex ep:w-full ep:min-w-0 ep:items-center ep:justify-between ep:gap-3 ep:border ep:border-border-ep ep:bg-selected-ep ep:px-4 ep:text-left ep:text-sm ep:text-white ep:outline-none ep:transition ep:focus:border-muted-ep ep:focus:ring-2 ep:focus:ring-white/10 ep:aria-invalid:border-danger-ep ep:disabled:cursor-not-allowed ep:disabled:opacity-50',
+  'ep:flex ep:w-full ep:min-w-0 ep:items-center ep:justify-between ep:gap-3 ep:border ep:border-border-default ep:bg-surface-input ep:px-4 ep:text-left ep:text-sm ep:text-text-strong ep:outline-none ep:transition ep:focus:border-text-muted ep:focus:ring-2 ep:focus:ring-contrast/10 ep:aria-invalid:border-danger ep:disabled:cursor-not-allowed ep:disabled:opacity-50',
   props.size === 'sm' ? 'ep:h-10 ep:rounded-lg' : 'ep:h-12 ep:rounded-xl',
 ])
 
@@ -93,10 +93,10 @@ onBeforeUnmount(() => {
         >
           <span
             class="ep:min-w-0 ep:truncate"
-            :class="modelValue ? 'ep:text-white' : 'ep:text-muted-ep'"
+            :class="modelValue ? 'ep:text-text-strong' : 'ep:text-text-muted'"
           >{{ selectedLabel }}</span>
           <span
-            class="ep:text-xs ep:text-muted-ep"
+            class="ep:text-xs ep:text-text-muted"
             aria-hidden="true"
           >⌄</span>
         </button>
@@ -107,8 +107,8 @@ onBeforeUnmount(() => {
         position="popper"
         :side-offset="6"
         :class="[
-          'eponyme-portal ep:min-w-(--reka-combobox-trigger-width) ep:overflow-hidden ep:rounded-xl ep:border ep:border-border-ep ep:bg-selected-ep ep:p-1 ep:text-text-ep',
-          contentClass || 'ep:z-40',
+          'eponyme-portal ep:min-w-(--reka-combobox-trigger-width) ep:overflow-hidden ep:rounded-xl ep:border ep:border-border-default ep:bg-surface-input ep:p-1 ep:text-text-default',
+          contentClass || 'ep:z-50',
         ]"
       >
         <div
@@ -120,11 +120,11 @@ onBeforeUnmount(() => {
             auto-focus
             :aria-label="t('select.search')"
             :placeholder="t('select.searchPlaceholder')"
-            class="ep:h-9 ep:w-full ep:rounded-lg ep:border ep:border-border-ep ep:bg-theme-ep ep:px-3 ep:text-sm ep:text-white ep:outline-none ep:placeholder:text-muted-ep ep:focus:border-muted-ep ep:focus:ring-2 ep:focus:ring-white/10"
+            class="ep:h-9 ep:w-full ep:rounded-lg ep:border ep:border-border-default ep:bg-surface-raised ep:px-3 ep:text-sm ep:text-text-strong ep:outline-none ep:placeholder:text-text-muted ep:focus:border-text-muted ep:focus:ring-2 ep:focus:ring-contrast/10"
           />
         </div>
         <ComboboxViewport class="ep:max-h-30 ep:touch-pan-y ep:overscroll-contain ep:sm:max-h-50">
-          <ComboboxEmpty class="ep:px-3 ep:py-2.5 ep:text-sm ep:text-muted-ep">
+          <ComboboxEmpty class="ep:px-3 ep:py-2.5 ep:text-sm ep:text-text-muted">
             {{ t('select.empty') }}
           </ComboboxEmpty>
           <ComboboxItem
@@ -132,7 +132,7 @@ onBeforeUnmount(() => {
             :key="option.value"
             :value="option.value"
             :text-value="option.label"
-            class="ep:relative ep:flex ep:cursor-pointer ep:items-center ep:rounded-lg ep:py-2.5 ep:pr-8 ep:pl-3 ep:text-sm ep:outline-none ep:select-none ep:data-highlighted:bg-white/10"
+            class="ep:relative ep:flex ep:cursor-pointer ep:items-center ep:rounded-lg ep:py-2.5 ep:pr-8 ep:pl-3 ep:text-sm ep:outline-none ep:select-none ep:data-highlighted:bg-contrast/10"
           >
             <span class="ep:truncate">{{ option.label }}</span>
             <ComboboxItemIndicator class="ep:absolute ep:right-3">

@@ -25,6 +25,7 @@ import { isFieldVisible } from '../../utils/is-field-visible'
 import { resolvePreviewPath } from '../../utils/preview'
 import { childErrors, errorsAt, fieldPathId } from '../../utils/field-path'
 import { EPONYME_DATE_LOCALE } from '../../utils/date-locale'
+import { humanizeLabel } from '../../utils/humanize-label'
 
 const props = withDefaults(defineProps<{ name: string, schema: EponymeSchema, readonlyFields?: string[] }>(), { readonlyFields: () => [] })
 const runtimeConfig = useRuntimeConfig()
@@ -102,7 +103,7 @@ const toast = ref<{
 })
 
 function label(name: string, configured?: string) {
-  return configured || name.replace(/[-_]/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
+  return humanizeLabel(name, configured)
 }
 
 /** Applies to every field type, including the ones nested in sections, tabs and arrays. */
@@ -304,9 +305,9 @@ useEventListener('beforeunload', (event) => {
 </script>
 
 <template>
-  <section class="eponyme-form ep:mx-auto ep:max-w-3xl ep:px-6 ep:py-8 ep:md:px-10 ep:md:py-12">
+  <section class="eponyme-form ep:scrollbar-thin ep:mx-auto ep:max-w-3xl ep:px-6 ep:py-8 ep:md:px-10 ep:md:py-12">
     <div class="ep:group ep:mt-2 ep:mb-8 ep:flex ep:flex-wrap ep:items-center ep:gap-3">
-      <h1 class="ep:m-0 ep:min-w-0 ep:max-w-full ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-white ep:[overflow-wrap:anywhere]">
+      <h1 class="ep:m-0 ep:min-w-0 ep:max-w-full ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-text-strong ep:[overflow-wrap:anywhere]">
         {{ label(name.split('/').at(-1) ?? name) }}
       </h1>
       <EPBadge :variant="publicationBadgeVariant">
@@ -320,7 +321,7 @@ useEventListener('beforeunload', (event) => {
       </EPBadge>
       <EPTooltip :content="t('form.history')">
         <EPButton
-          class="ep:opacity-0 ep:focus-visible:opacity-100 ep:focus-visible:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-white/30 ep:group-hover:opacity-100"
+          class="ep:opacity-0 ep:focus-visible:opacity-100 ep:focus-visible:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-contrast/30 ep:group-hover:opacity-100"
           icon="mingcute:history-anticlockwise-line"
           variant="ghost"
           :aria-label="t('form.openHistory')"
@@ -330,7 +331,7 @@ useEventListener('beforeunload', (event) => {
     </div>
     <p
       v-if="!eponymeData"
-      class="ep:text-sm ep:text-muted-ep"
+      class="ep:text-sm ep:text-text-muted"
     >
       {{ t('action.loading') }}
     </p>
@@ -344,7 +345,7 @@ useEventListener('beforeunload', (event) => {
       <div
         role="tablist"
         :aria-label="t('form.editorSections')"
-        class="ep:mb-8 ep:flex ep:gap-1 ep:border-b ep:border-border-ep"
+        class="ep:mb-8 ep:flex ep:gap-1 ep:border-b ep:border-border-default"
         @keydown.right.prevent="focusPanel(1)"
         @keydown.left.prevent="focusPanel(-1)"
         @keydown.home.prevent="focusBoundaryPanel('content')"
@@ -358,13 +359,13 @@ useEventListener('beforeunload', (event) => {
           :aria-controls="contentPanelId"
           :tabindex="activePanel === 'content' ? 0 : -1"
           class="ep:-mb-px ep:cursor-pointer ep:border-0 ep:border-b-2 ep:bg-transparent ep:px-4 ep:py-2.5 ep:text-sm ep:font-medium ep:transition"
-          :class="activePanel === 'content' ? 'ep:border-white ep:text-white' : 'ep:border-transparent ep:text-muted-ep ep:hover:text-text-ep'"
+          :class="activePanel === 'content' ? 'ep:border-contrast ep:text-text-strong' : 'ep:border-transparent ep:text-text-muted ep:hover:text-text-default'"
           @click="activatePanel('content')"
         >
           {{ t('form.contentTab') }}
           <span
             v-if="Object.keys(errors).some(key => key !== '_form')"
-            class="ep:ml-1 ep:text-danger-ep"
+            class="ep:ml-1 ep:text-danger"
             :aria-label="t('tabs.hasErrors', { tab: t('form.contentTab') })"
           >•</span>
         </button>
@@ -376,7 +377,7 @@ useEventListener('beforeunload', (event) => {
           :aria-controls="publicationPanelId"
           :tabindex="activePanel === 'publication' ? 0 : -1"
           class="ep:-mb-px ep:cursor-pointer ep:border-0 ep:border-b-2 ep:bg-transparent ep:px-4 ep:py-2.5 ep:text-sm ep:font-medium ep:transition"
-          :class="activePanel === 'publication' ? 'ep:border-white ep:text-white' : 'ep:border-transparent ep:text-muted-ep ep:hover:text-text-ep'"
+          :class="activePanel === 'publication' ? 'ep:border-contrast ep:text-text-strong' : 'ep:border-transparent ep:text-text-muted ep:hover:text-text-default'"
           @click="activatePanel('publication')"
         >
           {{ t('form.publicationTab') }}
@@ -413,21 +414,22 @@ useEventListener('beforeunload', (event) => {
               :field-name="fieldName"
               :definition="field"
               :errors="childErrors(errors, fieldName)"
+              :hide-top-border="true"
               :disabled="fieldDisabled(fieldName)"
             />
             <template v-else-if="field.type === 'array'">
               <label
                 :for="fieldPathId(fieldName)"
-                class="ep:mb-1.5 ep:block ep:text-sm ep:font-medium ep:text-text-ep"
+                class="ep:mb-1.5 ep:block ep:text-sm ep:font-medium ep:text-text-default"
               >
                 {{ label(fieldName, field.options.label) }}<span
                   v-if="field.options.required"
-                  class="ep:text-danger-ep"
+                  class="ep:text-field-required"
                 > *</span>
               </label>
               <p
                 v-if="field.options.description"
-                class="ep:mt-0 ep:mb-2 ep:text-xs ep:leading-relaxed ep:text-muted-ep"
+                class="ep:mt-0 ep:mb-2 ep:text-xs ep:leading-relaxed ep:text-text-muted"
               >
                 {{ field.options.description }}
               </p>
@@ -442,7 +444,7 @@ useEventListener('beforeunload', (event) => {
                 v-for="error in errorsAt(errors, fieldName)"
                 :key="error"
                 role="alert"
-                class="ep:mt-1.5 ep:text-xs ep:text-danger-ep"
+                class="ep:mt-1.5 ep:text-xs ep:text-danger"
               >
                 {{ error }}
               </p>
@@ -469,16 +471,16 @@ useEventListener('beforeunload', (event) => {
         <section :aria-labelledby="`${publicationPanelId}-status`">
           <h2
             :id="`${publicationPanelId}-status`"
-            class="ep:m-0 ep:text-xl ep:font-semibold ep:text-white"
+            class="ep:m-0 ep:text-xl ep:font-semibold ep:text-text-strong"
           >
             {{ t('form.publicationTab') }}
           </h2>
-          <p class="ep:mt-1 ep:mb-0 ep:text-sm ep:leading-relaxed ep:text-muted-ep">
+          <p class="ep:mt-1 ep:mb-0 ep:text-sm ep:leading-relaxed ep:text-text-muted">
             {{ t('form.publicationDescription') }}
           </p>
-          <dl class="ep:mt-5 ep:grid ep:gap-3 ep:rounded-xl ep:bg-selected-ep/50 ep:p-4 ep:text-sm">
+          <dl class="ep:mt-5 ep:grid ep:gap-3 ep:rounded-xl ep:bg-surface-active/50 ep:p-4 ep:text-sm ep:border ep:border-border-default">
             <div class="ep:flex ep:flex-wrap ep:items-center ep:justify-between ep:gap-3">
-              <dt class="ep:text-muted-ep">
+              <dt class="ep:text-text-muted">
                 {{ t('form.currentStatus') }}
               </dt>
               <dd class="ep:m-0">
@@ -491,10 +493,10 @@ useEventListener('beforeunload', (event) => {
               v-if="publishedAt"
               class="ep:flex ep:flex-wrap ep:items-center ep:justify-between ep:gap-3"
             >
-              <dt class="ep:text-muted-ep">
+              <dt class="ep:text-text-muted">
                 {{ t('form.publishedAt') }}
               </dt>
-              <dd class="ep:m-0 ep:text-white">
+              <dd class="ep:m-0 ep:text-text-strong">
                 {{ formatDate(publishedAt) }}
               </dd>
             </div>
@@ -504,18 +506,18 @@ useEventListener('beforeunload', (event) => {
         <section :aria-labelledby="`${publicationPanelId}-schedule`">
           <h3
             :id="`${publicationPanelId}-schedule`"
-            class="ep:m-0 ep:text-base ep:font-semibold ep:text-white"
+            class="ep:m-0 ep:text-base ep:font-semibold ep:text-text-strong"
           >
             {{ t('form.scheduleTitle') }}
           </h3>
-          <p class="ep:mt-1 ep:mb-4 ep:text-xs ep:leading-relaxed ep:text-muted-ep">
+          <p class="ep:mt-1 ep:mb-4 ep:text-xs ep:leading-relaxed ep:text-text-muted">
             {{ t('form.scheduleBody') }}
           </p>
           <div class="ep:grid ep:gap-4 ep:md:grid-cols-2">
             <div>
               <label
                 :for="schedulePublishId"
-                class="ep:mb-1.5 ep:block ep:text-sm ep:font-medium ep:text-text-ep"
+                class="ep:mb-1.5 ep:block ep:text-sm ep:font-medium ep:text-text-default"
               >{{ t('form.scheduledPublishAt') }}</label>
               <EPInputText
                 :id="schedulePublishId"
@@ -529,7 +531,7 @@ useEventListener('beforeunload', (event) => {
             <div>
               <label
                 :for="scheduleUnpublishId"
-                class="ep:mb-1.5 ep:block ep:text-sm ep:font-medium ep:text-text-ep"
+                class="ep:mb-1.5 ep:block ep:text-sm ep:font-medium ep:text-text-default"
               >{{ t('form.scheduledUnpublishAt') }}</label>
               <EPInputText
                 :id="scheduleUnpublishId"
@@ -543,14 +545,14 @@ useEventListener('beforeunload', (event) => {
           </div>
           <p
             :id="scheduleHintId"
-            class="ep:mt-2 ep:mb-0 ep:text-xs ep:leading-relaxed ep:text-muted-ep"
+            class="ep:mt-2 ep:mb-0 ep:text-xs ep:leading-relaxed ep:text-text-muted"
           >
             {{ t('form.scheduleTimezone') }}
           </p>
           <p
             v-if="scheduleError"
             :id="scheduleErrorId"
-            class="ep:mt-2 ep:mb-0 ep:text-xs ep:text-danger-ep"
+            class="ep:mt-2 ep:mb-0 ep:text-xs ep:text-danger"
           >
             {{ scheduleError }}
           </p>
@@ -590,7 +592,7 @@ useEventListener('beforeunload', (event) => {
         >
           <h3
             :id="`${publicationPanelId}-actions`"
-            class="ep:m-0 ep:text-base ep:font-semibold ep:text-white"
+            class="ep:m-0 ep:text-base ep:font-semibold ep:text-text-strong"
           >
             {{ t('form.publicationActions') }}
           </h3>
@@ -623,13 +625,13 @@ useEventListener('beforeunload', (event) => {
 
       <p
         v-if="errors._form"
-        class="ep:mt-1 ep:text-xs ep:text-danger-ep"
+        class="ep:mt-1 ep:text-xs ep:text-danger"
       >
         {{ errors._form.join(' ') }}
       </p>
       <div
         v-if="activePanel === 'content'"
-        class="ep:sticky ep:bottom-4 ep:z-20 ep:mt-8 ep:flex ep:flex-wrap ep:items-center ep:justify-between ep:gap-3 ep:rounded-xl ep:bg-theme-ep/70 ep:p-3 ep:backdrop-blur-xl"
+        class="ep:sticky ep:bottom-4 ep:z-20 ep:mt-8 ep:flex ep:flex-wrap ep:items-center ep:justify-between ep:gap-3 ep:rounded-xl ep:bg-surface-raised/70 ep:p-3 ep:backdrop-blur-xl"
       >
         <div class="ep:flex ep:flex-wrap ep:items-center ep:gap-2">
           <EPButton

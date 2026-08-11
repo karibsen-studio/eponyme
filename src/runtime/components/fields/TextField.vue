@@ -44,7 +44,7 @@ const value = () => typeof props.modelValue === 'string' ? props.modelValue : ''
     />
     <p
       v-if="maxLength !== undefined && showCounter !== false"
-      class="ep:mt-1.5 ep:mb-0 ep:text-right ep:text-[11px] ep:text-muted-ep"
+      class="ep:mt-1.5 ep:mb-0 ep:text-right ep:text-[11px] ep:text-text-muted"
     >
       {{ value().length }} / {{ maxLength }}
     </p>
@@ -52,7 +52,7 @@ const value = () => typeof props.modelValue === 'string' ? props.modelValue : ''
       v-if="preview && value()"
       :src="value()"
       :alt="label"
-      class="ep:mt-3 ep:block ep:max-h-64 ep:max-w-full ep:rounded-xl ep:border ep:border-border-ep ep:object-contain"
+      class="ep:mt-3 ep:block ep:max-h-64 ep:max-w-full ep:rounded-xl ep:border ep:border-border-default ep:object-contain"
     >
   </EPFormField>
 </template>

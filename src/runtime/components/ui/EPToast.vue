@@ -32,28 +32,28 @@ const emit = defineEmits<{
   >
     <ToastRoot
       :open="open"
-      class="eponyme-toast eponyme-portal ep:grid ep:w-full ep:grid-cols-[auto_1fr_auto] ep:items-start ep:gap-3 ep:rounded-xl ep:border ep:border-border-ep ep:bg-selected-ep ep:p-4 ep:font-sans ep:text-text-ep ep:outline-none"
+      class="eponyme-toast eponyme-portal ep:grid ep:w-full ep:grid-cols-[auto_1fr_auto] ep:items-start ep:gap-3 ep:rounded-xl ep:border ep:border-border-default ep:bg-surface-active ep:p-4 ep:font-sans ep:text-text-default ep:outline-none"
       @update:open="emit('update:open', $event)"
     >
       <span
         class="ep:mt-1.5 ep:h-2 ep:w-2 ep:rounded-full"
-        :class="variant === 'error' ? 'ep:bg-danger-ep' : 'ep:bg-success-ep'"
+        :class="variant === 'error' ? 'ep:bg-danger' : 'ep:bg-success'"
         aria-hidden="true"
       />
       <div class="ep:min-w-0">
-        <ToastTitle class="ep:m-0 ep:text-sm ep:font-semibold ep:text-white">
+        <ToastTitle class="ep:m-0 ep:text-sm ep:font-semibold ep:text-text-strong">
           {{ title }}
         </ToastTitle>
         <ToastDescription
           v-if="description"
-          class="ep:mt-1 ep:mb-0 ep:text-xs ep:leading-relaxed ep:text-muted-ep"
+          class="ep:mt-1 ep:mb-0 ep:text-xs ep:leading-relaxed ep:text-text-muted"
         >
           {{ description }}
         </ToastDescription>
       </div>
       <ToastClose
         :aria-label="t('toast.close')"
-        class="ep:-mt-1 ep:-mr-1 ep:inline-flex ep:h-7 ep:w-7 ep:cursor-pointer ep:items-center ep:justify-center ep:rounded-md ep:border-0 ep:bg-transparent ep:text-lg ep:leading-none ep:text-muted-ep ep:transition ep:hover:bg-white/5 ep:hover:text-white ep:focus-visible:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-white/20"
+        class="ep:-mt-1 ep:-mr-1 ep:inline-flex ep:h-7 ep:w-7 ep:cursor-pointer ep:items-center ep:justify-center ep:rounded-md ep:border-0 ep:bg-transparent ep:text-lg ep:leading-none ep:text-text-muted ep:transition ep:hover:bg-contrast/5 ep:hover:text-text-strong ep:focus-visible:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-contrast/20"
       >
         <span aria-hidden="true">&times;</span>
       </ToastClose>

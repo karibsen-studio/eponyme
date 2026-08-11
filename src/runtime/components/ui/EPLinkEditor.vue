@@ -51,20 +51,20 @@ function openLink() {
 
 <template>
   <div
-    class="ep:flex ep:min-h-12 ep:items-center ep:gap-3 ep:rounded-xl ep:border ep:bg-selected-ep ep:px-3 ep:py-2"
-    :class="invalid ? 'ep:border-danger-ep' : 'ep:border-0'"
+    class="ep:flex ep:min-h-12 ep:items-center ep:gap-3 ep:rounded-xl ep:border ep:border-border-default ep:bg-surface-active ep:px-3 ep:py-2"
+    :class="invalid ? 'ep:border-danger' : ''"
   >
     <Icon
       name="mingcute:link-2-line"
       size="20"
-      class="ep:shrink-0 ep:text-muted-ep"
+      class="ep:shrink-0 ep:text-text-muted"
       aria-hidden="true"
     />
     <div class="ep:min-w-0 ep:flex-1">
-      <p class="ep:m-0 ep:truncate ep:text-sm ep:text-white">
+      <p class="ep:m-0 ep:truncate ep:text-sm ep:text-text-strong">
         {{ value.href ? middleEllipsis(value.href, 40) : t('link.none') }}
       </p>
-      <p class="ep:mt-0.5 ep:mb-0 ep:text-[11px] ep:text-muted-ep">
+      <p class="ep:mt-0.5 ep:mb-0 ep:text-[11px] ep:text-text-muted">
         {{ value.type === 'internal' ? t('link.kindInternal') : t('link.kindExternal') }} · {{ value.download ? t('link.stateDownload') : value.openInNewTab ? t('link.stateNewTab') : t('link.stateSameTab') }}
       </p>
     </div>

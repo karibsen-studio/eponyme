@@ -81,7 +81,7 @@ function insert() {
       @submit.prevent="insert"
     >
       <label class="ep:block">
-        <span class="ep:mb-2 ep:block ep:text-sm ep:font-medium ep:text-white">{{ t('richText.imageUrl') }}</span>
+        <span class="ep:mb-2 ep:block ep:text-sm ep:font-medium ep:text-text-strong">{{ t('richText.imageUrl') }}</span>
         <EPInputText
           :id="urlId"
           v-model="src"
@@ -96,14 +96,14 @@ function insert() {
           v-show="urlError"
           :id="urlErrorId"
           role="alert"
-          class="ep:mt-1.5 ep:block ep:text-xs ep:text-danger-ep"
+          class="ep:mt-1.5 ep:block ep:text-xs ep:text-danger"
         >
           {{ urlError }}
         </span>
       </label>
 
       <label class="ep:block">
-        <span class="ep:mb-2 ep:block ep:text-sm ep:font-medium ep:text-white">{{ t('richText.imageAlt') }}</span>
+        <span class="ep:mb-2 ep:block ep:text-sm ep:font-medium ep:text-text-strong">{{ t('richText.imageAlt') }}</span>
         <EPInputText
           :id="altId"
           v-model="alt"

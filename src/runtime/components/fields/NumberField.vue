@@ -26,13 +26,13 @@ const inputMode = computed(() => {
   >
     <div
       v-if="!slider"
-      class="ep:flex ep:h-12 ep:items-center ep:gap-2 ep:rounded-xl ep:bg-selected-ep ep:px-4 ep:text-sm ep:transition ep:focus-within:ring-2 ep:focus-within:ring-white/10"
-      :class="errors.length ? 'ep:ring-1 ep:ring-danger-ep' : ''"
+      class="ep:flex ep:h-12 ep:items-center ep:gap-2 ep:rounded-xl ep:border ep:border-border-default ep:bg-surface-input ep:px-4 ep:text-sm ep:transition ep:focus-within:border-text-muted ep:focus-within:ring-2 ep:focus-within:ring-contrast/10"
+      :class="errors.length ? 'ep:ring-1 ep:ring-danger' : ''"
     >
       <span
         v-if="prefix"
         aria-hidden="true"
-        class="ep:shrink-0 ep:text-muted-ep"
+        class="ep:shrink-0 ep:text-text-muted"
       >{{ prefix }}</span>
       <EPInputText
         :id="id"
@@ -51,7 +51,7 @@ const inputMode = computed(() => {
       <span
         v-if="suffix"
         aria-hidden="true"
-        class="ep:shrink-0 ep:text-muted-ep"
+        class="ep:shrink-0 ep:text-text-muted"
       >{{ suffix }}</span>
     </div>
     <ClientOnly v-else>
@@ -68,7 +68,7 @@ const inputMode = computed(() => {
         @update:model-value="emit('update:modelValue', $event)"
       />
       <template #fallback>
-        <span class="ep:block ep:h-10 ep:w-full ep:rounded-lg ep:bg-selected-ep" />
+        <span class="ep:block ep:h-10 ep:w-full ep:rounded-lg ep:bg-surface-input" />
       </template>
     </ClientOnly>
   </EPFormField>

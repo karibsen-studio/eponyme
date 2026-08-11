@@ -27,7 +27,7 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
           <div
             v-for="option in options"
             :key="option.value"
-            class="ep:h-12 ep:rounded-xl ep:border ep:border-border-ep ep:bg-selected-ep/40"
+            class="ep:h-12 ep:rounded-xl ep:border ep:border-border-default ep:bg-surface-active/40"
           />
         </div>
       </template>

@@ -139,7 +139,7 @@ watch(() => route.path, () => {
 
 <template>
   <aside
-    class="eponyme-sidebar ep:flex ep:max-h-dvh ep:w-full ep:max-w-full ep:shrink-0 ep:flex-col ep:overflow-hidden ep:border-b ep:border-border-ep ep:bg-theme-ep ep:p-4 ep:transition-[width] ep:md:sticky ep:md:top-0 ep:md:h-dvh ep:md:border-r ep:md:border-b-0 ep:md:p-5"
+    class="eponyme-sidebar ep:flex ep:max-h-dvh ep:w-full ep:max-w-full ep:shrink-0 ep:flex-col ep:overflow-hidden ep:border-b ep:border-border-default ep:bg-surface-sidebar ep:p-4 ep:transition-[width] ep:md:sticky ep:md:top-0 ep:md:h-dvh ep:md:border-r ep:md:border-b-0 ep:md:p-5"
     :class="{ 'is-collapsed': collapsed }"
   >
     <div class="ep:flex ep:shrink-0 ep:items-center ep:justify-between ep:gap-2">
@@ -156,7 +156,7 @@ watch(() => route.path, () => {
       </NuxtLink>
       <button
         type="button"
-        class="ep:flex ep:h-8 ep:w-8 ep:shrink-0 ep:cursor-pointer ep:items-center ep:justify-center ep:rounded-lg ep:border-0 ep:bg-transparent ep:text-muted-ep ep:transition ep:hover:bg-selected-ep ep:hover:text-white"
+        class="ep:flex ep:h-8 ep:w-8 ep:shrink-0 ep:cursor-pointer ep:items-center ep:justify-center ep:rounded-lg ep:border-0 ep:bg-transparent ep:text-text-muted ep:transition ep:hover:bg-surface-active ep:hover:text-text-strong"
         :aria-label="collapsed ? t('sidebar.expand') : t('sidebar.collapse')"
         :title="collapsed ? t('sidebar.expand') : t('sidebar.collapse')"
         @click="collapsed = !collapsed"
@@ -171,7 +171,7 @@ watch(() => route.path, () => {
     <nav
       v-if="!collapsed"
       ref="navigationElement"
-      class="ep:mt-6 ep:grid ep:min-h-0 ep:min-w-0 ep:flex-1 ep:content-start ep:gap-1 ep:overflow-y-auto ep:overscroll-contain ep:pr-1"
+      class="ep:mt-6 ep:grid ep:min-h-0 ep:min-w-0 ep:flex-1 ep:content-start ep:gap-1 ep:overflow-y-auto ep:scrollbar-thin ep:overscroll-contain ep:pr-1"
       :aria-label="t('sidebar.contentEntries')"
     >
       <div class="ep:relative ep:mb-3">
@@ -179,7 +179,7 @@ watch(() => route.path, () => {
           name="mingcute:search-line"
           size="17"
           aria-hidden="true"
-          class="ep:pointer-events-none ep:absolute ep:top-1/2 ep:left-3 ep:-translate-y-1/2 ep:text-muted-ep"
+          class="ep:pointer-events-none ep:absolute ep:top-1/2 ep:left-3 ep:-translate-y-1/2 ep:text-text-muted"
         />
         <EPInputText
           ref="searchInput"
@@ -191,7 +191,7 @@ watch(() => route.path, () => {
           :aria-label="t('sidebar.searchLabel')"
           @focus="preloadEponymeNavigationSearch"
         />
-        <kbd class="ep:pointer-events-none ep:absolute ep:top-1/2 ep:right-2.5 ep:-translate-y-1/2 ep:rounded ep:border ep:border-border-ep ep:bg-theme-ep ep:px-1.5 ep:py-0.5 ep:font-sans ep:text-[10px] ep:font-medium ep:text-muted-ep">
+        <kbd class="ep:pointer-events-none ep:absolute ep:top-1/2 ep:right-2.5 ep:-translate-y-1/2 ep:rounded ep:border ep:border-border-default ep:bg-surface-raised ep:px-1.5 ep:py-0.5 ep:font-sans ep:text-[10px] ep:font-medium ep:text-text-muted">
           ⌘ K
         </kbd>
       </div>
@@ -206,11 +206,7 @@ watch(() => route.path, () => {
         :label="t('sidebar.users')"
         :active="route.path === `${normalizedBasePath}/users`"
       />
-      <div
-        class="ep:my-3 ep:px-3 ep:text-[11px] ep:font-semibold ep:tracking-widest ep:text-muted-ep ep:uppercase"
-      >
-        {{ t('sidebar.editables') }}
-      </div>
+      <div class="ep:mx-2 ep:h-px ep:bg-border-default ep:my-1.5" />
       <EponymeSidebarTree
         :nodes="filteredTree"
         :base-path="normalizedBasePath"
@@ -223,30 +219,30 @@ watch(() => route.path, () => {
       />
       <p
         v-if="isFiltering && !filteredTree.length"
-        class="ep:m-0 ep:px-3 ep:py-2 ep:text-xs ep:text-muted-ep"
+        class="ep:m-0 ep:px-3 ep:py-2 ep:text-xs ep:text-text-muted"
       >
         {{ t('sidebar.noMatch', { query: searchQuery }) }}
       </p>
     </nav>
     <div
       v-if="!collapsed && auth.user.value"
-      class="ep:mt-5 ep:flex ep:shrink-0 ep:items-center ep:gap-3 ep:border-t ep:border-border-ep ep:px-2 ep:pt-4"
+      class="ep:mt-5 ep:flex ep:shrink-0 ep:items-center ep:gap-3 ep:border-t ep:border-border-default ep:px-2 ep:pt-4"
     >
       <EPAvatar
         size="sm"
         :username="auth.user.value.username"
       />
       <div class="ep:min-w-0 ep:flex-1">
-        <p class="ep:m-0 ep:truncate ep:text-xs ep:font-semibold ep:text-white">
+        <p class="ep:m-0 ep:truncate ep:text-xs ep:font-semibold ep:text-text-strong">
           {{ auth.user.value.username }}
         </p>
-        <p class="ep:mt-0.5 ep:mb-0 ep:text-[11px] ep:text-muted-ep">
+        <p class="ep:mb-0 ep:text-[11px] ep:text-text-muted">
           {{ t(`role.${auth.user.value.role}`) }}
         </p>
       </div>
       <EPButton
         variant="ghost"
-        icon="mingcute:align-arrow-right-line"
+        icon="mingcute:selector-vertical-line"
         :aria-label="t('sidebar.logout')"
         @click="logout"
       />

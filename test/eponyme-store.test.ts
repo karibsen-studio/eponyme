@@ -1198,6 +1198,13 @@ describe('Eponyme export and import', () => {
     expect(schemaFingerprint({ title: field.textarea() })).not.toBe(schemaFingerprint(before))
   })
 
+  it('ignores the site-wide constants a seo preset carries, but not the fields it emits', () => {
+    const plain = { seo: field.seo() }
+    expect(schemaFingerprint({ seo: field.seo({ siteName: 'Karibsen', themeColor: '#111111' }) }))
+      .toBe(schemaFingerprint(plain))
+    expect(schemaFingerprint({ seo: field.seo({ social: false }) })).not.toBe(schemaFingerprint(plain))
+  })
+
   it('reports what a dry run would do without writing anything', async () => {
     const { service: source } = await seed()
     const file = await source.exportContent()

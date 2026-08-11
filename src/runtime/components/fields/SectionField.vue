@@ -48,28 +48,28 @@ function focusNextField(name: string) {
 </script>
 
 <template>
-  <section :class="hideHeader ? '' : ['ep:border-border-ep ep:pt-5', { 'ep:border-t': !hideTopBorder }]">
+  <section :class="hideHeader ? '' : ['ep:border-border-default ep:pt-5', { 'ep:border-t': !hideTopBorder }]">
     <button
       v-if="!hideHeader"
       type="button"
-      class="ep:flex ep:w-full ep:cursor-pointer ep:items-start ep:justify-between ep:gap-4 ep:border-0 ep:bg-transparent ep:p-0 ep:text-left ep:text-text-ep"
+      class="ep:flex ep:w-full ep:cursor-pointer ep:items-start ep:justify-between ep:gap-4 ep:border-0 ep:bg-transparent ep:p-0 ep:text-left ep:text-text-default"
       :aria-expanded="open"
       :aria-controls="`${fieldPathId(basePath)}-panel`"
       @click="open = !open"
     >
       <span class="ep:min-w-0 ep:flex-1">
-        <span class="ep:block ep:min-w-0 ep:max-w-full ep:text-xl ep:font-semibold ep:tracking-tight ep:text-white ep:[overflow-wrap:anywhere]">
+        <span class="ep:block ep:min-w-0 ep:max-w-full ep:text-xl ep:font-semibold ep:tracking-tight ep:text-text-strong ep:[overflow-wrap:anywhere]">
           {{ humanizeLabel(fieldName, definition.options.label) }}
         </span>
         <span
           v-if="definition.options.description"
-          class="ep:mt-1 ep:block ep:text-xs ep:leading-relaxed ep:text-muted-ep"
+          class="ep:mt-1 ep:block ep:text-xs ep:leading-relaxed ep:text-text-muted"
         >
           {{ definition.options.description }}
         </span>
       </span>
       <span
-        class="ep:mt-1 ep:shrink-0 ep:text-lg ep:text-muted-ep ep:transition-transform"
+        class="ep:mt-1 ep:shrink-0 ep:text-lg ep:text-text-muted ep:transition-transform"
         :class="{ 'ep:rotate-90': open }"
         aria-hidden="true"
       >
@@ -91,14 +91,14 @@ function focusNextField(name: string) {
           <template v-if="sectionField.type === 'array'">
             <label
               :for="fieldPathId(fieldPath(sectionFieldName))"
-              class="ep:mb-1.5 ep:inline-block ep:w-fit ep:text-sm ep:font-medium ep:text-text-ep"
+              class="ep:mb-1.5 ep:inline-block ep:w-fit ep:text-sm ep:font-medium ep:text-text-default"
             >{{ humanizeLabel(sectionFieldName, sectionField.options.label) }}<span
               v-if="sectionField.options.required"
-              class="ep:text-danger-ep"
+              class="ep:text-danger"
             > *</span></label>
             <p
               v-if="sectionField.options.description"
-              class="ep:mt-0 ep:mb-2 ep:text-xs ep:leading-relaxed ep:text-muted-ep"
+              class="ep:mt-0 ep:mb-2 ep:text-xs ep:leading-relaxed ep:text-text-muted"
             >
               {{ sectionField.options.description }}
             </p>
@@ -115,7 +115,7 @@ function focusNextField(name: string) {
               v-for="error in errorsAt(errors, relativePath(sectionFieldName))"
               :key="error"
               role="alert"
-              class="ep:mt-1.5 ep:text-xs ep:text-danger-ep"
+              class="ep:mt-1.5 ep:text-xs ep:text-danger"
             >
               {{ error }}
             </p>

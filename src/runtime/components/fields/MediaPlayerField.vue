@@ -61,7 +61,7 @@ function update(url: string | number) {
     />
     <p
       v-if="value.url"
-      class="ep:mt-1.5 ep:mb-0 ep:flex ep:items-center ep:gap-1.5 ep:text-[11px] ep:text-muted-ep"
+      class="ep:mt-1.5 ep:mb-0 ep:flex ep:items-center ep:gap-1.5 ep:text-[11px] ep:text-text-muted"
     >
       <Icon
         :name="detected ? detected.icon : 'mingcute:alert-line'"

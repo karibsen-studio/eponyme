@@ -70,7 +70,7 @@ function onEnter(event: KeyboardEvent) {
       :required="required"
       :disabled="disabled"
       :add-on-paste="false"
-      class="ep:flex ep:min-h-12 ep:w-full ep:flex-wrap ep:items-center ep:gap-1.5 ep:rounded-xl ep:border ep:border-border-ep ep:bg-selected-ep ep:px-2 ep:py-2 ep:transition ep:focus-within:border-muted-ep ep:focus-within:ring-2 ep:focus-within:ring-white/10 ep:aria-invalid:border-danger-ep"
+      class="ep:flex ep:min-h-12 ep:w-full ep:flex-wrap ep:items-center ep:gap-1.5 ep:rounded-xl ep:border ep:border-border-default ep:bg-surface-input ep:px-2 ep:py-2 ep:transition ep:focus-within:border-text-muted ep:focus-within:ring-2 ep:focus-within:ring-contrast/10 ep:aria-invalid:border-danger"
       :aria-invalid="invalid || undefined"
       @remove-tag="remove"
     >
@@ -78,12 +78,12 @@ function onEnter(event: KeyboardEvent) {
         v-for="tag in modelValue"
         :key="tag"
         :value="tag"
-        class="ep:flex ep:items-center ep:gap-1 ep:rounded-lg ep:bg-white/10 ep:py-1 ep:pr-1 ep:pl-2.5 ep:text-sm ep:text-white"
+        class="ep:flex ep:items-center ep:gap-1 ep:rounded-lg ep:bg-contrast/10 ep:py-1 ep:pr-1 ep:pl-2.5 ep:text-sm ep:text-text-strong"
       >
         <TagsInputItemText />
         <TagsInputItemDelete
           :aria-label="t('tags.remove', { tag })"
-          class="ep:flex ep:size-5 ep:cursor-pointer ep:items-center ep:justify-center ep:rounded-md ep:border-0 ep:bg-transparent ep:text-muted-ep ep:transition ep:hover:bg-white/10 ep:hover:text-white"
+          class="ep:flex ep:size-5 ep:cursor-pointer ep:items-center ep:justify-center ep:rounded-md ep:border-0 ep:bg-transparent ep:text-text-muted ep:transition ep:hover:bg-contrast/10 ep:hover:text-text-strong"
         >
           <Icon
             name="mingcute:close-line"
@@ -97,7 +97,7 @@ function onEnter(event: KeyboardEvent) {
         v-model="search"
         :placeholder="full ? undefined : placeholder"
         :disabled="disabled || full"
-        class="ep:min-w-24 ep:flex-1 ep:border-0 ep:bg-transparent ep:px-2 ep:text-sm ep:text-white ep:outline-none ep:placeholder:text-muted-ep ep:disabled:cursor-not-allowed"
+        class="ep:min-w-24 ep:flex-1 ep:border-0 ep:bg-transparent ep:px-2 ep:text-sm ep:text-text-strong ep:outline-none ep:placeholder:text-text-muted ep:disabled:cursor-not-allowed"
         @keydown.enter="onEnter"
       >
     </TagsInputRoot>
@@ -111,7 +111,7 @@ function onEnter(event: KeyboardEvent) {
         :key="suggestion"
         type="button"
         :disabled="disabled || full"
-        class="ep:cursor-pointer ep:rounded-lg ep:border ep:border-border-ep ep:bg-transparent ep:px-2.5 ep:py-1 ep:text-sm ep:text-muted-ep ep:transition ep:hover:border-muted-ep ep:hover:text-white ep:disabled:cursor-not-allowed ep:disabled:opacity-50"
+        class="ep:cursor-pointer ep:rounded-lg ep:border ep:border-border-default ep:bg-transparent ep:px-2.5 ep:py-1 ep:text-sm ep:text-text-muted ep:transition ep:hover:border-text-muted ep:hover:text-text-strong ep:disabled:cursor-not-allowed ep:disabled:opacity-50"
         @click="add(suggestion)"
       >
         {{ suggestion }}

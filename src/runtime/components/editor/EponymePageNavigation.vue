@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { t } from '#eponyme/locale'
 import { computed } from 'vue'
+import { humanizeLabel } from '../../utils/humanize-label'
 
 const props = defineProps<{
   basePath: string
@@ -17,7 +18,7 @@ function path(name: string) {
 }
 
 function label(name: string) {
-  return (name.split('/').at(-1) ?? name).replace(/[-_]/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
+  return humanizeLabel(name.split('/').at(-1) ?? name)
 }
 </script>
 
@@ -30,15 +31,15 @@ function label(name: string) {
     <NuxtLink
       v-if="previous"
       :to="path(previous)"
-      class="ep:group ep:flex ep:min-w-0 ep:items-center ep:gap-3 ep:rounded-xl ep:bg-selected-ep/40 ep:px-5 ep:py-4 ep:text-left ep:no-underline ep:transition ep:hover:border-muted-ep ep:hover:bg-selected-ep"
+      class="ep:group ep:flex ep:min-w-0 ep:items-center ep:gap-3 ep:rounded-xl ep:bg-nav-card ep:px-5 ep:py-4 ep:text-left ep:no-underline ep:transition ep:hover:bg-nav-card/80"
     >
       <span
-        class="ep:text-lg ep:text-muted-ep ep:transition ep:group-hover:-translate-x-1 ep:group-hover:text-white"
+        class="ep:text-lg ep:text-text-muted ep:transition ep:group-hover:-translate-x-1 ep:group-hover:text-text-strong"
         aria-hidden="true"
       >←</span>
       <span class="ep:min-w-0">
-        <span class="ep:block ep:text-[10px] ep:font-semibold ep:tracking-widest ep:text-muted-ep ep:uppercase">{{ t('action.previous') }}</span>
-        <span class="ep:mt-1 ep:block ep:truncate ep:text-sm ep:font-semibold ep:text-white">{{ label(previous) }}</span>
+        <span class="ep:block ep:text-xs ep:font-semibold ep:text-text-muted">{{ t('action.previous') }}</span>
+        <span class="ep:mt-1 ep:block ep:truncate ep:text-sm ep:font-semibold ep:text-text-strong">{{ label(previous) }}</span>
       </span>
     </NuxtLink>
     <span
@@ -48,14 +49,14 @@ function label(name: string) {
     <NuxtLink
       v-if="next"
       :to="path(next)"
-      class="ep:group ep:flex ep:min-w-0 ep:items-center ep:justify-end ep:gap-3 ep:rounded-xl ep:bg-selected-ep/40 ep:px-5 ep:py-4 ep:text-right ep:no-underline ep:transition ep:hover:border-muted-ep ep:hover:bg-selected-ep"
+      class="ep:group ep:flex ep:min-w-0 ep:items-center ep:justify-end ep:gap-3 ep:rounded-xl ep:bg-nav-card ep:px-5 ep:py-4 ep:text-right ep:no-underline ep:transition ep:hover:bg-nav-card/80"
     >
       <span class="ep:min-w-0">
-        <span class="ep:block ep:text-[10px] ep:font-semibold ep:tracking-widest ep:text-muted-ep ep:uppercase">{{ t('action.next') }}</span>
-        <span class="ep:mt-1 ep:block ep:truncate ep:text-sm ep:font-semibold ep:text-white">{{ label(next) }}</span>
+        <span class="ep:block ep:text-xs ep:font-semibold ep:text-text-muted">{{ t('action.next') }}</span>
+        <span class="ep:mt-1 ep:block ep:truncate ep:text-sm ep:font-semibold ep:text-text-strong">{{ label(next) }}</span>
       </span>
       <span
-        class="ep:text-lg ep:text-muted-ep ep:transition ep:group-hover:translate-x-1 ep:group-hover:text-white"
+        class="ep:text-lg ep:text-text-muted ep:transition ep:group-hover:translate-x-1 ep:group-hover:text-text-strong"
         aria-hidden="true"
       >→</span>
     </NuxtLink>
