@@ -2,6 +2,7 @@
 import { t } from '#eponyme/locale'
 import { computed, ref, watch } from 'vue'
 import { middleEllipsis } from '../../utils/middle-ellipsis'
+import { humanizeLabel } from '../../utils/humanize-label'
 
 const props = defineProps<{ basePath: string, eponyme: string }>()
 const parts = computed(() => props.eponyme.split('/'))
@@ -23,7 +24,7 @@ const visibleBreadcrumbs = computed(() => {
 })
 
 function label(name: string) {
-  return name.replace(/[-_]/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
+  return humanizeLabel(name)
 }
 
 function updateBreadcrumbMenuScroll(event: Event) {
@@ -41,7 +42,7 @@ watch(() => hiddenBreadcrumbs.value.map(breadcrumb => breadcrumb.path).join('|')
 <template>
   <nav
     v-if="folder"
-    class="ep:relative ep:z-50 ep:flex ep:min-h-14 ep:min-w-0 ep:items-center ep:overflow-visible ep:border-b ep:border-border-ep ep:bg-theme-ep/95 ep:px-3 ep:text-xs ep:backdrop-blur"
+    class="ep:relative ep:z-50 ep:flex ep:min-h-14 ep:min-w-0 ep:items-center ep:overflow-visible ep:border-b ep:border-border-default ep:bg-surface-page/95 ep:px-3 ep:text-xs ep:backdrop-blur"
     :aria-label="t('nav.label')"
   >
     <div class="eponyme-mobile-breadcrumbs ep:flex ep:min-w-0 ep:flex-1 ep:touch-pan-x ep:items-center ep:overflow-x-auto ep:overscroll-x-contain ep:sm:hidden">
@@ -52,18 +53,18 @@ watch(() => hiddenBreadcrumbs.value.map(breadcrumb => breadcrumb.path).join('|')
         <NuxtLink
           :to="`${basePath}/${breadcrumb.path}`"
           :title="breadcrumb.label"
-          class="ep:max-w-40 ep:shrink-0 ep:overflow-hidden ep:text-ellipsis ep:whitespace-nowrap ep:rounded-md ep:px-2 ep:py-1.5 ep:font-medium ep:text-muted-ep ep:no-underline"
+          class="ep:max-w-40 ep:shrink-0 ep:overflow-hidden ep:text-ellipsis ep:whitespace-nowrap ep:rounded-md ep:px-2 ep:py-1.5 ep:font-medium ep:text-text-muted ep:no-underline"
         >
           {{ middleEllipsis(breadcrumb.label) }}
         </NuxtLink>
         <span
-          class="ep:mx-1 ep:shrink-0 ep:text-muted-ep"
+          class="ep:mx-1 ep:shrink-0 ep:text-text-muted"
           aria-hidden="true"
         >/</span>
       </template>
       <span
         :title="eponymeLabel"
-        class="ep:shrink-0 ep:whitespace-nowrap ep:px-2 ep:font-medium ep:text-text-ep"
+        class="ep:shrink-0 ep:whitespace-nowrap ep:px-2 ep:font-medium ep:text-text-default"
       >{{ middleEllipsis(eponymeLabel, 36) }}</span>
     </div>
 
@@ -76,7 +77,7 @@ watch(() => hiddenBreadcrumbs.value.map(breadcrumb => breadcrumb.path).join('|')
           v-if="breadcrumb.kind === 'link'"
           :to="`${basePath}/${breadcrumb.path}`"
           :title="breadcrumb.label"
-          class="ep:max-w-40 ep:shrink-0 ep:overflow-hidden ep:text-ellipsis ep:whitespace-nowrap ep:rounded-md ep:px-2 ep:py-1.5 ep:font-medium ep:text-muted-ep ep:no-underline ep:transition ep:hover:bg-selected-ep ep:hover:text-white"
+          class="ep:max-w-40 ep:shrink-0 ep:overflow-hidden ep:text-ellipsis ep:whitespace-nowrap ep:rounded-md ep:px-2 ep:py-1.5 ep:font-medium ep:text-text-muted ep:no-underline ep:transition ep:hover:bg-surface-active ep:hover:text-text-strong"
         >
           {{ middleEllipsis(breadcrumb.label) }}
         </NuxtLink>
@@ -86,14 +87,14 @@ watch(() => hiddenBreadcrumbs.value.map(breadcrumb => breadcrumb.path).join('|')
         >
           <button
             type="button"
-            class="ep:cursor-default ep:rounded-md ep:border-0 ep:bg-transparent ep:px-2 ep:py-1.5 ep:font-semibold ep:text-muted-ep ep:transition ep:hover:bg-selected-ep ep:hover:text-white ep:focus-visible:bg-selected-ep ep:focus-visible:text-white ep:focus-visible:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-white/20"
+            class="ep:cursor-default ep:rounded-md ep:border-0 ep:bg-transparent ep:px-2 ep:py-1.5 ep:font-semibold ep:text-text-muted ep:transition ep:hover:bg-surface-active ep:hover:text-text-strong ep:focus-visible:bg-surface-active ep:focus-visible:text-text-strong ep:focus-visible:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-contrast/20"
             aria-haspopup="menu"
             :aria-label="t('nav.hiddenFoldersCount', { count: hiddenBreadcrumbs.length })"
           >
             …
           </button>
           <div class="ep:invisible ep:absolute ep:top-full ep:left-0 ep:z-[60] ep:w-max ep:max-w-72 ep:pt-1 ep:opacity-0 ep:transition ep:group-hover:visible ep:group-hover:opacity-100 ep:group-focus-within:visible ep:group-focus-within:opacity-100">
-            <div class="ep:relative ep:overflow-hidden ep:rounded-xl ep:border ep:border-border-ep ep:bg-theme-ep ep:p-2">
+            <div class="ep:relative ep:overflow-hidden ep:rounded-xl ep:border ep:border-border-default ep:bg-surface-raised ep:p-2">
               <div
                 :key="folder"
                 role="menu"
@@ -106,7 +107,7 @@ watch(() => hiddenBreadcrumbs.value.map(breadcrumb => breadcrumb.path).join('|')
                   :to="`${basePath}/${hiddenBreadcrumb.path}`"
                   :title="hiddenBreadcrumb.label"
                   role="menuitem"
-                  class="ep:block ep:max-w-64 ep:overflow-hidden ep:text-ellipsis ep:whitespace-nowrap ep:rounded-lg ep:px-3 ep:py-2 ep:font-medium ep:text-text-ep ep:no-underline ep:transition ep:hover:bg-selected-ep ep:hover:text-white"
+                  class="ep:block ep:max-w-64 ep:overflow-hidden ep:text-ellipsis ep:whitespace-nowrap ep:rounded-lg ep:px-3 ep:py-2 ep:font-medium ep:text-text-default ep:no-underline ep:transition ep:hover:bg-surface-active ep:hover:text-text-strong"
                 >
                   {{ hiddenBreadcrumb.label }}
                 </NuxtLink>
@@ -114,7 +115,7 @@ watch(() => hiddenBreadcrumbs.value.map(breadcrumb => breadcrumb.path).join('|')
               <Transition name="breadcrumb-scroll-hint">
                 <div
                   v-if="hiddenBreadcrumbs.length > 6 && !breadcrumbMenuAtBottom"
-                  class="eponyme-breadcrumb-scroll-hint ep:pointer-events-none ep:absolute ep:right-2 ep:bottom-2 ep:left-2 ep:flex ep:h-14 ep:items-end ep:justify-center ep:pb-1 ep:text-center ep:text-[10px] ep:font-semibold ep:tracking-widest ep:text-muted-ep ep:uppercase"
+                  class="eponyme-breadcrumb-scroll-hint ep:pointer-events-none ep:absolute ep:right-2 ep:bottom-2 ep:left-2 ep:flex ep:h-14 ep:items-end ep:justify-center ep:pb-1 ep:text-center ep:text-[10px] ep:font-semibold ep:tracking-widest ep:text-text-muted ep:uppercase"
                   aria-hidden="true"
                 >
                   {{ t('nav.scroll') }}
@@ -124,13 +125,13 @@ watch(() => hiddenBreadcrumbs.value.map(breadcrumb => breadcrumb.path).join('|')
           </div>
         </div>
         <span
-          class="ep:mx-1 ep:shrink-0 ep:text-muted-ep"
+          class="ep:mx-1 ep:shrink-0 ep:text-text-muted"
           aria-hidden="true"
         >/</span>
       </template>
       <span
         :title="eponymeLabel"
-        class="ep:min-w-0 ep:overflow-hidden ep:text-ellipsis ep:whitespace-nowrap ep:px-2 ep:font-medium ep:text-text-ep"
+        class="ep:min-w-0 ep:overflow-hidden ep:text-ellipsis ep:whitespace-nowrap ep:px-2 ep:font-medium ep:text-text-default"
       >{{ middleEllipsis(eponymeLabel, 36) }}</span>
     </div>
   </nav>
@@ -152,7 +153,7 @@ watch(() => hiddenBreadcrumbs.value.map(breadcrumb => breadcrumb.path).join('|')
 }
 
 .eponyme-breadcrumb-scroll-hint {
-  background: linear-gradient(180deg, transparent, var(--ep-color-theme-ep, #1c1c1c) 65%);
+  background: linear-gradient(180deg, transparent, var(--ep-color-surface-raised, #1c1c1c) 65%);
 }
 
 .breadcrumb-scroll-hint-enter-active,

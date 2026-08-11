@@ -6,6 +6,8 @@ import { normalizeHexColor, sameHexColor } from '../src/runtime/utils/normalize-
 import { collection } from '../src/config/collection'
 import { form } from '../src/config/form'
 import { field } from '../src/runtime/fields'
+import { resolveEponymeSeo } from '../src/runtime/fields/seo'
+import { isFieldVisible } from '../src/runtime/utils/is-field-visible'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas, isEponymeForm, isEponymeSchema } from '../src/runtime/utils/get-eponyme-schemas'
 import { findEponymeVariableRanges, interpolateEponymeText, interpolateEponymeValue, resolveEponymeVariables, summariseEponymeVariables } from '../src/runtime/utils/variables'
 import { applyPreviewSlug, readPreviewQuery, readPreviewVersion, resolvePreviewPath } from '../src/runtime/utils/preview'
@@ -39,6 +41,13 @@ describe('humanizeLabel', () => {
     expect(humanizeLabel('launch_date')).toBe('Launch Date')
     expect(humanizeLabel('hero-title')).toBe('Hero Title')
     expect(humanizeLabel('title')).toBe('Title')
+  })
+
+  it('splits camel case', () => {
+    expect(humanizeLabel('productionPhoto')).toBe('Production Photo')
+    expect(humanizeLabel('production_photoGallery')).toBe('Production Photo Gallery')
+    expect(humanizeLabel('heroSEOTitle')).toBe('Hero SEO Title')
+    expect(humanizeLabel('SEO')).toBe('SEO')
   })
 
   it('prefers the configured label', () => {
@@ -701,5 +710,56 @@ describe('field.mediaPlayer()', () => {
     expect(validate({}, 'https://youtu.be/dQw4w9WgXcQ')).toEqual(['Must be a video.'])
     expect(validate({}, { provider: '', url: 'not a url', id: '' }))
       .toEqual(['Must be a YouTube link, a Vimeo link or a direct video URL.'])
+  })
+})
+
+describe('field.seo', () => {
+  it('emits the classic fields, and the sharing ones only when asked', () => {
+    expect(Object.keys(field.seo().options.fields)).toEqual([
+      'title',
+      'description',
+      'image',
+      'shareSameAsPage',
+      'ogTitle',
+      'ogDescription',
+    ])
+    expect(Object.keys(field.seo({ image: false, social: false }).options.fields)).toEqual(['title', 'description'])
+  })
+
+  it('hides the sharing overrides behind the switch', () => {
+    const fields = field.seo().options.fields
+    expect(fields.ogTitle!.options.visibleWhen).toEqual({ field: 'shareSameAsPage', equals: false })
+    expect(isFieldVisible(fields.ogTitle!.options, { shareSameAsPage: true })).toBe(false)
+    expect(isFieldVisible(fields.ogTitle!.options, { shareSameAsPage: false })).toBe(true)
+  })
+
+  it('keeps the site-wide constants off the fields', () => {
+    const definition = field.seo({ siteName: 'Karibsen', themeColor: '#111111' })
+    expect(definition.seo).toEqual({ siteName: 'Karibsen', themeColor: '#111111' })
+    expect(Object.keys(definition.options.fields)).not.toContain('siteName')
+  })
+})
+
+describe('resolveEponymeSeo', () => {
+  it('falls back to the page values while the switch is on', () => {
+    const resolved = resolveEponymeSeo({ title: 'Homepage', description: 'A page', ogTitle: 'Stale' })
+    expect(resolved.ogTitle).toBe('Homepage')
+    expect(resolved.ogDescription).toBe('A page')
+  })
+
+  it('uses the overrides once the switch is off, and falls back when one is left empty', () => {
+    const value = { title: 'Homepage', description: 'A page', shareSameAsPage: false, ogTitle: 'Shared' }
+    const resolved = resolveEponymeSeo(value)
+    expect(resolved.ogTitle).toBe('Shared')
+    expect(resolved.ogDescription).toBe('A page')
+  })
+
+  it('reads the constants back from the definition, and tolerates an empty entry', () => {
+    const definition = field.seo({ siteName: 'Karibsen', themeColor: '#111111' })
+    expect(resolveEponymeSeo(undefined, definition)).toMatchObject({
+      siteName: 'Karibsen',
+      themeColor: '#111111',
+      title: undefined,
+    })
   })
 })

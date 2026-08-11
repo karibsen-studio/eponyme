@@ -29,7 +29,7 @@ const revealed = ref(false)
     />
     <button
       type="button"
-      class="ep:absolute ep:top-1/2 ep:right-2 ep:flex ep:size-8 ep:-translate-y-1/2 ep:cursor-pointer ep:items-center ep:justify-center ep:rounded-lg ep:border-0 ep:bg-transparent ep:text-muted-ep ep:transition ep:hover:bg-white/10 ep:hover:text-white ep:focus-visible:ring-2 ep:focus-visible:ring-white/30 ep:focus-visible:outline-none ep:disabled:cursor-not-allowed ep:disabled:opacity-50"
+      class="ep:absolute ep:top-1/2 ep:right-2 ep:flex ep:size-8 ep:-translate-y-1/2 ep:cursor-pointer ep:items-center ep:justify-center ep:rounded-lg ep:border-0 ep:bg-transparent ep:text-text-muted ep:transition ep:hover:bg-contrast/10 ep:hover:text-text-strong ep:focus-visible:ring-2 ep:focus-visible:ring-contrast/30 ep:focus-visible:outline-none ep:disabled:cursor-not-allowed ep:disabled:opacity-50"
       :disabled="disabled"
       :aria-label="revealed ? t('password.hide') : t('password.show')"
       :aria-pressed="revealed"

@@ -151,21 +151,18 @@ async function confirmSubmissionAction() {
   <section class="ep:mx-auto ep:w-full ep:max-w-5xl ep:px-6 ep:py-8 ep:md:px-10 ep:md:py-12">
     <header class="ep:flex ep:flex-wrap ep:items-start ep:justify-between ep:gap-4">
       <div>
-        <p class="ep:m-0 ep:text-[11px] ep:font-semibold ep:tracking-widest ep:text-muted-ep ep:uppercase">
-          {{ t('submissions.mode') }}
-        </p>
-        <h1 class="ep:mt-2 ep:mb-0 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-white">
+        <h1 class="ep:mt-2 ep:mb-0 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-text-strong">
           {{ label }}
         </h1>
         <p
           v-if="definition.description"
-          class="ep:mt-2 ep:mb-0 ep:text-sm ep:text-muted-ep"
+          class="ep:mt-2 ep:mb-0 ep:text-sm ep:text-text-muted"
         >
           {{ definition.description }}
         </p>
       </div>
       <div class="ep:flex ep:items-center ep:gap-3">
-        <EPBadge :variant="collects ? 'success' : 'neutral'">
+        <EPBadge :variant="collects ? 'managed' : 'neutral'">
           {{ definition.submission.mode }}
         </EPBadge>
         <EPButton
@@ -181,19 +178,19 @@ async function confirmSubmissionAction() {
 
     <div
       v-if="!collects"
-      class="ep:mt-8 ep:rounded-xl ep:border ep:border-dashed ep:border-border-ep ep:p-8 ep:text-center"
+      class="ep:mt-8 ep:rounded-xl ep:border ep:border-dashed ep:border-border-default ep:p-8 ep:text-center"
     >
-      <p class="ep:m-0 ep:text-sm ep:text-muted-ep">
+      <p class="ep:m-0 ep:text-sm ep:text-text-muted">
         {{ t('submissions.customTitle') }}
       </p>
-      <p class="ep:mt-2 ep:mb-0 ep:text-xs ep:text-muted-ep">
+      <p class="ep:mt-2 ep:mb-0 ep:text-xs ep:text-text-muted">
         Switch it to <code>submission: {{ '{' }} mode: 'managed' {{ '}' }}</code> to collect them here,
         or add <code>store: true</code> and call <code>storeEponymeFormSubmission()</code> from your own route.
       </p>
     </div>
     <p
       v-else-if="pending"
-      class="ep:mt-8 ep:text-sm ep:text-muted-ep"
+      class="ep:mt-8 ep:text-sm ep:text-text-muted"
     >
       {{ t('action.loading') }}
     </p>
@@ -201,8 +198,8 @@ async function confirmSubmissionAction() {
       v-else-if="submissions.length"
       class="ep:mt-8"
     >
-      <div class="ep:overflow-x-auto ep:rounded-xl ep:bg-selected-ep/50">
-        <table class="ep:w-full ep:border-collapse ep:text-left ep:text-sm">
+      <div class="ep:overflow-x-auto ep:rounded-xl ep:bg-surface-active/50">
+        <table class="ep:w-full ep:table-fixed ep:border-collapse ep:text-left ep:text-sm">
           <thead>
             <tr
               v-for="headerGroup in table.getHeaderGroups()"
@@ -212,7 +209,7 @@ async function confirmSubmissionAction() {
                 v-for="header in headerGroup.headers"
                 :key="header.id"
                 scope="col"
-                class="ep:border-b ep:border-border-ep ep:p-3 ep:text-[11px] ep:font-semibold ep:text-muted-ep ep:uppercase"
+                class="ep:border-b ep:border-border-default ep:p-3 ep:text-xs ep:font-semibold ep:text-text-muted ep:uppercase ep:w-[230px]"
               >
                 <button
                   type="button"
@@ -229,7 +226,7 @@ async function confirmSubmissionAction() {
               </th>
               <th
                 scope="col"
-                class="ep:relative ep:border-b ep:border-border-ep ep:p-3"
+                class="ep:relative ep:border-b ep:border-border-default ep:p-3"
               >
                 <span class="ep:sr-only">{{ t('action.actions') }}</span>
               </th>
@@ -239,12 +236,12 @@ async function confirmSubmissionAction() {
             <tr
               v-for="row in table.getRowModel().rows"
               :key="row.id"
-              class="ep:group ep:border-b ep:border-border-ep/50 ep:last:border-0"
+              class="ep:group ep:border-b ep:border-border-default/50 ep:last:border-0"
             >
               <td
                 v-for="cell in row.getVisibleCells()"
                 :key="cell.id"
-                class="ep:p-3 ep:align-top ep:text-white"
+                class="ep:p-3 ep:align-top ep:break-words ep:text-text-strong"
               >
                 <button
                   type="button"
@@ -274,7 +271,7 @@ async function confirmSubmissionAction() {
       </div>
 
       <div class="ep:mt-4 ep:flex ep:flex-wrap ep:items-center ep:justify-between ep:gap-3">
-        <p class="ep:m-0 ep:text-xs ep:text-muted-ep">
+        <p class="ep:m-0 ep:text-xs ep:text-text-muted">
           {{ t('submissions.pager', { count: total, page, pages: pageCount }) }}
         </p>
         <div class="ep:flex ep:gap-2">
@@ -297,9 +294,9 @@ async function confirmSubmissionAction() {
     </div>
     <div
       v-else
-      class="ep:mt-8 ep:rounded-xl ep:border ep:border-dashed ep:border-border-ep ep:p-8 ep:text-center"
+      class="ep:mt-8 ep:rounded-xl ep:border ep:border-dashed ep:border-border-default ep:p-8 ep:text-center"
     >
-      <p class="ep:m-0 ep:text-sm ep:text-muted-ep">
+      <p class="ep:m-0 ep:text-sm ep:text-text-muted">
         {{ t('submissions.empty') }}
       </p>
     </div>
@@ -318,10 +315,10 @@ async function confirmSubmissionAction() {
           v-for="(field, fieldName) in definition.fields"
           :key="fieldName"
         >
-          <dt class="ep:text-[11px] ep:font-semibold ep:tracking-widest ep:text-muted-ep ep:uppercase">
+          <dt class="ep:text-[11px] ep:font-semibold ep:text-text-muted">
             {{ humanizeLabel(String(fieldName), field.options.label) }}
           </dt>
-          <dd class="ep:m-0 ep:mt-1 ep:whitespace-pre-wrap ep:text-sm ep:text-white">
+          <dd class="ep:m-0 ep:mt-1 ep:whitespace-pre-wrap ep:text-sm ep:text-text-strong">
             {{ formatValue(selected.data[fieldName]) || t('action.empty') }}
           </dd>
         </div>
@@ -342,7 +339,7 @@ async function confirmSubmissionAction() {
       <p
         v-show="submissionActionError"
         role="alert"
-        class="ep:m-0 ep:rounded-lg ep:bg-danger-ep/10 ep:p-3 ep:text-sm ep:text-danger-ep"
+        class="ep:m-0 ep:rounded-lg ep:bg-danger/10 ep:p-3 ep:text-sm ep:text-danger"
       >
         {{ submissionActionError }}
       </p>

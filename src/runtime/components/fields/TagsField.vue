@@ -47,12 +47,12 @@ const tags = computed(() => Array.isArray(props.modelValue)
         @update:model-value="emit('update:modelValue', normalizeEponymeTags($event, { suggestions, allowCustom }))"
       />
       <template #fallback>
-        <div class="ep:min-h-12 ep:rounded-xl ep:border ep:border-border-ep ep:bg-selected-ep" />
+        <div class="ep:min-h-12 ep:rounded-xl ep:border ep:border-border-default ep:bg-surface-active" />
       </template>
     </ClientOnly>
     <p
       v-if="maxItems !== undefined"
-      class="ep:mt-1.5 ep:mb-0 ep:text-right ep:text-[11px] ep:text-muted-ep"
+      class="ep:mt-1.5 ep:mb-0 ep:text-right ep:text-[11px] ep:text-text-muted"
     >
       {{ tags.length }} / {{ maxItems }}
     </p>

@@ -13,6 +13,7 @@ import EPDialog from '../ui/EPDialog.vue'
 import EPFormField from '../ui/EPFormField.vue'
 import EPInputText from '../ui/EPInputText.vue'
 import { EPONYME_DATE_LOCALE } from '../../utils/date-locale'
+import { humanizeLabel } from '../../utils/humanize-label'
 
 const props = defineProps<{ basePath: string, name: string, definition: EponymeCollectionDefinitionBase }>()
 const route = useRoute()
@@ -56,7 +57,7 @@ watch(() => route.query.create, value => createOpen.value = value === '1')
 watch(entries, value => collectionEntries.value = { ...collectionEntries.value, [props.name]: value }, { immediate: true })
 
 function humanize(value: string) {
-  return value.replace(/[-_]/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
+  return humanizeLabel(value)
 }
 
 function truncateTitle(value: string, maxLength = 48) {
@@ -165,12 +166,12 @@ function formatDate(value: string | null) {
   <section class="ep:mx-auto ep:w-full ep:max-w-3xl ep:px-6 ep:py-8 ep:md:px-10 ep:md:py-12">
     <header class="ep:flex ep:flex-wrap ep:items-start ep:justify-between ep:gap-4">
       <div>
-        <h1 class="ep:mt-2 ep:mb-0 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-white">
+        <h1 class="ep:mt-2 ep:mb-0 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-text-strong">
           {{ label }}
         </h1>
         <p
           v-if="definition.description"
-          class="ep:mt-2 ep:mb-0 ep:text-sm ep:text-muted-ep"
+          class="ep:mt-2 ep:mb-0 ep:text-sm ep:text-text-muted"
         >
           {{ definition.description }}
         </p>
@@ -198,20 +199,20 @@ function formatDate(value: string | null) {
       v-if="view === 'trash'"
       class="ep:mt-8 ep:grid ep:gap-3"
     >
-      <p class="ep:m-0 ep:text-sm ep:text-muted-ep">
+      <p class="ep:m-0 ep:text-sm ep:text-text-muted">
         {{ t('collection.trashHint') }}
       </p>
       <article
         v-for="entry in trashEntries"
         :key="entry.slug"
-        class="ep:flex ep:flex-wrap ep:items-center ep:justify-between ep:gap-3 ep:rounded-xl ep:bg-selected-ep/50 ep:p-4"
+        class="ep:flex ep:flex-wrap ep:items-center ep:justify-between ep:gap-3 ep:rounded-xl ep:bg-surface-active/50 ep:p-4"
       >
         <div
           class="ep:min-w-0 ep:flex-1"
           :title="entry.title"
         >
-          <span class="ep:block ep:min-w-0 ep:overflow-hidden ep:text-ellipsis ep:whitespace-nowrap ep:text-sm ep:font-semibold ep:text-white">{{ truncateTitle(entry.title) }}</span>
-          <span class="ep:mt-1 ep:block ep:text-xs ep:text-muted-ep">{{ entry.deletedAt ? t('collection.deletedOn', { date: formatDate(entry.deletedAt) }) : t('collection.deleted') }}</span>
+          <span class="ep:block ep:min-w-0 ep:overflow-hidden ep:text-ellipsis ep:whitespace-nowrap ep:text-sm ep:font-semibold ep:text-text-strong">{{ truncateTitle(entry.title) }}</span>
+          <span class="ep:mt-1 ep:block ep:text-xs ep:text-text-muted">{{ entry.deletedAt ? t('collection.deletedOn', { date: formatDate(entry.deletedAt) }) : t('collection.deleted') }}</span>
         </div>
         <div class="ep:flex ep:shrink-0 ep:gap-2">
           <EPButton
@@ -234,7 +235,7 @@ function formatDate(value: string | null) {
 
     <p
       v-else-if="pending"
-      class="ep:mt-8 ep:text-sm ep:text-muted-ep"
+      class="ep:mt-8 ep:text-sm ep:text-text-muted"
     >
       {{ t('action.loading') }}
     </p>
@@ -245,7 +246,7 @@ function formatDate(value: string | null) {
       <article
         v-for="entry in entries"
         :key="entry.slug"
-        class="ep:group ep:flex ep:items-center ep:justify-between ep:gap-4 ep:rounded-xl ep:bg-selected-ep/50 ep:p-4"
+        class="ep:group ep:flex ep:items-center ep:justify-between ep:gap-4 ep:rounded-xl ep:bg-surface-active/50 ep:p-4"
       >
         <NuxtLink
           :to="`${basePath}/${name}/${entry.slug}`"
@@ -253,9 +254,9 @@ function formatDate(value: string | null) {
           class="ep:min-w-0 ep:flex-1 ep:no-underline"
         >
           <span class="ep:flex ep:min-w-0 ep:items-center ep:gap-2">
-            <span class="ep:min-w-0 ep:flex-1 ep:overflow-hidden ep:text-ellipsis ep:whitespace-nowrap ep:text-sm ep:font-semibold ep:text-white">{{ truncateTitle(entry.title) }}</span>
+            <span class="ep:min-w-0 ep:flex-1 ep:overflow-hidden ep:text-ellipsis ep:whitespace-nowrap ep:text-sm ep:font-semibold ep:text-text-strong">{{ truncateTitle(entry.title) }}</span>
           </span>
-          <span class="ep:mt-1 ep:block ep:text-xs ep:text-muted-ep">
+          <span class="ep:mt-1 ep:block ep:text-xs ep:text-text-muted">
             {{ t(`status.${entry.status}`) }}<template v-if="entry.updatedAt"> · {{ formatDate(entry.updatedAt) }}</template>
             <template v-if="entry.scheduledPublishAt"><br>{{ t('collection.scheduledPublish', { date: formatDate(entry.scheduledPublishAt) }) }}</template>
             <template v-if="entry.scheduledUnpublishAt"><br>{{ t('collection.scheduledUnpublish', { date: formatDate(entry.scheduledUnpublishAt) }) }}</template>
@@ -274,9 +275,9 @@ function formatDate(value: string | null) {
     </div>
     <div
       v-else
-      class="ep:mt-8 ep:rounded-xl ep:border ep:border-dashed ep:border-border-ep ep:p-8 ep:text-center"
+      class="ep:mt-8 ep:rounded-xl ep:border ep:border-dashed ep:border-border-default ep:p-8 ep:text-center"
     >
-      <p class="ep:m-0 ep:text-sm ep:text-muted-ep">
+      <p class="ep:m-0 ep:text-sm ep:text-text-muted">
         {{ t('collection.empty') }}
       </p>
       <EPButton
@@ -326,7 +327,7 @@ function formatDate(value: string | null) {
         </EPFormField>
         <p
           v-if="errors._form"
-          class="ep:m-0 ep:text-xs ep:text-danger-ep"
+          class="ep:m-0 ep:text-xs ep:text-danger"
         >
           {{ errors._form.join(' ') }}
         </p>
@@ -359,7 +360,7 @@ function formatDate(value: string | null) {
       <p
         v-show="entryActionError"
         role="alert"
-        class="ep:m-0 ep:rounded-lg ep:bg-danger-ep/10 ep:p-3 ep:text-sm ep:text-danger-ep"
+        class="ep:m-0 ep:rounded-lg ep:bg-danger/10 ep:p-3 ep:text-sm ep:text-danger"
       >
         {{ entryActionError }}
       </p>

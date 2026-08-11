@@ -568,9 +568,20 @@ export default defineNuxtModule<ModuleOptions>({
       pages.push(
         { name: 'eponyme-login', path: `${dashboardPath}/login`, file: resolver.resolve('./runtime/pages/EponymeLoginPage.vue'), meta: { layout: false } },
         { name: 'eponyme-change-password', path: `${dashboardPath}/change-password`, file: resolver.resolve('./runtime/pages/EponymeChangePasswordPage.vue'), meta: { layout: false, middleware: ['eponyme-auth'] } },
-        { name: 'eponyme-users', path: `${dashboardPath}/users`, file: resolver.resolve('./runtime/pages/EponymeUsersPage.vue'), meta: { layout: false, middleware: ['eponyme-auth', 'eponyme-owner'] } },
-        { name: 'eponyme-index', path: dashboardPath, file: resolver.resolve('./runtime/pages/EponymeIndexPage.vue'), meta: { layout: false, middleware: ['eponyme-auth'] } },
-        { name: 'eponyme-detail', path: `${dashboardPath}/:eponyme(.*)*`, file: resolver.resolve('./runtime/pages/EponymeDetailPage.vue'), meta: { layout: false, middleware: ['eponyme-auth'] } },
+        // The shell is a parent route rather than a layout: a layout only renders when the
+        // host application's `app.vue` uses `<NuxtLayout>`, which a module cannot require.
+        // Keeping it mounted across navigations is what spares the sidebar a remount.
+        {
+          name: 'eponyme-dashboard',
+          path: dashboardPath,
+          file: resolver.resolve('./runtime/pages/EponymeDashboardShell.vue'),
+          meta: { layout: false },
+          children: [
+            { name: 'eponyme-users', path: 'users', file: resolver.resolve('./runtime/pages/EponymeUsersPage.vue'), meta: { middleware: ['eponyme-auth', 'eponyme-owner'] } },
+            { name: 'eponyme-index', path: '', file: resolver.resolve('./runtime/pages/EponymeIndexPage.vue'), meta: { middleware: ['eponyme-auth'] } },
+            { name: 'eponyme-detail', path: ':eponyme(.*)*', file: resolver.resolve('./runtime/pages/EponymeDetailPage.vue'), meta: { middleware: ['eponyme-auth'] } },
+          ],
+        },
       )
     })
 

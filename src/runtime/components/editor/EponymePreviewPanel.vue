@@ -77,10 +77,10 @@ watch(() => props.name, () => {
 <template>
   <aside
     v-if="open"
-    class="ep:fixed ep:z-100 ep:top-0 ep:right-0 ep:bottom-0 ep:flex ep:w-full ep:flex-col ep:border-l ep:border-border-ep ep:bg-theme-ep ep:shadow-2xl ep:md:w-[45vw] ep:lg:w-[40vw]"
+    class="ep:fixed ep:z-100 ep:top-0 ep:right-0 ep:bottom-0 ep:flex ep:w-full ep:flex-col ep:border-l ep:border-border-default ep:bg-surface-raised ep:shadow-2xl ep:md:w-[45vw] ep:lg:w-[40vw]"
     :aria-label="t('preview.label')"
   >
-    <div class="ep:flex ep:flex-wrap ep:items-center ep:gap-2 ep:border-b ep:border-border-ep ep:p-3">
+    <div class="ep:flex ep:flex-wrap ep:items-center ep:gap-2 ep:border-b ep:border-border-default ep:p-3">
       <EPSelect
         size="sm"
         class="ep:min-w-0 ep:flex-1"
@@ -109,14 +109,14 @@ watch(() => props.name, () => {
         @click="emit('update:open', false)"
       />
     </div>
-    <p class="ep:m-0 ep:px-3 ep:py-2 ep:text-[11px] ep:text-muted-ep">
+    <p class="ep:m-0 ep:px-3 ep:py-2 ep:text-[11px] ep:text-text-muted">
       {{ t('preview.hint') }}
     </p>
     <iframe
       :key="previewUrl"
       :src="previewUrl"
       :title="t('preview.frame')"
-      class="ep:min-h-0 ep:w-full ep:flex-1 ep:border-0 ep:bg-canvas-ep"
+      class="ep:min-h-0 ep:w-full ep:flex-1 ep:border-0 ep:bg-always-white"
     />
   </aside>
 </template>

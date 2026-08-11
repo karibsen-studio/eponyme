@@ -22,14 +22,14 @@ const emit = defineEmits<{ 'update:open': [value: boolean] }>()
       <DialogOverlay class="eponyme-dialog-overlay ep:fixed ep:inset-0 ep:z-50 ep:bg-black/65 ep:backdrop-blur-sm" />
       <DialogContent
         :role="role"
-        class="eponyme-dialog-content eponyme-portal ep:fixed ep:top-1/2 ep:left-1/2 ep:z-50 ep:w-[min(32rem,calc(100vw-2rem))] ep:rounded-2xl ep:border-0 ep:bg-theme-ep ep:p-6 ep:font-sans ep:text-text-ep ep:outline-none"
+        class="eponyme-dialog-content eponyme-portal ep:fixed ep:top-1/2 ep:left-1/2 ep:z-50 ep:w-[min(32rem,calc(100vw-2rem))] ep:rounded-2xl ep:border-0 ep:bg-surface-raised ep:p-6 ep:font-sans ep:text-text-default ep:outline-none"
       >
-        <DialogTitle class="ep:text-xl ep:font-semibold ep:text-white">
+        <DialogTitle class="ep:text-xl ep:font-semibold ep:text-text-strong">
           {{ title }}
         </DialogTitle>
         <DialogDescription
           v-if="description"
-          class="ep:mt-2 ep:text-sm ep:leading-relaxed ep:text-muted-ep"
+          class="ep:mt-2 ep:text-sm ep:leading-relaxed ep:text-text-muted"
         >
           {{ description }}
         </DialogDescription>

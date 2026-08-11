@@ -27,11 +27,11 @@ const padding = computed(() => {
 })
 
 const classes = computed(() => [
-  'ep:block ep:w-full ep:min-w-0 ep:border-0 ep:text-sm ep:text-white ep:outline-none ep:transition ep:placeholder:text-muted-ep ep:disabled:cursor-not-allowed ep:disabled:opacity-50',
+  'ep:block ep:w-full ep:min-w-0 ep:text-sm ep:text-text-strong ep:outline-none ep:transition ep:placeholder:text-text-muted ep:disabled:cursor-not-allowed ep:disabled:opacity-50',
   props.bare
-    ? 'ep:h-full ep:bg-transparent ep:p-0'
+    ? 'ep:h-full ep:border-0 ep:bg-transparent ep:p-0'
     : [
-        'ep:bg-selected-ep ep:focus:border-muted-ep ep:focus:ring-2 ep:focus:ring-white/10 ep:aria-invalid:border-danger-ep',
+        'ep:border ep:border-border-default ep:bg-surface-input ep:focus:border-text-muted ep:focus:ring-2 ep:focus:ring-contrast/10 ep:aria-invalid:border-danger',
         props.size === 'sm' ? 'ep:h-10 ep:rounded-lg' : 'ep:h-12 ep:rounded-xl ep:py-3',
         padding.value,
       ],

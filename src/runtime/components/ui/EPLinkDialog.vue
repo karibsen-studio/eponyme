@@ -82,7 +82,7 @@ function apply() {
   >
     <div class="ep:grid ep:gap-5">
       <div>
-        <p class="ep:mt-0 ep:mb-2 ep:text-sm ep:font-medium ep:text-white">
+        <p class="ep:mt-0 ep:mb-2 ep:text-sm ep:font-medium ep:text-text-strong">
           {{ t('link.type') }}
         </p>
         <EPRadioButton
@@ -93,27 +93,27 @@ function apply() {
       </div>
 
       <label class="ep:block">
-        <span class="ep:mb-2 ep:block ep:text-sm ep:font-medium ep:text-white">{{ t('link.destination') }}</span>
+        <span class="ep:mb-2 ep:block ep:text-sm ep:font-medium ep:text-text-strong">{{ t('link.destination') }}</span>
         <EPInputText
           :model-value="draftHref"
           :type="draftType === 'external' ? 'url' : 'text'"
           :placeholder="draftType === 'internal' ? t('link.internalPlaceholder') : (placeholder || t('link.externalPlaceholder'))"
           @update:model-value="updateHref"
         />
-        <span class="ep:mt-1.5 ep:block ep:text-xs ep:text-muted-ep">
+        <span class="ep:mt-1.5 ep:block ep:text-xs ep:text-text-muted">
           {{ draftType === 'internal' ? t('link.internalHint') : t('link.externalHint') }}
         </span>
       </label>
 
       <div
         v-if="downloadableExtension"
-        class="ep:flex ep:items-center ep:justify-between ep:gap-4 ep:rounded-xl ep:bg-selected-ep/40 ep:px-4 ep:py-3"
+        class="ep:flex ep:items-center ep:justify-between ep:gap-4 ep:rounded-xl ep:bg-surface-active/40 ep:px-4 ep:py-3 ep:border ep:border-border-default"
       >
         <div>
-          <p class="ep:m-0 ep:text-sm ep:font-medium ep:text-white">
+          <p class="ep:m-0 ep:text-sm ep:font-medium ep:text-text-strong">
             {{ t('link.download') }}
           </p>
-          <p class="ep:mt-1 ep:mb-0 ep:text-xs ep:text-muted-ep">
+          <p class="ep:mt-1 ep:mb-0 ep:text-xs ep:text-text-muted">
             {{ t('link.downloadHint', { extension: downloadableExtension ?? '' }) }}
           </p>
         </div>
@@ -123,12 +123,12 @@ function apply() {
         />
       </div>
 
-      <div class="ep:flex ep:items-center ep:justify-between ep:gap-4 ep:rounded-xl ep:bg-selected-ep/40 ep:px-4 ep:py-3">
+      <div class="ep:flex ep:items-center ep:justify-between ep:gap-4 ep:rounded-xl ep:bg-surface-active/40 ep:px-4 ep:py-3 ep:border ep:border-border-default">
         <div>
-          <p class="ep:m-0 ep:text-sm ep:font-medium ep:text-white">
+          <p class="ep:m-0 ep:text-sm ep:font-medium ep:text-text-strong">
             {{ t('link.newTab') }}
           </p>
-          <p class="ep:mt-1 ep:mb-0 ep:text-xs ep:text-muted-ep">
+          <p class="ep:mt-1 ep:mb-0 ep:text-xs ep:text-text-muted">
             {{ t('link.newTabHint') }}
           </p>
         </div>

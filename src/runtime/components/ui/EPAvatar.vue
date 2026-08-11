@@ -27,9 +27,11 @@ let generate: ((seed: string) => string) | undefined
 
 async function loadGenerator() {
   if (generate) return generate
+  // No `with { type: 'json' }`: the bundler turns the JSON into a JS module, which the
+  // browser then rejects for not being served as `application/json`.
   const [{ Avatar, Style }, { default: glass }] = await Promise.all([
     import('@dicebear/core'),
-    import('@dicebear/styles/glass.json', { with: { type: 'json' } }),
+    import('@dicebear/styles/glass.json'),
   ])
   const style = new Style(glass)
   generate = (value: string) => new Avatar(style, { seed: value }).toDataUri()
@@ -47,8 +49,8 @@ watch(seed, draw)
 
 <template>
   <AvatarRoot
-    class="ep:inline-flex ep:shrink-0 ep:items-center ep:justify-center ep:overflow-hidden ep:rounded-full ep:bg-selected-ep ep:text-xs ep:font-semibold ep:text-text-ep"
-    :class="{ sm: 'ep:h-8 ep:w-8', md: 'ep:h-9 ep:w-9', lg: 'ep:h-12 ep:w-12' }[size]"
+    class="ep:inline-flex ep:shrink-0 ep:items-center ep:justify-center ep:overflow-hidden ep:rounded-full ep:bg-surface-active ep:text-xs ep:font-semibold ep:text-text-default"
+    :class="{ sm: 'ep:size-8', md: 'ep:h-9 ep:w-9', lg: 'ep:h-12 ep:w-12' }[size]"
   >
     <AvatarImage
       v-if="resolvedSrc"

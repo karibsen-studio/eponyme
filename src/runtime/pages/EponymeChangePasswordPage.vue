@@ -43,15 +43,15 @@ async function logout() {
 </script>
 
 <template>
-  <main class="eponyme-root ep:flex ep:min-h-screen ep:items-center ep:justify-center ep:bg-theme-ep ep:px-6 ep:py-12 ep:font-sans ep:text-text-ep">
+  <main class="eponyme-root ep:flex ep:min-h-screen ep:items-center ep:justify-center ep:bg-surface-page ep:px-6 ep:py-12 ep:font-sans ep:text-text-default">
     <section class="ep:w-full ep:max-w-md">
-      <p class="ep:m-0 ep:text-[11px] ep:font-semibold ep:tracking-widest ep:text-muted-ep ep:uppercase">
+      <p class="ep:m-0 ep:text-[11px] ep:font-semibold ep:tracking-widest ep:text-text-muted ep:uppercase">
         {{ t('sidebar.logo') }}
       </p>
-      <h1 class="ep:mt-2 ep:mb-2 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-white">
+      <h1 class="ep:mt-2 ep:mb-2 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-text-strong">
         {{ t('password.heading') }}
       </h1>
-      <p class="ep:mt-0 ep:mb-8 ep:text-sm ep:leading-relaxed ep:text-muted-ep">
+      <p class="ep:mt-0 ep:mb-8 ep:text-sm ep:leading-relaxed ep:text-text-muted">
         {{ t('password.subheading') }}
       </p>
       <form
@@ -97,7 +97,7 @@ async function logout() {
         </EPFormField>
         <p
           v-if="error"
-          class="ep:m-0 ep:text-sm ep:text-danger-ep"
+          class="ep:m-0 ep:text-sm ep:text-danger"
           role="alert"
         >
           {{ error }}

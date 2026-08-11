@@ -13,7 +13,7 @@ const embedUrl = computed(() => eponymeMediaEmbedUrl(media.value))
 </script>
 
 <template>
-  <div class="ep:aspect-video ep:w-full ep:overflow-hidden ep:rounded-xl ep:border ep:border-border-ep ep:bg-black">
+  <div class="ep:aspect-video ep:w-full ep:overflow-hidden ep:rounded-xl ep:border ep:border-border-default ep:bg-black">
     <video
       v-if="media.provider === 'url'"
       :key="embedUrl"

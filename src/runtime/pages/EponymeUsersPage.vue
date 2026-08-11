@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { t } from '#eponyme/locale'
-import { useRequestFetch, useRoute, useSeoMeta } from '#app'
+import { useRequestFetch, useSeoMeta } from '#app'
 import type { FetchError } from 'ofetch'
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import type { EponymeAuthUser, EponymeManagedUserResult, EponymeRole } from '../types'
 import EponymeCopy from '../components/editor/EponymeCopy.vue'
-import EponymeSidebar from '../components/editor/EponymeSidebar.vue'
 import { useEponymeFavicon } from '../composables/useEponymeFavicon'
 import EPAlertDialog from '../components/ui/EPAlertDialog.vue'
 import EPButton from '../components/ui/EPButton.vue'
@@ -21,7 +20,6 @@ import '../assets/dashboard.css'
 useEponymeFavicon()
 useSeoMeta({ title: t('users.title') })
 
-const route = useRoute()
 const requestFetch = useRequestFetch()
 const users = ref<EponymeAuthUser[]>([])
 const pending = ref(true)
@@ -33,7 +31,6 @@ const temporaryCredentials = ref<EponymeManagedUserResult>()
 const resetTarget = ref<EponymeAuthUser>()
 const resetPending = ref(false)
 const resetError = ref('')
-const basePath = computed(() => route.path.replace(/\/users\/?$/, ''))
 const roleOptions = [
   { label: t('role.viewer'), value: 'viewer' },
   { label: t('role.editor'), value: 'editor' },
@@ -124,19 +121,19 @@ function replaceUser(user: EponymeAuthUser) {
 </script>
 
 <template>
-  <main class="eponyme-root ep:flex ep:min-h-screen ep:flex-col ep:bg-theme-ep ep:font-sans ep:text-text-ep ep:md:flex-row">
-    <EponymeSidebar :base-path="basePath" />
+  <div class="ep:contents">
     <section class="ep:mx-auto ep:w-full ep:max-w-4xl ep:px-6 ep:py-8 ep:md:px-10 ep:md:py-12">
       <header class="ep:flex ep:flex-wrap ep:items-end ep:justify-between ep:gap-4">
         <div>
-          <h1 class="ep:mt-2 ep:mb-0 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-white">
+          <h1 class="ep:mt-2 ep:mb-0 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-text-strong">
             {{ t('users.heading') }}
           </h1>
-          <p class="ep:mt-2 ep:mb-0 ep:text-sm ep:text-muted-ep">
+          <p class="ep:mt-2 ep:mb-0 ep:text-sm ep:text-text-muted">
             {{ t('users.subheading') }}
           </p>
         </div>
         <EPButton
+          size="sm"
           variant="primary"
           @click="createOpen = true"
         >
@@ -146,14 +143,14 @@ function replaceUser(user: EponymeAuthUser) {
 
       <p
         v-if="error"
-        class="ep:mt-6 ep:rounded-xl ep:bg-danger-ep/10 ep:p-4 ep:text-sm ep:text-danger-ep"
+        class="ep:mt-6 ep:rounded-xl ep:bg-danger/10 ep:p-4 ep:text-sm ep:text-danger"
         role="alert"
       >
         {{ error }}
       </p>
       <p
         v-if="pending"
-        class="ep:mt-8 ep:text-sm ep:text-muted-ep"
+        class="ep:mt-8 ep:text-sm ep:text-text-muted"
       >
         {{ t('users.loading') }}
       </p>
@@ -164,17 +161,17 @@ function replaceUser(user: EponymeAuthUser) {
         <article
           v-for="user in users"
           :key="user.id"
-          class="ep:grid ep:gap-4 ep:rounded-xl ep:bg-selected-ep/50 ep:p-4 ep:sm:grid-cols-[minmax(0,1fr)_10rem_auto_auto] ep:sm:items-center"
+          class="ep:grid ep:gap-4 ep:rounded-xl ep:bg-surface-active/50 ep:p-4 ep:sm:grid-cols-[minmax(0,1fr)_10rem_auto_auto] ep:sm:items-center"
         >
           <div class="ep:flex ep:min-w-0 ep:items-center ep:gap-3">
             <EPAvatar :username="user.username" />
             <div class="ep:min-w-0">
-              <p class="ep:m-0 ep:truncate ep:text-sm ep:font-semibold ep:text-white">
+              <p class="ep:m-0 ep:truncate ep:text-sm ep:font-semibold ep:text-text-strong">
                 {{ user.username }}
               </p>
               <p
                 v-if="user.mustChangePassword"
-                class="ep:m-0 ep:mt-1 ep:text-xs ep:text-muted-ep"
+                class="ep:m-0 ep:mt-1 ep:text-xs ep:text-text-muted"
               >
                 {{ t('users.mustChangePassword') }}
               </p>
@@ -262,7 +259,7 @@ function replaceUser(user: EponymeAuthUser) {
       <div v-if="temporaryCredentials">
         <dl class="ep:grid ep:gap-3">
           <div>
-            <dt class="ep:text-xs ep:text-muted-ep">
+            <dt class="ep:text-xs ep:text-text-muted">
               {{ t('users.username') }}
             </dt>
             <dd class="ep:mt-1 ep:mb-0">
@@ -273,7 +270,7 @@ function replaceUser(user: EponymeAuthUser) {
             </dd>
           </div>
           <div>
-            <dt class="ep:text-xs ep:text-muted-ep">
+            <dt class="ep:text-xs ep:text-text-muted">
               {{ t('users.temporaryPassword') }}
             </dt>
             <dd class="ep:mt-1 ep:mb-0">
@@ -284,7 +281,7 @@ function replaceUser(user: EponymeAuthUser) {
             </dd>
           </div>
         </dl>
-        <p class="ep:mt-4 ep:mb-0 ep:text-xs ep:leading-relaxed ep:text-muted-ep">
+        <p class="ep:mt-4 ep:mb-0 ep:text-xs ep:leading-relaxed ep:text-text-muted">
           {{ t('users.credentialsFooter') }}
         </p>
       </div>
@@ -304,16 +301,10 @@ function replaceUser(user: EponymeAuthUser) {
       <p
         v-show="resetError"
         role="alert"
-        class="ep:m-0 ep:rounded-lg ep:bg-danger-ep/10 ep:p-3 ep:text-sm ep:text-danger-ep"
+        class="ep:m-0 ep:rounded-lg ep:bg-danger/10 ep:p-3 ep:text-sm ep:text-danger"
       >
         {{ resetError }}
       </p>
     </EPAlertDialog>
-  </main>
+  </div>
 </template>
-
-<style scoped>
-:global(body) {
-  margin: 0;
-}
-</style>

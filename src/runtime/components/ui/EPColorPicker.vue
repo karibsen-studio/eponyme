@@ -15,7 +15,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
-const swatchClasses = 'ep:h-8 ep:w-8 ep:shrink-0 ep:cursor-pointer ep:rounded-lg ep:border ep:border-white/15 ep:transition ep:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-white/40 ep:disabled:cursor-not-allowed ep:disabled:opacity-50'
+const swatchClasses = 'ep:h-8 ep:w-8 ep:shrink-0 ep:cursor-pointer ep:rounded-lg ep:border ep:border-contrast/15 ep:transition ep:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-contrast/40 ep:disabled:cursor-not-allowed ep:disabled:opacity-50'
 
 /** Falls back to black so the native picker always opens on a valid colour. */
 const pickerValue = computed(() => normalizeHexColor(props.modelValue)?.slice(0, 7) ?? '#000000')
@@ -36,7 +36,7 @@ function select(value: string) {
       v-for="preset in presets"
       :key="preset.value"
       type="button"
-      :class="[swatchClasses, sameHexColor(preset.value, modelValue) ? 'ep:ring-2 ep:ring-white ep:ring-offset-2 ep:ring-offset-theme-ep' : 'ep:hover:scale-110']"
+      :class="[swatchClasses, sameHexColor(preset.value, modelValue) ? 'ep:ring-2 ep:ring-contrast ep:ring-offset-2 ep:ring-offset-surface-raised' : 'ep:hover:scale-110']"
       :style="{ backgroundColor: preset.value }"
       :disabled="disabled"
       :aria-pressed="sameHexColor(preset.value, modelValue)"
@@ -50,7 +50,7 @@ function select(value: string) {
       :class="{ 'ep:ml-1': presets.length }"
     >
       <span
-        :class="[swatchClasses, 'ep:flex ep:items-center ep:justify-center ep:bg-selected-ep ep:text-sm ep:text-muted-ep', customActive ? 'ep:ring-2 ep:ring-white ep:ring-offset-2 ep:ring-offset-theme-ep' : '']"
+        :class="[swatchClasses, 'ep:flex ep:items-center ep:justify-center ep:bg-surface-input ep:text-sm ep:text-text-muted', customActive ? 'ep:ring-2 ep:ring-contrast ep:ring-offset-2 ep:ring-offset-surface-raised' : '']"
         :style="customActive ? { backgroundColor: pickerValue } : undefined"
         aria-hidden="true"
       >
@@ -69,6 +69,6 @@ function select(value: string) {
       >
     </span>
 
-    <span class="ep:ml-1 ep:text-sm ep:font-medium ep:text-muted-ep">{{ modelValue }}</span>
+    <span class="ep:ml-1 ep:text-sm ep:font-medium ep:text-text-muted">{{ modelValue }}</span>
   </div>
 </template>
