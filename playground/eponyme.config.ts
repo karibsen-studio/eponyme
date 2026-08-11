@@ -216,6 +216,8 @@ export default defineEponymeConfig({
       },
       contact: {
         title: field.string({ defaultValue: 'Contact' }),
+        // The trimmed form: no sharing image, no Open Graph overrides.
+        seo: field.seo({ label: 'SEO (title and description only)', image: false, social: false }),
       },
     },
   },
@@ -285,6 +287,11 @@ export default defineEponymeConfig({
         description: 'Format the article with headings, lists, quotes and links.',
         required: true,
         placeholder: 'Write your article…',
+      }),
+      seo: field.seo({
+        description: 'Preset built on field.section(), the way field.money() is built on field.number().',
+        siteName: 'Eponyme Playground',
+        themeColor: '#171714',
       }),
       publishedOn: field.date({ label: 'Publication date', defaultValue: today() }),
       tags: field.tags({

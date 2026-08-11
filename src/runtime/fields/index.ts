@@ -14,6 +14,7 @@ import { phone } from './phone'
 import { radio } from './radio'
 import { richText } from './rich-text'
 import { section } from './section'
+import { seo } from './seo'
 import { select } from './select'
 import { slug } from './slug'
 import { string } from './string'
@@ -22,6 +23,6 @@ import { tab } from './tab'
 import { textarea } from './textarea'
 import { url } from './url'
 
-export const field = { string, slug, email, phone, url, mediaPlayer, textarea, richText, number, money, boolean, image, select, radio, checkboxGroup, tags, date, datetime, duration, color, array, section, tab }
+export const field = { string, slug, email, phone, url, mediaPlayer, textarea, richText, number, money, boolean, image, select, radio, checkboxGroup, tags, date, datetime, duration, color, array, section, seo, tab }
 export { today }
 export { toMs } from '../utils/duration'
