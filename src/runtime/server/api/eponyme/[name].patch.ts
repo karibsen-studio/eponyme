@@ -44,7 +44,7 @@ export default defineEventHandler(async (event) => {
   })
   if (!result) throw createError({ statusCode: 404, statusMessage: t('server.entryNotFound') })
   if ('conflict' in result && result.conflict)
-    throw createError({ statusCode: 409, statusMessage: 'This entry was changed by someone else. Reload the page to get the latest version.' })
+    throw createError({ statusCode: 409, statusMessage: t('server.entryConflict') })
   if (result.errors) {
     setResponseStatus(event, 422)
     return { errors: result.errors }
