@@ -33,8 +33,8 @@ async function submit() {
     await navigateAfterLogin(user.mustChangePassword)
   }
   catch (caught) {
-    const fetchError = caught as FetchError
-    error.value = fetchError.statusMessage ?? t('server.badCredentials')
+    const fetchError = caught as FetchError<{ statusMessage?: string }>
+    error.value = fetchError.data?.statusMessage || fetchError.statusMessage || t('server.badCredentials')
   }
 }
 
@@ -93,7 +93,6 @@ async function navigateAfterLogin(mustChangePassword: boolean) {
           />
         </EPFormField>
         <p
-          v-if="error"
           class="ep:m-0 ep:text-sm ep:text-danger"
           role="alert"
         >
