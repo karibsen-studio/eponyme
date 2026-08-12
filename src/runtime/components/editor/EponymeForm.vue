@@ -22,18 +22,30 @@ import type { EponymeSchema } from '../../types'
 import type { EponymeAction, EponymeSchedule, EponymeStatus } from '../../server/services/eponyme-store'
 import { getEponymeCollections } from '../../utils/get-eponyme-schemas'
 import { isFieldVisible } from '../../utils/is-field-visible'
-import { resolvePreviewPath } from '../../utils/preview'
+import { resolvePreviewPath, splitCollectionEntry } from '../../utils/preview'
+import { isEponymePublicationEnabled } from '../../utils/eponyme-publication'
+import type { EponymePublicationOption } from '../../utils/eponyme-publication'
 import { childErrors, errorsAt, fieldPathId } from '../../utils/field-path'
 import { EPONYME_DATE_LOCALE } from '../../utils/date-locale'
 import { humanizeLabel } from '../../utils/humanize-label'
 
 const props = withDefaults(defineProps<{ name: string, schema: EponymeSchema, readonlyFields?: string[] }>(), { readonlyFields: () => [] })
 const runtimeConfig = useRuntimeConfig()
-const previewPaths = (runtimeConfig.public.eponyme as { previewPaths?: Record<string, string> } | undefined)?.previewPaths ?? {}
+const eponymeOptions = runtimeConfig.public.eponyme as { previewPaths?: Record<string, string>, publication?: EponymePublicationOption } | undefined
+const previewPaths = eponymeOptions?.previewPaths ?? {}
 // Collection entries are named `<collection>/<slug>`, so the preview path comes
 // from the collection's `:slug` pattern rather than an exact key match.
-const collectionNames = Object.keys(getEponymeCollections(useEponymeConfig()))
+const collections = getEponymeCollections(useEponymeConfig())
+const collectionNames = Object.keys(collections)
 const previewPath = computed(() => resolvePreviewPath(previewPaths, collectionNames, props.name))
+const publicationEnabled = computed(() => {
+  const entry = splitCollectionEntry(collectionNames, props.name)
+  return isEponymePublicationEnabled(
+    eponymeOptions?.publication,
+    props.name,
+    entry && { name: entry.collection, publication: collections[entry.collection]?.publication },
+  )
+})
 const auth = useEponymeAuth()
 const {
   data: eponymeData,
@@ -74,7 +86,7 @@ const scheduleDirty = computed(() => schedulePublishValue.value !== toLocalDateT
   || scheduleUnpublishValue.value !== toLocalDateTime(scheduledUnpublishAt.value))
 const dirty = computed(() => contentDirty.value || scheduleDirty.value)
 const publicationStatus = computed<'draft' | 'published' | 'unpublished' | 'scheduled'>(() => hasSchedule.value ? 'scheduled' : status.value)
-const mainAction = computed<EponymeAction>(() => hasSchedule.value ? 'schedule' : 'publish')
+const mainAction = computed<EponymeAction>(() => publicationEnabled.value && hasSchedule.value ? 'schedule' : 'publish')
 const primaryActionLabel = computed(() => {
   if (pending.value) return t('form.saving')
   if (activePanel.value === 'publication' && scheduleDirty.value) return t('form.schedule')
@@ -245,7 +257,7 @@ async function submitPrimary() {
     await submitSchedule()
     return
   }
-  await save(mainAction.value, hasSchedule.value ? currentSchedule() : {})
+  await save(mainAction.value, mainAction.value === 'schedule' ? currentSchedule() : {})
 }
 
 function activatePanel(panel: 'content' | 'publication') {
@@ -321,7 +333,7 @@ useEventListener('beforeunload', (event) => {
       </EPBadge>
       <EPTooltip :content="t('form.history')">
         <EPButton
-          class="ep:opacity-0 ep:focus-visible:opacity-100 ep:focus-visible:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-contrast/30 ep:group-hover:opacity-100"
+          class="ep:focus-visible:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-contrast/30 ep:md:opacity-0 ep:md:group-hover:opacity-100 ep:md:focus-visible:opacity-100"
           icon="mingcute:history-anticlockwise-line"
           variant="ghost"
           :aria-label="t('form.openHistory')"
@@ -343,6 +355,7 @@ useEventListener('beforeunload', (event) => {
       @submit.prevent="submitPrimary"
     >
       <div
+        v-if="publicationEnabled"
         role="tablist"
         :aria-label="t('form.editorSections')"
         class="ep:mb-8 ep:flex ep:gap-1 ep:border-b ep:border-border-default"
@@ -462,6 +475,7 @@ useEventListener('beforeunload', (event) => {
       </div>
 
       <div
+        v-if="publicationEnabled"
         v-show="activePanel === 'publication'"
         :id="publicationPanelId"
         role="tabpanel"
@@ -655,7 +669,7 @@ useEventListener('beforeunload', (event) => {
             {{ pending ? t('form.saving') : t('form.saveDraft') }}
           </EPButton>
           <EPButton
-            v-if="auth.canEdit.value"
+            v-if="auth.canEdit.value && publicationEnabled"
             size="sm"
             variant="ghost"
             @click="focusBoundaryPanel('publication')"

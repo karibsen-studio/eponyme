@@ -1,3 +1,4 @@
+import { t } from '#eponyme/locale'
 import { useRequestFetch } from '#app'
 import { ref } from 'vue'
 import type { EponymeHistoryEntry } from '../server/services/eponyme-store'
@@ -17,7 +18,7 @@ export function useEponymeHistory(name: () => string) {
       history.value = response.history
     }
     catch {
-      error.value = 'Unable to load version history.'
+      error.value = t('history.loadFailed')
     }
     finally {
       pending.value = false

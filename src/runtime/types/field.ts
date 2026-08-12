@@ -27,6 +27,7 @@ export interface TextFieldOptions extends DefaultFieldOptions<string> {
   placeholder?: string
   trim?: boolean
   regex?: RegExp
+  mask?: string
 }
 
 export type StringFieldOptions = TextFieldOptions

@@ -163,7 +163,7 @@ async function confirmSubmissionAction() {
       </div>
       <div class="ep:flex ep:items-center ep:gap-3">
         <EPBadge :variant="collects ? 'managed' : 'neutral'">
-          {{ definition.submission.mode }}
+          {{ t(definition.submission.mode === 'managed' ? 'submissions.modeManaged' : 'submissions.modeCustom') }}
         </EPBadge>
         <EPButton
           v-if="collects && auth.canEdit.value && total > 0"
@@ -184,8 +184,7 @@ async function confirmSubmissionAction() {
         {{ t('submissions.customTitle') }}
       </p>
       <p class="ep:mt-2 ep:mb-0 ep:text-xs ep:text-text-muted">
-        Switch it to <code>submission: {{ '{' }} mode: 'managed' {{ '}' }}</code> to collect them here,
-        or add <code>store: true</code> and call <code>storeEponymeFormSubmission()</code> from your own route.
+        {{ t('submissions.customHint') }}
       </p>
     </div>
     <p

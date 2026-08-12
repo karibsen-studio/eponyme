@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
   const result = await service.restore(name!, versionId, user.id)
   if (!result) throw createError({ statusCode: 404, statusMessage: t('server.versionNotFound') })
   if ('conflict' in result)
-    throw createError({ statusCode: 409, statusMessage: 'This entry was changed by someone else. Reload the page to get the latest version.' })
+    throw createError({ statusCode: 409, statusMessage: t('server.entryConflict') })
 
   await callEponymeHook('eponyme:entry:restored', {
     name: name!,

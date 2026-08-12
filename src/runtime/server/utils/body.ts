@@ -1,3 +1,4 @@
+import { t } from '#eponyme/locale'
 import { createError, getRequestHeader, getRequestWebStream } from 'h3'
 import type { H3Event } from 'h3'
 
@@ -16,7 +17,7 @@ export async function readEponymeBody<T>(
     return JSON.parse(raw) as T
   }
   catch {
-    throw createError({ statusCode: 400, statusMessage: 'Request body must be valid JSON.' })
+    throw createError({ statusCode: 400, statusMessage: t('server.invalidJson') })
   }
 }
 
@@ -66,6 +67,6 @@ export async function readEponymeRawBody(
   return new TextDecoder().decode(body)
 }
 
-function bodyTooLarge(statusMessage = 'Request body is too large.') {
+function bodyTooLarge(statusMessage = t('server.bodyTooLarge')) {
   return createError({ statusCode: 413, statusMessage })
 }

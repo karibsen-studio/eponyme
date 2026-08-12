@@ -6,7 +6,8 @@ import { defineAsyncComponent } from 'vue'
  * `RichTextField` carries TipTap and ProseMirror, about half of the editor's JavaScript, and
  * `ArrayField` carries `sortablejs` through `useSortable`. Both were imported statically, so a
  * schema of nothing but text fields downloaded an editor and a drag-and-drop engine it had no
- * use for.
+ * use for. `EPMaskedInput` carries `maska` and is reached from `TextField`, which every schema
+ * renders — so a static import there would ship the masking engine to schemas with no mask.
  *
  * Declared here, once, rather than inline at each call site. `defineAsyncComponent` returns a
  * new wrapper on every call, and a wrapper whose identity changes makes Vue unmount and remount
@@ -20,3 +21,4 @@ import { defineAsyncComponent } from 'vue'
  */
 export const LazyRichTextField = defineAsyncComponent(() => import('./RichTextField.vue'))
 export const LazyArrayField = defineAsyncComponent(() => import('./ArrayField.vue'))
+export const LazyMaskedInput = defineAsyncComponent(() => import('../ui/EPMaskedInput.vue'))

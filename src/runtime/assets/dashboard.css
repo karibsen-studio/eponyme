@@ -105,6 +105,24 @@
   }
 }
 
+/*
+ * Unlayered on purpose: an unlayered rule beats every `@layer utilities` one, which is what
+ * lets it override the `ep:` sizing utilities the inputs carry.
+ *
+ * WebKit sizes a date or datetime control to its intrinsic width and ignores `width: 100%`
+ * entirely, so on iOS these fields rendered at 159px and 106px inside a 361px container.
+ * Dropping the native appearance restores the declared width and height; the picker still
+ * opens on tap, and Chrome keeps its calendar indicator.
+ */
 .eponyme-date-input {
   color-scheme: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+/* iOS Safari zooms the whole page when a field it focuses is under 16px. */
+@media (max-width: 767px) {
+  .eponyme-date-input {
+    font-size: 16px;
+  }
 }

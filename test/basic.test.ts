@@ -70,7 +70,8 @@ describe('ssr', async () => {
 
   it('exposes and updates Eponyme data', async () => {
     await expect($fetch('/api/eponyme-statuses', authenticated())).resolves.toEqual({
-      statuses: { 'pages/homepage': 'published' },
+      // Every configured singleton is listed; one with no row yet reads as published.
+      statuses: { 'pages/frozen': 'published', 'pages/homepage': 'published' },
     })
 
     await expect($fetch('/api/eponyme/pages/homepage')).resolves.toEqual({
@@ -91,7 +92,8 @@ describe('ssr', async () => {
       ...authenticated(),
     })
     await expect($fetch('/api/eponyme-statuses', authenticated())).resolves.toEqual({
-      statuses: { 'pages/homepage': 'published' },
+      // Every configured singleton is listed; one with no row yet reads as published.
+      statuses: { 'pages/frozen': 'published', 'pages/homepage': 'published' },
     })
   })
 
@@ -805,6 +807,59 @@ describe('ssr', async () => {
     await expect($fetch('/api/eponyme/pages/homepage')).resolves.toMatchObject({ data: { title: 'Welcome' } })
   })
 
+  it('refuses the publication actions of a collection that disabled them', async () => {
+    await $fetch('/api/eponyme-collections/releases', { method: 'POST', body: { title: 'Cut' }, ...authenticated() })
+
+    for (const action of ['schedule', 'unpublish', 'revertToDraft']) {
+      const refused = await fetch(url(`/api/eponyme/releases/cut?action=${action}`), {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', 'cookie': authCookie },
+        body: JSON.stringify({ data: { title: 'Cut', slug: 'cut' }, scheduledUnpublishAt: '2099-01-01T00:00:00.000Z' }),
+      })
+      expect(refused.status).toBe(422)
+    }
+
+    // Publishing and saving a draft are what the toolbar still offers, so they must go through.
+    await expect($fetch('/api/eponyme/releases/cut?action=publish', {
+      method: 'PATCH',
+      body: { title: 'Cut', slug: 'cut' },
+      ...authenticated(),
+    })).resolves.toMatchObject({ status: 'published' })
+    await expect($fetch('/api/eponyme/releases/cut?action=draft', {
+      method: 'PATCH',
+      body: { title: 'Cut', slug: 'cut' },
+      ...authenticated(),
+    })).resolves.toMatchObject({ data: { title: 'Cut' } })
+    // `unschedule` stays allowed: it is the only way out for an entry scheduled beforehand.
+    await expect($fetch('/api/eponyme/releases/cut?action=unschedule', {
+      method: 'PATCH',
+      body: { title: 'Cut', slug: 'cut' },
+      ...authenticated(),
+    })).resolves.toBeTruthy()
+
+    await $fetch('/api/eponyme-collections/releases/cut', { method: 'DELETE', ...authenticated() })
+    await $fetch('/api/eponyme-trash/releases/cut', { method: 'DELETE', ...authenticated() })
+  })
+
+  it('refuses the publication actions of a singleton disabled by name', async () => {
+    for (const action of ['schedule', 'unpublish', 'revertToDraft']) {
+      const refused = await fetch(url(`/api/eponyme/pages/frozen?action=${action}`), {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', 'cookie': authCookie },
+        body: JSON.stringify({ data: { title: 'Frozen' }, scheduledUnpublishAt: '2099-01-01T00:00:00.000Z' }),
+      })
+      expect(refused.status).toBe(422)
+    }
+
+    // Saving stays available, and leaves this singleton unpublished so the statuses
+    // endpoint keeps the exact shape the earlier test asserts.
+    await expect($fetch('/api/eponyme/pages/frozen?action=draft', {
+      method: 'PATCH',
+      body: { title: 'Frozen' },
+      ...authenticated(),
+    })).resolves.toMatchObject({ data: { title: 'Frozen' } })
+  })
+
   it('exports the content and imports it back, with import reserved to owners', async () => {
     await $fetch('/api/eponyme-collections/articles', {
       method: 'POST',
@@ -815,7 +870,7 @@ describe('ssr', async () => {
     const file = await $fetch<EponymeExportFile>('/api/eponyme-export', authenticated())
     expect(file.eponyme.format).toBe(1)
     // Forms own their submissions, so they are not part of a content export.
-    expect(Object.keys(file.eponyme.schemas).sort()).toEqual(['articles', 'pages/homepage'])
+    expect(Object.keys(file.eponyme.schemas).sort()).toEqual(['articles', 'pages/frozen', 'pages/homepage', 'releases'])
     expect(file.entries.map(entry => entry.name)).toContain('articles/export-round-trip')
 
     // Simulate the target environment drifting, then bring it back with the file.

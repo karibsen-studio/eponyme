@@ -204,6 +204,12 @@ export default defineEponymeConfig({
                   currency: 'USD',
                   min: 0,
                 }),
+                heroReference: field.masked({
+                  label: 'Hero reference',
+                  description: 'Preset built on field.string(). Stored the way it is displayed.',
+                  mask: '@@-###-@@',
+                  placeholder: 'AB-123-CD',
+                }),
                 published: field.boolean({
                   label: 'Published',
                   description: 'Make this homepage visible to visitors.',

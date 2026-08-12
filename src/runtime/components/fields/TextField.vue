@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import EPFormField from '../ui/EPFormField.vue'
 import EPInputText from '../ui/EPInputText.vue'
+import { LazyMaskedInput } from './lazy'
 
 const props = withDefaults(defineProps<{
   id: string
@@ -13,6 +14,7 @@ const props = withDefaults(defineProps<{
   maxLength?: number
   showCounter?: boolean
   inputType?: 'text' | 'email' | 'url'
+  mask?: string
   errors?: string[]
   preview?: boolean
   disabled?: boolean
@@ -30,7 +32,19 @@ const value = () => typeof props.modelValue === 'string' ? props.modelValue : ''
     :required="required"
     :errors="errors"
   >
+    <LazyMaskedInput
+      v-if="mask"
+      :id="id"
+      :model-value="value()"
+      :mask="mask"
+      :placeholder="placeholder"
+      :required="required"
+      :invalid="Boolean(errors.length)"
+      :disabled="disabled"
+      @update:model-value="emit('update:modelValue', $event)"
+    />
     <EPInputText
+      v-else
       :id="id"
       :model-value="value()"
       :type="inputType"

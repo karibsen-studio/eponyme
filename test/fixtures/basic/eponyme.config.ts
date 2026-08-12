@@ -14,6 +14,9 @@ export default defineEponymeConfig({
         },
       }),
     },
+    frozen: {
+      title: field.string({ required: true, defaultValue: 'Frozen' }),
+    },
   },
   contact: form({
     label: 'Contact',
@@ -46,6 +49,17 @@ export default defineEponymeConfig({
   throttled: form({
     fields: { email: field.email({ required: true }) },
     submission: { mode: 'custom', store: false },
+  }),
+  // Publication turned off: the editor hides the tab and the API refuses its actions.
+  releases: collection({
+    label: 'Releases',
+    titleField: 'title',
+    slugField: 'slug',
+    publication: false,
+    fields: {
+      title: field.string({ required: true }),
+      slug: field.slug({ required: true }),
+    },
   }),
   articles: collection({
     label: 'Articles',
