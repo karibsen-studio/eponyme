@@ -253,6 +253,7 @@ const CLIENT_DEPENDENCIES = [
   'fuse.js',
   'zod',
   'libphonenumber-js/min',
+  'maska/vue',
   '@tiptap/vue-3',
   '@tiptap/starter-kit',
   '@tiptap/extension-image',

@@ -135,6 +135,7 @@ const specificProps = computed<Record<string, unknown>>(() => {
       const options = field.options as Record<string, unknown>
       return {
         inputType: field.type === 'image' ? 'url' : field.type === 'email' ? 'email' : 'text',
+        mask: options.mask,
         placeholder: options.placeholder,
         minLength: options.minLength,
         maxLength: options.maxLength,

@@ -7,6 +7,7 @@ import { datetime } from './datetime'
 import { duration } from './duration'
 import { email } from './email'
 import { image } from './image'
+import { masked } from './masked'
 import { mediaPlayer } from './media-player'
 import { money } from './money'
 import { number } from './number'
@@ -23,6 +24,6 @@ import { tab } from './tab'
 import { textarea } from './textarea'
 import { url } from './url'
 
-export const field = { string, slug, email, phone, url, mediaPlayer, textarea, richText, number, money, boolean, image, select, radio, checkboxGroup, tags, date, datetime, duration, color, array, section, seo, tab }
+export const field = { string, masked, slug, email, phone, url, mediaPlayer, textarea, richText, number, money, boolean, image, select, radio, checkboxGroup, tags, date, datetime, duration, color, array, section, seo, tab }
 export { today }
 export { toMs } from '../utils/duration'
