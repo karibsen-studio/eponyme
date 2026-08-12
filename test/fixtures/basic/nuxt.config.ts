@@ -29,5 +29,6 @@ export default defineNuxtConfig({
       'pages/homepage': '/',
       'articles': '/articles/:slug',
     },
+    publication: { 'pages/frozen': false },
   },
 })

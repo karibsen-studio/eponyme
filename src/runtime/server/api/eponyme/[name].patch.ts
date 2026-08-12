@@ -1,13 +1,21 @@
 import { t } from '#eponyme/locale'
 import { createError, defineEventHandler, getQuery, getRequestURL, setResponseStatus } from 'h3'
+import { useRuntimeConfig } from 'nitropack/runtime'
 import { useEponymeService } from '../../services/eponyme-service'
 import { assertEponymeMutationOrigin, requireEponymeUser } from '../../utils/auth'
 import { callEponymeBlockingHook, callEponymeHook } from '../../utils/eponyme-hooks'
 import { readEponymeBody } from '../../utils/body'
 import { splitEponymeCollectionEntry } from '../../utils/eponyme-entry'
+import { isEponymePublicationEnabled } from '../../../utils/eponyme-publication'
+import type { EponymePublicationOption } from '../../../utils/eponyme-publication'
 import type { EponymeAction } from '../../services/eponyme-store'
 
 const actions = ['draft', 'publish', 'unpublish', 'revertToDraft', 'schedule', 'unschedule'] as const satisfies readonly EponymeAction[]
+/**
+ * Actions the publication tab is the only way to reach. `unschedule` is left out on purpose:
+ * an entry scheduled before the tab was turned off must still be able to lose its dates.
+ */
+const publicationActions = ['unpublish', 'revertToDraft', 'schedule'] as const satisfies readonly EponymeAction[]
 const hookByAction = {
   draft: 'eponyme:entry:saved',
   publish: 'eponyme:entry:published',
@@ -29,6 +37,17 @@ export default defineEventHandler(async (event) => {
   const action: EponymeAction = (requestedAction as EponymeAction | undefined) ?? 'publish'
   const service = useEponymeService()
   const collection = splitEponymeCollectionEntry(service, name)
+
+  if ((publicationActions as readonly EponymeAction[]).includes(action)) {
+    const options = useRuntimeConfig().public.eponyme as { publication?: EponymePublicationOption }
+    const definition = collection ? service.getCollection(collection.name) : undefined
+    const enabled = isEponymePublicationEnabled(
+      options.publication,
+      name,
+      collection && { name: collection.name, publication: definition?.publication },
+    )
+    if (!enabled) throw createError({ statusCode: 422, statusMessage: t('server.publicationDisabled') })
+  }
 
   const body = await readEponymeBody(event)
   const scheduleBody = action === 'schedule' && isObject(body) ? body : undefined

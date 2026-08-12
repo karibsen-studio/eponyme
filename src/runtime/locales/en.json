@@ -373,6 +373,7 @@
   "server.badCredentials": "Invalid username or password.",
   "server.entryNotFound": "Eponyme entry not found.",
   "server.invalidAction": "Unknown editorial action.",
+  "server.publicationDisabled": "Publication is disabled for this entry.",
   "server.invalidSchedule": "Provide at least one valid publication date.",
   "server.collectionNotFound": "Eponyme collection not found.",
   "server.collectionEntryNotFound": "Eponyme collection entry not found.",

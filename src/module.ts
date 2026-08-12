@@ -26,6 +26,7 @@ import type { EponymeLocaleDefinition } from './runtime/locales'
 import { resolve } from 'pathe'
 import { tagPreviewPathRoutes } from './runtime/utils/cache-tags'
 import { EPONYME_THEME_BOOTSTRAP } from './runtime/utils/eponyme-theme'
+import type { EponymePublicationOption } from './runtime/utils/eponyme-publication'
 
 export type { EponymeLocaleDefinition, EponymeMessageKey } from './runtime/locales'
 
@@ -104,6 +105,30 @@ export interface ModuleOptions {
    * ```
    */
   colorPresets?: Array<string | { label: string, value: string }>
+
+  /**
+   * Whether the editor offers the publication tab: current status, scheduling, unpublishing
+   * and reverting to draft.
+   *
+   * @remarks
+   * A boolean answers for every entry. A record answers per entry, keyed by singleton name or
+   * by collection name the way `previewPaths` is, with an unlisted name left enabled. A
+   * collection overrides both with its own `publication`.
+   *
+   * Publishing and saving a draft stay in the editor toolbar either way, so disabling this
+   * removes the editorial lifecycle from the interface rather than the ability to publish.
+   * The API refuses the actions the tab carried, so a stale tab cannot still send them.
+   *
+   * @default true
+   * @example
+   * ```ts
+   * publication: {
+   *   'pages/homepage': false,
+   *   articles: false,
+   * }
+   * ```
+   */
+  publication?: EponymePublicationOption
 
   auth?: {
     /**
@@ -310,6 +335,7 @@ export default defineNuxtModule<ModuleOptions>({
     previewPaths: {},
     prismaClient: '',
     colorPresets: [],
+    publication: true,
     auth: {
       sessionDurationDays: 7,
     },
@@ -382,6 +408,7 @@ export default defineNuxtModule<ModuleOptions>({
       previewPaths: options.previewPaths ?? {},
       dashboardPath,
       colorPresets: options.colorPresets ?? [],
+      publication: options.publication ?? true,
     }
     nuxt.options.runtimeConfig.eponymeAuth = {
       sessionDurationDays: options.auth?.sessionDurationDays ?? 7,

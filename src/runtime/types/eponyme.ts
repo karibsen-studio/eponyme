@@ -6,6 +6,7 @@ export interface EponymeCollectionDefinitionBase {
   label?: string
   description?: string
   addLabel?: string
+  publication?: boolean
   fields: EponymeSchema
   slugField: string
   titleField: string
@@ -16,6 +17,11 @@ export interface EponymeCollectionOptions<T extends EponymeSchema = EponymeSchem
   description?: string
   /** Replaces the whole text of the create button. Defaults to `+ New <singular label>`. */
   addLabel?: string
+  /**
+   * Whether entries of this collection offer the publication tab. Overrides the module-wide
+   * `publication` option, whether that one is a boolean or a per-name record.
+   */
+  publication?: boolean
   fields: T
   slugField: keyof T & string
   titleField: keyof T & string
