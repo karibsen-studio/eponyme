@@ -333,7 +333,7 @@ useEventListener('beforeunload', (event) => {
       </EPBadge>
       <EPTooltip :content="t('form.history')">
         <EPButton
-          class="ep:opacity-0 ep:focus-visible:opacity-100 ep:focus-visible:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-contrast/30 ep:group-hover:opacity-100"
+          class="ep:focus-visible:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-contrast/30 ep:md:opacity-0 ep:md:group-hover:opacity-100 ep:md:focus-visible:opacity-100"
           icon="mingcute:history-anticlockwise-line"
           variant="ghost"
           :aria-label="t('form.openHistory')"
