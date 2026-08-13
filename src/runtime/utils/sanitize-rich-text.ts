@@ -33,13 +33,16 @@ const NON_BOOLEAN_ATTRIBUTES = sanitizeHtml.defaults.nonBooleanAttributes.filter
 const POLICY: sanitizeHtml.IOptions = {
   allowedTags: ALLOWED_TAGS,
   allowedAttributes: {
-    // `download` comes from Eponyme's own link extension.
     a: ['href', 'target', 'rel', 'download'],
     img: ['src', 'alt', 'title'],
-    // TipTap only writes `start` when a list does not begin at 1.
     ol: ['start'],
     code: ['class'],
-    p: [],
+    p: ['style'],
+    h2: ['style'],
+    h3: ['style'],
+  },
+  allowedStyles: {
+    '*': { 'text-align': [/^left$/, /^center$/, /^right$/] },
   },
   allowedClasses: {
     code: ['language-*'],

@@ -5,6 +5,7 @@ import { FlexRender, createColumnHelper, getCoreRowModel, getSortedRowModel, use
 import type { ColumnDef, SortingState } from '@tanstack/vue-table'
 import type { FetchError } from 'ofetch'
 import { computed, ref, watch } from 'vue'
+import { refDebounced } from '@vueuse/core'
 import type { EponymeFormDefinitionBase } from '../../types'
 import type { EponymeFormSubmission, EponymeFormSubmissionPage } from '../../server/services/eponyme-form-store'
 import { humanizeLabel } from '../../utils/humanize-label'
@@ -13,6 +14,7 @@ import EPAlertDialog from '../ui/EPAlertDialog.vue'
 import EPBadge from '../ui/EPBadge.vue'
 import EPButton from '../ui/EPButton.vue'
 import EPDialog from '../ui/EPDialog.vue'
+import EPInputText from '../ui/EPInputText.vue'
 import { EPONYME_DATE_LOCALE } from '../../utils/date-locale'
 
 const props = defineProps<{ name: string, definition: EponymeFormDefinitionBase }>()
@@ -21,6 +23,9 @@ const requestFetch = useRequestFetch()
 const auth = useEponymeAuth()
 const collects = computed(() => props.definition.submission.store)
 const page = ref(1)
+const search = ref('')
+// The query is what the request keys on, so the debounce also bounds the round trips.
+const debouncedSearch = refDebounced(search, 300)
 const sorting = ref<SortingState>([{ id: 'createdAt', desc: true }])
 const selected = ref<EponymeFormSubmission>()
 const submissionAction = ref<{ type: 'clear' } | { type: 'delete', submission: EponymeFormSubmission }>()
@@ -28,14 +33,22 @@ const submissionActionPending = ref(false)
 const submissionActionError = ref('')
 
 const label = computed(() => props.definition.label || humanizeLabel(props.name.split('/').at(-1) || props.name))
+/** Whether the form has submissions at all, which a filtered response must not answer. */
+const hasSubmissions = ref(false)
 
 const { data: response, pending, refresh } = useAsyncData(
-  () => `eponyme:form:${props.name}:${page.value}`,
+  () => `eponyme:form:${props.name}`,
   () => collects.value
-    ? requestFetch<EponymeFormSubmissionPage>(`/api/eponyme-forms/${props.name}/submissions`, { query: { page: page.value } })
+    ? requestFetch<EponymeFormSubmissionPage>(`/api/eponyme-forms/${props.name}/submissions`, {
+        query: { page: page.value, search: debouncedSearch.value || undefined },
+      })
     : Promise.resolve(undefined),
-  { watch: [page, () => props.name] },
+  { watch: [page, debouncedSearch, () => props.name] },
 )
+
+watch(response, (value) => {
+  if (value && !debouncedSearch.value) hasSubmissions.value = value.total > 0
+}, { immediate: true })
 
 const submissions = computed(() => response.value?.submissions ?? [])
 const total = computed(() => response.value?.total ?? 0)
@@ -80,7 +93,13 @@ const table = useVueTable({
 
 watch(() => props.name, () => {
   page.value = 1
+  search.value = ''
+  hasSubmissions.value = false
   selected.value = undefined
+})
+
+watch(debouncedSearch, () => {
+  page.value = 1
 })
 
 function formatValue(value: unknown): string {
@@ -177,6 +196,26 @@ async function confirmSubmissionAction() {
     </header>
 
     <div
+      v-if="collects && (hasSubmissions || search)"
+      class="ep:relative ep:mt-8 ep:max-w-xs"
+    >
+      <Icon
+        name="mingcute:search-line"
+        size="15"
+        aria-hidden="true"
+        class="ep:pointer-events-none ep:absolute ep:top-1/2 ep:left-3 ep:-translate-y-1/2 ep:text-text-muted"
+      />
+      <EPInputText
+        v-model="search"
+        padded="start"
+        size="sm"
+        type="search"
+        :placeholder="t('submissions.search')"
+        :aria-label="t('submissions.search')"
+      />
+    </div>
+
+    <div
       v-if="!collects"
       class="ep:mt-8 ep:rounded-xl ep:border ep:border-dashed ep:border-border-default ep:p-8 ep:text-center"
     >
@@ -188,7 +227,7 @@ async function confirmSubmissionAction() {
       </p>
     </div>
     <p
-      v-else-if="pending"
+      v-else-if="pending && !submissions.length"
       class="ep:mt-8 ep:text-sm ep:text-text-muted"
     >
       {{ t('action.loading') }}
@@ -296,7 +335,7 @@ async function confirmSubmissionAction() {
       class="ep:mt-8 ep:rounded-xl ep:border ep:border-dashed ep:border-border-default ep:p-8 ep:text-center"
     >
       <p class="ep:m-0 ep:text-sm ep:text-text-muted">
-        {{ t('submissions.empty') }}
+        {{ search ? t('submissions.noMatch', { query: search }) : t('submissions.empty') }}
       </p>
     </div>
 

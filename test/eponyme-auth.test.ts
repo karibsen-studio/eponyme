@@ -143,10 +143,29 @@ describe('EponymeAuthService', () => {
       error: 'The last active owner cannot be disabled or demoted.',
     })
     const secondOwner = await service.createUser('SecondOwner', 'owner')
-    await expect(service.updateUser(ownerLogin.session.user.id, { role: 'viewer' })).resolves.toMatchObject({
+    // Another owner may demote them, which is what the last-owner rule guards.
+    await expect(service.updateUser(ownerLogin.session.user.id, { role: 'viewer' }, secondOwner.result!.user.id)).resolves.toMatchObject({
       user: { role: 'viewer' },
     })
     expect(secondOwner.result?.user.role).toBe('owner')
+  })
+
+  it('refuses to let an owner demote or deactivate their own account', async () => {
+    const { client } = createAuthClient()
+    const service = new EponymeAuthService(client)
+    await service.bootstrapOwner(() => {})
+    const owner = (await service.listUsers())[0]!
+    // A second owner, so the last-owner rule is not what refuses the change.
+    await service.createUser('SecondOwner', 'owner')
+
+    const message = 'You cannot change the role or the status of your own account.'
+    await expect(service.updateUser(owner.id, { active: false }, owner.id)).resolves.toEqual({ error: message })
+    await expect(service.updateUser(owner.id, { role: 'viewer' }, owner.id)).resolves.toEqual({ error: message })
+
+    // Still the owner it was, and still active.
+    await expect(service.updateUser(owner.id, { active: true }, owner.id)).resolves.toMatchObject({
+      user: { role: 'owner', active: true },
+    })
   })
 
   it('never lets failed passwords lock out the legitimate account', async () => {

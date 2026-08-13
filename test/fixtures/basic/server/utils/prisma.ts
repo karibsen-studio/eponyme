@@ -126,6 +126,25 @@ const matchesValue = (value: string, filter: string | StringRange) => {
 // The recorded fingerprint per configured name, which decides what a boot rebuilds.
 const indexState = new Map<string, string>()
 type FormSubmissionRow = { id: string, formName: string, data: Record<string, unknown>, createdAt: Date }
+type SubmissionWhere = {
+  formName: string
+  OR?: Array<{ data: { path: string[], string_contains: string, mode?: 'insensitive' } }>
+}
+
+/** Mirrors Prisma's JSON `string_contains` with `mode: 'insensitive'`. */
+const matchesSubmission = (row: FormSubmissionRow, where: SubmissionWhere) => {
+  if (row.formName !== where.formName) return false
+  if (!where.OR) return true
+  return where.OR.some((clause) => {
+    const value = clause.data.path.reduce<unknown>((current, key) => (
+      current && typeof current === 'object' ? (current as Record<string, unknown>)[key] : undefined
+    ), row.data)
+    if (typeof value !== 'string') return false
+    return clause.data.mode === 'insensitive'
+      ? value.toLowerCase().includes(clause.data.string_contains.toLowerCase())
+      : value.includes(clause.data.string_contains)
+  })
+}
 const formSubmissions = new Map<string, FormSubmissionRow>()
 type RateLimitRow = { key: string, count: number, expiresAt: Date }
 const rateLimits = new Map<string, RateLimitRow>()
@@ -263,20 +282,20 @@ const delegates = {
       return row
     },
     async findMany({ where, skip = 0, take, orderBy, select }: {
-      where: { formName: string }
+      where: SubmissionWhere
       skip?: number
       take: number
       orderBy: { createdAt: 'asc' | 'desc' }
       select?: { id: true }
     }) {
       const found = [...formSubmissions.values()]
-        .filter(row => row.formName === where.formName)
+        .filter(row => matchesSubmission(row, where))
         .sort((a, b) => (a.createdAt.getTime() - b.createdAt.getTime()) * (orderBy.createdAt === 'asc' ? 1 : -1))
         .slice(skip, skip + take)
       return select ? found.map(row => ({ id: row.id })) as FormSubmissionRow[] : found
     },
-    async count({ where }: { where: { formName: string } }) {
-      return [...formSubmissions.values()].filter(row => row.formName === where.formName).length
+    async count({ where }: { where: SubmissionWhere }) {
+      return [...formSubmissions.values()].filter(row => matchesSubmission(row, where)).length
     },
     async findUnique({ where }: { where: { id: string } }) {
       return formSubmissions.get(where.id) ?? null
