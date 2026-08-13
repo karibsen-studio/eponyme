@@ -860,6 +860,27 @@ describe('ssr', async () => {
     })).resolves.toMatchObject({ data: { title: 'Frozen' } })
   })
 
+  it('refuses to let the signed-in owner change their own role or status', async () => {
+    const { users } = await $fetch<{ users: Array<{ id: string, username: string }> }>('/api/eponyme-users', authenticated())
+    const self = users.find(user => user.username === 'EponymeOwner')!
+
+    for (const body of [{ active: false }, { role: 'viewer' }]) {
+      const refused = await fetch(url(`/api/eponyme-users/${self.id}`), {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', 'cookie': authCookie },
+        body: JSON.stringify(body),
+      })
+      expect(refused.status).toBe(422)
+      // The wording proves the actor reached the service: the last-owner rule has its own.
+      expect(await refused.json()).toMatchObject({
+        statusMessage: 'You cannot change the role or the status of your own account.',
+      })
+    }
+
+    await expect($fetch('/api/eponyme-users', authenticated()))
+      .resolves.toMatchObject({ users: expect.arrayContaining([expect.objectContaining({ username: 'EponymeOwner', role: 'owner', active: true })]) })
+  })
+
   it('exports the content and imports it back, with import reserved to owners', async () => {
     await $fetch('/api/eponyme-collections/articles', {
       method: 'POST',
