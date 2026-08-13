@@ -20,6 +20,7 @@ export default defineEventHandler(async (event) => {
   const page = await service.listSubmissions(route.name, {
     page: Number(query.page ?? 1),
     perPage: query.perPage === undefined ? undefined : Number(query.perPage),
+    search: typeof query.search === 'string' ? query.search : undefined,
   })
   if (!page) throw createError({ statusCode: 404, statusMessage: t('server.formNotFound') })
   return page

@@ -211,6 +211,7 @@ export class EponymeAuthService {
   async updateUser(
     id: string,
     changes: { role?: unknown, active?: unknown },
+    actorId?: string,
   ): Promise<{ user?: EponymeAuthUser, error?: string, notFound?: boolean }> {
     const user = await this.client.eponymeUser.findUnique({ where: { id } })
     if (!user) return { error: t('server.userNotFound'), notFound: true }
@@ -221,6 +222,9 @@ export class EponymeAuthService {
 
     const nextRole = (changes.role ?? user.role) as EponymeRole
     const nextActive = (changes.active ?? user.active) as boolean
+
+    if (actorId === id && (nextRole !== user.role || nextActive !== user.active))
+      return { error: t('server.selfUpdate') }
     const removesActiveOwner = user.role === 'owner' && user.active && (nextRole !== 'owner' || !nextActive)
 
     // Counting owners and demoting must be atomic: two concurrent demotions could otherwise

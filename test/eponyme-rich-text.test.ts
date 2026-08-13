@@ -30,6 +30,29 @@ describe('rich text sanitisation', () => {
     expect(eponymeRichTextWasStripped(html)).toBe(false)
   })
 
+  it.each([
+    ['<p style="text-align: center">x</p>', '<p style="text-align:center">x</p>'],
+    ['<h2 style="text-align: right">x</h2>', '<h2 style="text-align:right">x</h2>'],
+    ['<h3 style="text-align: left">x</h3>', '<h3 style="text-align:left">x</h3>'],
+  ])('keeps the alignment the toolbar writes: %s', (html, stored) => {
+    // The declaration is re-serialised without its space, which is a rewrite and not a
+    // removal — so a save is never refused over it.
+    expect(sanitizeEponymeRichText(html)).toBe(stored)
+    expect(eponymeRichTextWasStripped(html)).toBe(false)
+  })
+
+  it.each([
+    ['another declaration', '<p style="text-align: center; color: red">x</p>', '<p style="text-align:center">x</p>'],
+    ['a layout escape', '<p style="position: fixed; top: 0">x</p>', '<p>x</p>'],
+    ['a url value', '<p style="text-align: url(javascript:alert(1))">x</p>', '<p>x</p>'],
+    // An alignment the toolbar cannot produce is not one the policy has to accept.
+    ['an alignment the toolbar lacks', '<p style="text-align: justify">x</p>', '<p>x</p>'],
+    // Allowing `style` on a paragraph must not open it anywhere else.
+    ['a tag outside the list', '<blockquote style="text-align: center">x</blockquote>', '<blockquote>x</blockquote>'],
+  ])('drops %s', (_, html, expected) => {
+    expect(sanitizeEponymeRichText(html)).toBe(expected)
+  })
+
   it('accepts the empty download attribute the link extension writes', () => {
     expect(sanitizeEponymeRichText('<a href="https://example.com/f.pdf" download="">f</a>'))
       .toBe('<a href="https://example.com/f.pdf" download>f</a>')

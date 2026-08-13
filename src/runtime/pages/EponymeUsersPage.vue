@@ -5,6 +5,7 @@ import type { FetchError } from 'ofetch'
 import { ref } from 'vue'
 import type { EponymeAuthUser, EponymeManagedUserResult, EponymeRole } from '../types'
 import EponymeCopy from '../components/editor/EponymeCopy.vue'
+import { useEponymeAuth } from '../composables/useEponymeAuth'
 import { useEponymeFavicon } from '../composables/useEponymeFavicon'
 import EPAlertDialog from '../components/ui/EPAlertDialog.vue'
 import EPButton from '../components/ui/EPButton.vue'
@@ -18,6 +19,9 @@ import EPAvatar from '../components/ui/EPAvatar.vue'
 import '../assets/dashboard.css'
 
 useEponymeFavicon()
+const auth = useEponymeAuth()
+/** The server refuses it either way; disabling the controls says so before the attempt. */
+const isSelf = (user: EponymeAuthUser) => user.id === auth.user.value?.id
 useSeoMeta({ title: t('users.title') })
 
 const requestFetch = useRequestFetch()
@@ -182,6 +186,7 @@ function replaceUser(user: EponymeAuthUser) {
             :model-value="user.role"
             :options="roleOptions"
             :aria-label="t('users.role')"
+            :disabled="isSelf(user)"
             @update:model-value="updateUser(user, { role: $event as EponymeRole })"
           />
           <EPButton
@@ -190,9 +195,10 @@ function replaceUser(user: EponymeAuthUser) {
           >
             {{ t('users.resetPassword') }}
           </EPButton>
-          <EPTooltip :content="user.active ? t('users.active') : t('users.disabled')">
+          <EPTooltip :content="isSelf(user) ? t('users.selfHint') : user.active ? t('users.active') : t('users.disabled')">
             <EPSwitch
               :model-value="user.active"
+              :disabled="isSelf(user)"
               :aria-label="user.active ? t('users.deactivate', { user: user.username }) : t('users.activate', { user: user.username })"
               @update:model-value="updateUser(user, { active: $event })"
             />

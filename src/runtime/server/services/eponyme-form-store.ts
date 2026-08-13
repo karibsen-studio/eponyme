@@ -29,17 +29,30 @@ export interface PrismaEponymeFormSubmissionRow {
   createdAt: DateValue
 }
 
+/**
+ * One clause per searchable field, ORed together. `path` is the Postgres form, a key list.
+ *
+ * `mode` is not decoration: without it Postgres matches the JSON string case-sensitively, so
+ * searching `grace` would miss `Grace Hopper` and no one would find an address they typed in
+ * lower case. Verified against Postgres 16 rather than assumed.
+ */
+export interface EponymeSubmissionSearch {
+  OR: Array<{ data: { path: string[], string_contains: string, mode: 'insensitive' } }>
+}
+
+export type EponymeSubmissionWhere = { formName: string } & Partial<EponymeSubmissionSearch>
+
 export type PrismaEponymeFormClient = {
   eponymeFormSubmission: {
     create(args: { data: { id: string, formName: string, data: Record<string, unknown> } }): Promise<PrismaEponymeFormSubmissionRow>
     findMany(args: {
-      where: { formName: string }
+      where: EponymeSubmissionWhere
       orderBy: { createdAt: 'asc' | 'desc' }
       skip?: number
       take: number
       select?: { id: true }
     }): Promise<PrismaEponymeFormSubmissionRow[]>
-    count(args: { where: { formName: string } }): Promise<number>
+    count(args: { where: EponymeSubmissionWhere }): Promise<number>
     findUnique(args: { where: { id: string } }): Promise<PrismaEponymeFormSubmissionRow | null>
     delete(args: { where: { id: string } }): Promise<PrismaEponymeFormSubmissionRow>
     deleteMany(args: {
@@ -47,6 +60,13 @@ export type PrismaEponymeFormClient = {
     }): Promise<{ count: number }>
   }
 }
+
+/**
+ * Types whose stored value is free text a person would search for. `select`, `radio` and
+ * `checkboxGroup` are left out on purpose: they store the option value, not the label an
+ * editor reads in the table, so matching them would answer on a word nobody can see.
+ */
+const SEARCHABLE_TYPES = new Set(['string', 'textarea', 'email', 'phone', 'url'])
 
 const DEFAULT_PER_PAGE = 25
 const MAX_PER_PAGE = 100
@@ -142,22 +162,44 @@ export class EponymeFormService {
     return { submission: toSubmission(row) }
   }
 
-  async listSubmissions(name: string, options: { page?: number, perPage?: number } = {}): Promise<EponymeFormSubmissionPage | undefined> {
+  async listSubmissions(
+    name: string,
+    options: { page?: number, perPage?: number, search?: string } = {},
+  ): Promise<EponymeFormSubmissionPage | undefined> {
     const definition = this.forms[name]
     if (!definition || !definition.submission.store) return undefined
 
     const perPage = clamp(options.perPage ?? DEFAULT_PER_PAGE, 1, MAX_PER_PAGE)
     const page = Math.max(1, Math.trunc(options.page ?? 1) || 1)
+    const where = this.submissionWhere(definition, name, options.search)
+    // The count carries the same clause, or the pager would offer pages the filter empties.
     const [rows, total] = await Promise.all([
       this.submissions().findMany({
-        where: { formName: name },
+        where,
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * perPage,
         take: perPage,
       }),
-      this.submissions().count({ where: { formName: name } }),
+      this.submissions().count({ where }),
     ])
     return { submissions: rows.map(toSubmission), total, page, perPage }
+  }
+
+  /**
+   * An empty `OR` matches nothing in Prisma, so a form with no free-text field must fall
+   * back to the unfiltered clause rather than answer that it has no submissions.
+   */
+  private submissionWhere(definition: EponymeFormDefinitionBase, name: string, search?: string): EponymeSubmissionWhere {
+    const query = search?.trim()
+    if (!query) return { formName: name }
+    const fields = Object.entries(definition.fields)
+      .filter(([, field]) => SEARCHABLE_TYPES.has(field.type))
+      .map(([field]) => field)
+    if (!fields.length) return { formName: name }
+    return {
+      formName: name,
+      OR: fields.map(field => ({ data: { path: [field], string_contains: query, mode: 'insensitive' as const } })),
+    }
   }
 
   async getSubmission(name: string, id: string): Promise<EponymeFormSubmission | undefined> {
