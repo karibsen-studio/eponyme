@@ -264,6 +264,8 @@
   "submissions.customTitle": "This form uses the custom submission mode, so Eponyme does not store its submissions.",
   "submissions.customHint": "Switch it to submission: { mode: 'managed' } to collect them here, or add store: true and call storeEponymeFormSubmission() from your own route.",
   "submissions.empty": "No submissions yet.",
+  "submissions.search": "Search submissions",
+  "submissions.noMatch": "No submission matches “{query}”.",
   "submissions.detail": "Submission",
   "submissions.confirmClear": "Delete all {count} submissions of “{form}”? This cannot be undone.",
   "submissions.confirmDelete": "Delete this submission? This cannot be undone.",

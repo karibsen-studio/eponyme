@@ -860,6 +860,53 @@ describe('ssr', async () => {
     })).resolves.toMatchObject({ data: { title: 'Frozen' } })
   })
 
+  it('searches submissions server-side, across the pager', async () => {
+    for (const name of ['Ada Lovelace', 'Grace Hopper', 'Alan Turing']) {
+      await $fetch('/api/eponyme-forms/contact', {
+        method: 'POST',
+        body: { name, email: `${name.split(' ')[0]!.toLowerCase()}@example.com`, message: 'Hello there.' },
+      })
+    }
+
+    const all = await $fetch<{ total: number }>('/api/eponyme-forms/contact/submissions', authenticated())
+    expect(all.total).toBe(3)
+
+    // The count carries the filter too, so the pager cannot offer pages the search empties.
+    const byName = await $fetch<{ submissions: Array<{ data: { name: string } }>, total: number }>(
+      '/api/eponyme-forms/contact/submissions',
+      { query: { search: 'Grace' }, ...authenticated() },
+    )
+    expect(byName.total).toBe(1)
+    expect(byName.submissions[0]!.data.name).toBe('Grace Hopper')
+
+    // A field the form declares, other than the one the table sorts on.
+    const byEmail = await $fetch<{ total: number }>('/api/eponyme-forms/contact/submissions', {
+      query: { search: 'alan@example.com' },
+      ...authenticated(),
+    })
+    expect(byEmail.total).toBe(1)
+
+    // Case is not the editor's problem: nobody types an address back in its stored casing.
+    await expect($fetch<{ total: number }>('/api/eponyme-forms/contact/submissions', {
+      query: { search: 'grace hopper' },
+      ...authenticated(),
+    })).resolves.toMatchObject({ total: 1 })
+
+    // Every submission shares this message, so the search reaches beyond the first page.
+    const byMessage = await $fetch<{ total: number }>('/api/eponyme-forms/contact/submissions', {
+      query: { search: 'Hello there', perPage: 2 },
+      ...authenticated(),
+    })
+    expect(byMessage.total).toBe(3)
+
+    await expect($fetch<{ total: number }>('/api/eponyme-forms/contact/submissions', {
+      query: { search: 'nobody' },
+      ...authenticated(),
+    })).resolves.toMatchObject({ total: 0 })
+
+    await $fetch('/api/eponyme-forms/contact/submissions', { method: 'DELETE', ...authenticated() })
+  })
+
   it('refuses to let the signed-in owner change their own role or status', async () => {
     const { users } = await $fetch<{ users: Array<{ id: string, username: string }> }>('/api/eponyme-users', authenticated())
     const self = users.find(user => user.username === 'EponymeOwner')!
