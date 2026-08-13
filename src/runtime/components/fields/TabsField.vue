@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { computed, ref, watch } from 'vue'
 import SectionField from './SectionField.vue'
 import type { SectionFieldDefinition, TabFieldDefinition } from '../../types'
@@ -16,6 +17,8 @@ const props = defineProps<{
   /** Errors of this subtree, keyed relative to this group (`seo.title`). */
   errors?: ValidationErrors
   disabled?: boolean
+  /** Drops the rule separating this group from what precedes it, and the room it needs. */
+  hideTopBorder?: boolean
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [value: Record<string, unknown>] }>()
@@ -53,14 +56,14 @@ function focusTab(offset: number) {
 </script>
 
 <template>
-  <section class="ep:border-t ep:border-border-ep ep:pt-5">
+  <section :class="hideTopBorder ? '' : 'ep:border-t ep:border-border-default ep:pt-5'">
     <header class="ep:mb-5">
-      <h2 class="ep:m-0 ep:min-w-0 ep:max-w-full ep:text-xl ep:font-semibold ep:tracking-tight ep:text-white ep:[overflow-wrap:anywhere]">
+      <h2 class="ep:m-0 ep:min-w-0 ep:max-w-full ep:text-xl ep:font-semibold ep:tracking-tight ep:text-text-strong ep:[overflow-wrap:anywhere]">
         {{ humanizeLabel(fieldName, definition.options.label) }}
       </h2>
       <p
         v-if="definition.options.description"
-        class="ep:mt-1 ep:mb-0 ep:text-xs ep:leading-relaxed ep:text-muted-ep"
+        class="ep:mt-1 ep:mb-0 ep:text-xs ep:leading-relaxed ep:text-text-muted"
       >
         {{ definition.options.description }}
       </p>
@@ -69,7 +72,7 @@ function focusTab(offset: number) {
     <div
       role="tablist"
       :aria-label="humanizeLabel(fieldName, definition.options.label)"
-      class="ep:mb-6 ep:flex ep:flex-wrap ep:gap-1 ep:border-b ep:border-border-ep"
+      class="ep:mb-6 ep:flex ep:flex-wrap ep:gap-1 ep:border-b ep:border-border-default"
       @keydown.right.prevent="focusTab(1)"
       @keydown.left.prevent="focusTab(-1)"
     >
@@ -83,13 +86,13 @@ function focusTab(offset: number) {
         :aria-controls="`panel-${basePath}-${tabName}`"
         :tabindex="activeTab === tabName ? 0 : -1"
         class="ep:-mb-px ep:min-w-0 ep:max-w-full ep:cursor-pointer ep:border-0 ep:border-b-2 ep:bg-transparent ep:px-4 ep:py-2.5 ep:text-left ep:text-sm ep:font-medium ep:transition ep:[overflow-wrap:anywhere]"
-        :class="activeTab === tabName ? 'ep:border-white ep:text-white' : 'ep:border-transparent ep:text-muted-ep ep:hover:text-text-ep'"
+        :class="activeTab === tabName ? 'ep:border-contrast ep:text-text-strong' : 'ep:border-transparent ep:text-text-muted ep:hover:text-text-default'"
         @click="activeTab = tabName"
       >
         {{ humanizeLabel(tabName, tabDefinition.label) }}<span
           v-if="tabHasErrors(tabName)"
-          class="ep:ml-1 ep:text-danger-ep"
-          :aria-label="`${humanizeLabel(tabName, tabDefinition.label)} has errors`"
+          class="ep:ml-1 ep:text-danger"
+          :aria-label="t('tabs.hasErrors', { tab: humanizeLabel(tabName, tabDefinition.label) })"
         >•</span>
       </button>
     </div>

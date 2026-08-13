@@ -61,3 +61,4 @@ RELEASE-TEMPLATE.md
 COMMIT-TEMPLATE.md
 JSDOC_GUIDELINES.md
 explain.md
+/playground/generated

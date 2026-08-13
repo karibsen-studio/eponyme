@@ -21,12 +21,12 @@ const resolvedSize = computed(() =>
 )
 
 const classes = computed(() => [
-  'ep:inline-flex ep:cursor-pointer ep:items-center ep:justify-center ep:gap-2 ep:rounded-lg ep:border ep:text-sm ep:font-medium ep:transition ep:focus-visible:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-white/30 ep:active:translate-y-px ep:disabled:cursor-not-allowed ep:disabled:opacity-50',
+  'ep:inline-flex ep:cursor-pointer ep:items-center ep:justify-center ep:gap-2 ep:rounded-lg ep:border ep:text-sm ep:font-medium ep:transition ep:focus-visible:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-contrast/30 ep:active:translate-y-px ep:disabled:cursor-not-allowed ep:disabled:opacity-50',
   {
-    primary: 'ep:border-white/80 ep:bg-white ep:text-theme-ep ep:hover:bg-text-ep',
-    secondary: 'ep:border-border-ep ep:bg-transparent ep:text-muted-ep ep:hover:bg-selected-ep ep:hover:text-white',
-    ghost: 'ep:border-transparent ep:bg-transparent ep:text-muted-ep ep:hover:bg-selected-ep ep:hover:text-white',
-    danger: 'ep:border-danger-ep/30 ep:bg-danger-ep/10 ep:text-danger-ep ep:hover:bg-danger-ep/20',
+    primary: 'ep:border-contrast/80 ep:bg-contrast ep:shadow-[inset_0_0_1px_#ffffff7a] ep:text-surface-raised ep:hover:bg-text-default',
+    secondary: 'ep:border-border-default ep:bg-transparent ep:text-text-muted ep:hover:bg-surface-active ep:hover:text-text-strong',
+    ghost: 'ep:border-transparent ep:bg-transparent ep:text-text-muted ep:hover:bg-surface-active ep:hover:text-text-strong',
+    danger: 'ep:bg-danger ep:shadow-[inset_0_0_1px_#ffffff7a] ep:border-danger ep:text-always-white',
   }[props.variant],
   {
     sm: 'ep:h-8 ep:px-3 ep:text-xs',

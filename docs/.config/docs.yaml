@@ -6,6 +6,7 @@ github: "karibsen-studio/eponyme"
 url: "https://eponyme-docs.vercel.app"
 socials:
   x: https://x.com/karibsenstudios
+  discord: https://discord.gg/m2tkscPNfn
 themeColor: "pink"
 landing:
   heroCode: "pnpm add @karibsen/eponyme"

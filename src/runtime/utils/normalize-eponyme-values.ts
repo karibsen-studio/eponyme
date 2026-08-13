@@ -4,10 +4,12 @@ import { isArrayItemFieldDefinition } from './get-field-default-value'
 import { normalizeEponymeMediaPlayer } from './media-player'
 import { toEponymePhoneValue } from './normalize-phone'
 import { normalizeEponymeTags } from './normalize-tags'
+import { sanitizeEponymeRichText } from './sanitize-rich-text'
+import { normalizeEponymeDateTime } from './datetime'
 
 /**
- * Rewrites every value that has a canonical form — a phone in E.164, a tag list deduplicated —
- * wherever it sits in the schema.
+ * Rewrites every value that has a canonical form — a phone in E.164, a tag list deduplicated,
+ * rich text reduced to the HTML the editor can produce — wherever it sits in the schema.
  *
  * Applied on the server before a write, which is what makes a stored format a guarantee rather
  * than a convention: the API accepts any JSON, so a client normalising on its own could always
@@ -19,13 +21,18 @@ import { normalizeEponymeTags } from './normalize-tags'
 export function normalizeEponymeValues(schema: EponymeSchema, data: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = { ...data }
   for (const [name, definition] of Object.entries(schema)) {
-    if (!(name in result)) continue
+    if (!Object.hasOwn(result, name)) continue
     result[name] = normalizeField(definition, result[name])
   }
   return result
 }
 
 function normalizeField(definition: FieldDefinition, value: unknown): unknown {
+  if (definition.type === 'datetime' && typeof value === 'string')
+    return normalizeEponymeDateTime(value) ?? value
+
+  if (definition.type === 'richText') return typeof value === 'string' ? sanitizeEponymeRichText(value) : value
+
   if (definition.type === 'phone') return toEponymePhoneValue(value, definition.options)
 
   if (definition.type === 'tags') return Array.isArray(value) ? normalizeEponymeTags(value, definition.options) : value
@@ -39,7 +46,7 @@ function normalizeField(definition: FieldDefinition, value: unknown): unknown {
     if (!isRecord(value)) return value
     const tabs = { ...value }
     for (const [tabName, tab] of Object.entries(definition.options.tabs))
-      if (tabName in tabs) tabs[tabName] = normalizeNested(tab.fields, tabs[tabName])
+      if (Object.hasOwn(tabs, tabName)) tabs[tabName] = normalizeNested(tab.fields, tabs[tabName])
     return tabs
   }
 

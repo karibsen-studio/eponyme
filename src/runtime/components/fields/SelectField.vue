@@ -26,7 +26,7 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
         @update:model-value="emit('update:modelValue', $event)"
       />
       <template #fallback>
-        <div class="ep:h-12 ep:w-full ep:rounded-xl ep:border ep:border-border-ep ep:bg-selected-ep" />
+        <div class="ep:h-12 ep:w-full ep:rounded-xl ep:border ep:border-border-default ep:bg-surface-active" />
       </template>
     </ClientOnly>
   </EPFormField>

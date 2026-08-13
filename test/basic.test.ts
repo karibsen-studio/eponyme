@@ -55,9 +55,23 @@ describe('ssr', async () => {
     }
   })
 
+  it('restores the Eponyme theme from its cookie on the html element', async () => {
+    for (const theme of ['light', 'dark']) {
+      const html = String(await $fetch('/__eponyme/login', {
+        headers: { cookie: `eponyme-theme=${theme}` },
+      }))
+      expect(html).toMatch(new RegExp(`<html[^>]*class="[^"]*ep-${theme}[^"]*"`))
+    }
+
+    const firstVisitHtml = String(await $fetch('/__eponyme/login'))
+    expect(firstVisitHtml).toContain('eponyme-theme')
+    expect(firstVisitHtml).toContain('prefers-color-scheme: light')
+  })
+
   it('exposes and updates Eponyme data', async () => {
     await expect($fetch('/api/eponyme-statuses', authenticated())).resolves.toEqual({
-      statuses: { 'pages/homepage': 'published' },
+      // Every configured singleton is listed; one with no row yet reads as published.
+      statuses: { 'pages/frozen': 'published', 'pages/homepage': 'published' },
     })
 
     await expect($fetch('/api/eponyme/pages/homepage')).resolves.toEqual({
@@ -78,7 +92,8 @@ describe('ssr', async () => {
       ...authenticated(),
     })
     await expect($fetch('/api/eponyme-statuses', authenticated())).resolves.toEqual({
-      statuses: { 'pages/homepage': 'draft' },
+      // Every configured singleton is listed; one with no row yet reads as published.
+      statuses: { 'pages/frozen': 'published', 'pages/homepage': 'published' },
     })
   })
 
@@ -147,6 +162,25 @@ describe('ssr', async () => {
       body: { title: 'Hooked' },
       ...authenticated(),
     })
+    await $fetch('/api/eponyme/pages/homepage?action=schedule', {
+      method: 'PATCH',
+      body: {
+        data: { title: 'Hooked' },
+        scheduledUnpublishAt: '2099-01-01T00:00:00.000Z',
+      },
+      ...authenticated(),
+    })
+    await $fetch('/api/eponyme/pages/homepage?action=unschedule', {
+      method: 'PATCH',
+      body: { title: 'Hooked' },
+      ...authenticated(),
+    })
+    await $fetch('/api/eponyme/pages/homepage?action=unpublish', {
+      method: 'PATCH',
+      body: { title: 'Hooked' },
+      ...authenticated(),
+    })
+    await expect($fetch('/api/eponyme/pages/homepage')).rejects.toMatchObject({ statusCode: 404 })
     await $fetch('/api/eponyme-forms/contact', {
       method: 'POST',
       body: { name: 'Ada', email: 'ada@example.com', message: 'Hook me up.' },
@@ -156,6 +190,9 @@ describe('ssr', async () => {
     // A listener throwing on `saved` must not have failed the save itself.
     expect(seen).toContain('saved:pages/homepage')
     expect(seen).toContain('published:pages/homepage:-')
+    expect(seen).toContain('scheduled:pages/homepage')
+    expect(seen).toContain('unscheduled:pages/homepage')
+    expect(seen).toContain('unpublished:pages/homepage')
     expect(seen).toContain('submitted:contact:true')
 
     // Later tests share this fixture's database, so put it back as it was.
@@ -205,6 +242,12 @@ describe('ssr', async () => {
     expect(html).toContain('Welcome')
     expect(html).toContain('Add item')
     expect(html).toContain('Metadata')
+    expect(html).toContain('aria-label="Entry sections"')
+    expect(html).toContain('Publication')
+    expect(html).toContain('Save')
+    expect(html).toContain('Revert to draft')
+    expect(html).toContain('Unpublish')
+    expect(html).toContain('Schedule')
     expect(html).not.toContain('Loading…')
   })
 
@@ -253,6 +296,9 @@ describe('ssr', async () => {
     })
     const html = String(await $fetch('/__eponyme/articles/first-article', authenticated()))
     expect(html).toContain('First article')
+    // The rich text field is loaded lazily, and Vue awaits an async component before rendering,
+    // so its label must still reach the server-rendered HTML rather than a loading placeholder.
+    expect(html).toContain('Body')
 
     await expect($fetch('/api/eponyme-collections/articles/first-article', { method: 'DELETE', ...authenticated() })).resolves.toEqual({ deleted: true })
     await $fetch('/api/eponyme-trash/articles/first-article', { method: 'DELETE', ...authenticated() })
@@ -573,6 +619,61 @@ describe('ssr', async () => {
       .rejects.toMatchObject({ statusCode: 422, data: { errors: { email: expect.any(Array) } } })
   })
 
+  it('collects submissions a custom route stored itself', async () => {
+    // Still no public endpoint: storing is the host route's decision, not a visitor's.
+    await expect($fetch('/api/eponyme-forms/partnership', {
+      method: 'POST',
+      body: { company: 'Acme', email: 'ada@example.com' },
+    })).rejects.toMatchObject({ statusCode: 404 })
+
+    await expect($fetch('/partnership', { method: 'POST', body: { company: 'Spam Inc', email: 'bot@example.com' } }))
+      .rejects.toMatchObject({ statusCode: 403 })
+
+    // Validation still applies to what the route hands over.
+    await expect($fetch('/partnership', { method: 'POST', body: { company: 'Acme', email: 'nope' } }))
+      .rejects.toMatchObject({ statusCode: 422, data: { errors: { email: expect.any(Array) } } })
+
+    await expect($fetch('/partnership', { method: 'POST', body: { company: 'Acme', email: 'ada@example.com' } }))
+      .resolves.toMatchObject({ stored: true, id: expect.any(String) })
+
+    const listed = await $fetch<{ submissions: Array<{ data: { company: string } }>, total: number }>(
+      '/api/eponyme-forms/partnership/submissions',
+      authenticated(),
+    )
+    expect(listed.total).toBe(1)
+    expect(listed.submissions[0]!.data).toMatchObject({ company: 'Acme', email: 'ada@example.com' })
+
+    // And the dashboard shows the table rather than the "does not store" notice.
+    const page = String(await $fetch('/__eponyme/partnership', authenticated()))
+    expect(page).not.toContain('does not store its submissions')
+    expect(page).toContain('Acme')
+  })
+
+  it('refuses to store a submission for a form that does not declare it', async () => {
+    await expect($fetch('/newsletter-store', { method: 'POST', body: { email: 'ada@example.com' } }))
+      .rejects.toMatchObject({ statusCode: 500 })
+
+    // Nothing was collected on the way out.
+    await expect($fetch('/api/eponyme-forms/newsletter/submissions', authenticated()))
+      .rejects.toMatchObject({ statusCode: 404 })
+  })
+
+  it('rate-limits a custom route that opts in, the way the managed endpoint does', async () => {
+    const limit = 20
+    const post = () => $fetch('/throttled', { method: 'POST', body: { email: 'ada@example.com' } })
+
+    for (let attempt = 0; attempt < limit; attempt++)
+      await expect(post()).resolves.toMatchObject({ accepted: true })
+
+    // Refused rather than merely counted, and carrying what a client needs to back off.
+    const refused = await post().catch((error: { statusCode: number, response: Response }) => error)
+    expect(refused).toMatchObject({ statusCode: 429 })
+    const { response } = refused as { response: Response }
+    expect(Number(response.headers.get('retry-after'))).toBeGreaterThan(0)
+    expect(response.headers.get('x-ratelimit-limit')).toBe(String(limit))
+    expect(response.headers.get('x-ratelimit-remaining')).toBe('0')
+  })
+
   it('renders a public form from the composable alone', async () => {
     const html = String(await $fetch('/contact'))
     // Labels and the honeypot come from the config, the markup from the host app.
@@ -697,13 +798,134 @@ describe('ssr', async () => {
       query: { version: 'draft' },
       headers: { cookie: viewerCookie },
     })).resolves.toMatchObject({ data: { title: 'Welcome' } })
-    const forbidden = await fetch(url('/api/eponyme/pages/homepage'), {
+    const forbidden = await fetch(url('/api/eponyme/pages/homepage?action=unpublish'), {
       method: 'PATCH',
       headers: { 'content-type': 'application/json', 'cookie': viewerCookie },
       body: JSON.stringify({ title: 'Forbidden edit' }),
     })
     expect(forbidden.status).toBe(403)
     await expect($fetch('/api/eponyme/pages/homepage')).resolves.toMatchObject({ data: { title: 'Welcome' } })
+  })
+
+  it('refuses the publication actions of a collection that disabled them', async () => {
+    await $fetch('/api/eponyme-collections/releases', { method: 'POST', body: { title: 'Cut' }, ...authenticated() })
+
+    for (const action of ['schedule', 'unpublish', 'revertToDraft']) {
+      const refused = await fetch(url(`/api/eponyme/releases/cut?action=${action}`), {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', 'cookie': authCookie },
+        body: JSON.stringify({ data: { title: 'Cut', slug: 'cut' }, scheduledUnpublishAt: '2099-01-01T00:00:00.000Z' }),
+      })
+      expect(refused.status).toBe(422)
+    }
+
+    // Publishing and saving a draft are what the toolbar still offers, so they must go through.
+    await expect($fetch('/api/eponyme/releases/cut?action=publish', {
+      method: 'PATCH',
+      body: { title: 'Cut', slug: 'cut' },
+      ...authenticated(),
+    })).resolves.toMatchObject({ status: 'published' })
+    await expect($fetch('/api/eponyme/releases/cut?action=draft', {
+      method: 'PATCH',
+      body: { title: 'Cut', slug: 'cut' },
+      ...authenticated(),
+    })).resolves.toMatchObject({ data: { title: 'Cut' } })
+    // `unschedule` stays allowed: it is the only way out for an entry scheduled beforehand.
+    await expect($fetch('/api/eponyme/releases/cut?action=unschedule', {
+      method: 'PATCH',
+      body: { title: 'Cut', slug: 'cut' },
+      ...authenticated(),
+    })).resolves.toBeTruthy()
+
+    await $fetch('/api/eponyme-collections/releases/cut', { method: 'DELETE', ...authenticated() })
+    await $fetch('/api/eponyme-trash/releases/cut', { method: 'DELETE', ...authenticated() })
+  })
+
+  it('refuses the publication actions of a singleton disabled by name', async () => {
+    for (const action of ['schedule', 'unpublish', 'revertToDraft']) {
+      const refused = await fetch(url(`/api/eponyme/pages/frozen?action=${action}`), {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', 'cookie': authCookie },
+        body: JSON.stringify({ data: { title: 'Frozen' }, scheduledUnpublishAt: '2099-01-01T00:00:00.000Z' }),
+      })
+      expect(refused.status).toBe(422)
+    }
+
+    // Saving stays available, and leaves this singleton unpublished so the statuses
+    // endpoint keeps the exact shape the earlier test asserts.
+    await expect($fetch('/api/eponyme/pages/frozen?action=draft', {
+      method: 'PATCH',
+      body: { title: 'Frozen' },
+      ...authenticated(),
+    })).resolves.toMatchObject({ data: { title: 'Frozen' } })
+  })
+
+  it('searches submissions server-side, across the pager', async () => {
+    for (const name of ['Ada Lovelace', 'Grace Hopper', 'Alan Turing']) {
+      await $fetch('/api/eponyme-forms/contact', {
+        method: 'POST',
+        body: { name, email: `${name.split(' ')[0]!.toLowerCase()}@example.com`, message: 'Hello there.' },
+      })
+    }
+
+    const all = await $fetch<{ total: number }>('/api/eponyme-forms/contact/submissions', authenticated())
+    expect(all.total).toBe(3)
+
+    // The count carries the filter too, so the pager cannot offer pages the search empties.
+    const byName = await $fetch<{ submissions: Array<{ data: { name: string } }>, total: number }>(
+      '/api/eponyme-forms/contact/submissions',
+      { query: { search: 'Grace' }, ...authenticated() },
+    )
+    expect(byName.total).toBe(1)
+    expect(byName.submissions[0]!.data.name).toBe('Grace Hopper')
+
+    // A field the form declares, other than the one the table sorts on.
+    const byEmail = await $fetch<{ total: number }>('/api/eponyme-forms/contact/submissions', {
+      query: { search: 'alan@example.com' },
+      ...authenticated(),
+    })
+    expect(byEmail.total).toBe(1)
+
+    // Case is not the editor's problem: nobody types an address back in its stored casing.
+    await expect($fetch<{ total: number }>('/api/eponyme-forms/contact/submissions', {
+      query: { search: 'grace hopper' },
+      ...authenticated(),
+    })).resolves.toMatchObject({ total: 1 })
+
+    // Every submission shares this message, so the search reaches beyond the first page.
+    const byMessage = await $fetch<{ total: number }>('/api/eponyme-forms/contact/submissions', {
+      query: { search: 'Hello there', perPage: 2 },
+      ...authenticated(),
+    })
+    expect(byMessage.total).toBe(3)
+
+    await expect($fetch<{ total: number }>('/api/eponyme-forms/contact/submissions', {
+      query: { search: 'nobody' },
+      ...authenticated(),
+    })).resolves.toMatchObject({ total: 0 })
+
+    await $fetch('/api/eponyme-forms/contact/submissions', { method: 'DELETE', ...authenticated() })
+  })
+
+  it('refuses to let the signed-in owner change their own role or status', async () => {
+    const { users } = await $fetch<{ users: Array<{ id: string, username: string }> }>('/api/eponyme-users', authenticated())
+    const self = users.find(user => user.username === 'EponymeOwner')!
+
+    for (const body of [{ active: false }, { role: 'viewer' }]) {
+      const refused = await fetch(url(`/api/eponyme-users/${self.id}`), {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json', 'cookie': authCookie },
+        body: JSON.stringify(body),
+      })
+      expect(refused.status).toBe(422)
+      // The wording proves the actor reached the service: the last-owner rule has its own.
+      expect(await refused.json()).toMatchObject({
+        statusMessage: 'You cannot change the role or the status of your own account.',
+      })
+    }
+
+    await expect($fetch('/api/eponyme-users', authenticated()))
+      .resolves.toMatchObject({ users: expect.arrayContaining([expect.objectContaining({ username: 'EponymeOwner', role: 'owner', active: true })]) })
   })
 
   it('exports the content and imports it back, with import reserved to owners', async () => {
@@ -716,7 +938,7 @@ describe('ssr', async () => {
     const file = await $fetch<EponymeExportFile>('/api/eponyme-export', authenticated())
     expect(file.eponyme.format).toBe(1)
     // Forms own their submissions, so they are not part of a content export.
-    expect(Object.keys(file.eponyme.schemas).sort()).toEqual(['articles', 'pages/homepage'])
+    expect(Object.keys(file.eponyme.schemas).sort()).toEqual(['articles', 'pages/frozen', 'pages/homepage', 'releases'])
     expect(file.entries.map(entry => entry.name)).toContain('articles/export-round-trip')
 
     // Simulate the target environment drifting, then bring it back with the file.
@@ -835,5 +1057,28 @@ describe('ssr', async () => {
       expect(await cacheControl('/api/eponyme-users')).toBe('no-store')
       expect(await cacheControl('/api/eponyme/pages/homepage?version=draft')).toBe('no-store')
     })
+  })
+  it('rejects an unknown editorial action instead of publishing it', async () => {
+    const response = await fetch(url('/api/eponyme/pages/homepage?action=not-an-action'), {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', 'cookie': authCookie },
+      body: JSON.stringify({ title: 'Must not be published' }),
+    })
+    expect(response.status).toBe(400)
+    await expect($fetch('/api/eponyme/pages/homepage')).resolves.toMatchObject({ data: { title: 'Welcome' } })
+  })
+
+  it('keeps managed-form storage within its configured quota', async () => {
+    for (const value of ['first', 'second', 'third']) {
+      await $fetch('/api/eponyme-forms/limited', { method: 'POST', body: { value } })
+    }
+
+    const listed = await $fetch<{ submissions: Array<{ data: { value: string } }>, total: number }>(
+      '/api/eponyme-forms/limited/submissions',
+      authenticated(),
+    )
+    expect(listed.total).toBe(2)
+    expect(listed.submissions.map(item => item.data.value)).toEqual(['third', 'second'])
+    await $fetch('/api/eponyme-forms/limited/submissions', { method: 'DELETE', ...authenticated() })
   })
 })

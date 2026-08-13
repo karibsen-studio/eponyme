@@ -6,35 +6,92 @@
 @source "../pages";
 
 @theme {
-  --font-sans: "SF Pro Text", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --color-theme-ep: #1c1c1c;
-  --color-border-ep: #343434;
-  --color-selected-ep: #262626;
-  --color-text-ep: #e7e7e7;
-  --color-muted-ep: #8d8d8d;
-  --color-success-ep: #72d39a;
-  --color-warning-ep: #e6b85c;
-  --color-danger-ep: #ff8585;
+  --font-sans: "SF Pro Text", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI";
+
+  --color-surface-sidebar: #0d0d0d;
+  --color-surface-page: #121212;
+  --color-surface-raised: #1c1c1c;
+  --color-surface-input: #242424;
+  --color-surface-active: #242424;
+
+  --color-nav-card: #242424;
+  --color-nav-active: #242424;
+  --color-nav-hover: #242424;
+
+  --color-richtext-tool-active: #1c1c1c;
+  --color-richtext-text: #e7e7e7;
+
+  --color-text-default: #e7e7e7;
+  --color-text-muted: #8d8d8d;
+  --color-text-strong: #ffffff;
+  --color-contrast: #ffffff;
+  --color-always-white: #ffffff;
+
+  --color-border-default: #343434;
+
+  --color-success: #72d39a;
+  --color-warning: #e6b85c;
+  --color-danger: #f4222f;
+
+  --color-badge-neutral: #171717;
+  --color-text-badge-neutral: #9098a6;
+  --color-badge-success: #033d08;
+  --color-text-badge-success: #15c829;
+  --color-badge-warning: #3f2701;
+  --color-text-badge-warning: #e99c06;
+  --color-badge-error: #3c0302;
+  --color-text-badge-error: #e94011;
+  --color-badge-managed: #38023e;
+  --color-text-badge-managed: #e12cfd;
+
+  --color-field-required: #fd5e68;
 }
 
-:root.dark {
-  --color-eponyme-50: #fafafa;
-  --color-eponyme-100: #f5f5f5;
-  --color-eponyme-200: #e6e6e6;
-  --color-eponyme-300: #d3d3d3;
-  --color-eponyme-400: #a3a3a3;
-  --color-eponyme-500: #727272;
-  --color-eponyme-600: #535353;
-  --color-eponyme-700: #404040;
-  --color-eponyme-800: #272727;
-  --color-eponyme-900: #1c1c1c;
-  --color-eponyme-950: #0b0b0b;
+:root.ep-light {
+  --ep-color-surface-sidebar: #fafafa;
+  --ep-color-surface-page: white;
+  --ep-color-surface-raised: #fcfcfc;
+  --ep-color-surface-input: #f6f7f9;
+  --ep-color-surface-active: #f6f7f9;
+
+  --ep-color-nav-card: #f6f7f9;
+  --ep-color-nav-active: #e8e8e8;
+  --ep-color-nav-hover: rgb(232 232 232 / 0.65);
+
+  --ep-color-richtext-tool-active: #e0e1e3;
+  --ep-color-richtext-text: #1c1d20;
+
+  --ep-color-text-default: #1c1d20;
+  --ep-color-text-muted: #62656d;
+  --ep-color-text-strong: #1c1d20;
+  --ep-color-contrast: #1c1d20;
+
+  --ep-color-border-default: rgb(172 176 188 / 0.27) !important;
+
+  --ep-color-success: #187443;
+  --ep-color-warning: #ffa700;
+
+  --ep-color-badge-neutral: #ececec;
+  --ep-color-text-badge-neutral: #4f5763;
+  --ep-color-badge-success: #a4ffaa;
+  --ep-color-text-badge-success: #0a7815;
+  --ep-color-badge-warning: #fff1d7;
+  --ep-color-text-badge-warning: #9b6400;
+  --ep-color-badge-error: #fddbda;
+  --ep-color-text-badge-error: #c71d1c;
+  --ep-color-badge-managed: #fadbfd;
+  --ep-color-text-badge-managed: #ad0dc0;
 }
 
 @layer base {
   .eponyme-root,
   .eponyme-portal {
-    font-family: var(--ep-font-sans);
+    color-scheme: dark;
+    font-family: var(--ep-font-sans), sans-serif;
+  }
+
+  :root.ep-light :where(.eponyme-root, .eponyme-portal) {
+    color-scheme: light;
   }
 
   :where(.eponyme-root, .eponyme-portal),
@@ -48,7 +105,24 @@
   }
 }
 
+/*
+ * Unlayered on purpose: an unlayered rule beats every `@layer utilities` one, which is what
+ * lets it override the `ep:` sizing utilities the inputs carry.
+ *
+ * WebKit sizes a date or datetime control to its intrinsic width and ignores `width: 100%`
+ * entirely, so on iOS these fields rendered at 159px and 106px inside a 361px container.
+ * Dropping the native appearance restores the declared width and height; the picker still
+ * opens on tap, and Chrome keeps its calendar indicator.
+ */
 .eponyme-date-input {
-  color-scheme: dark;
+  color-scheme: inherit;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
+/* iOS Safari zooms the whole page when a field it focuses is under 16px. */
+@media (max-width: 767px) {
+  .eponyme-date-input {
+    font-size: 16px;
+  }
+}

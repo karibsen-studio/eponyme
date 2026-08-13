@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { humanizeLabel } from '../src/runtime/utils/humanize-label'
 import { asRecord } from '../src/runtime/utils/as-record'
 import { childErrors, errorsAt, fieldPathId, hasErrorsUnder, joinFieldPath } from '../src/runtime/utils/field-path'
@@ -6,11 +6,13 @@ import { normalizeHexColor, sameHexColor } from '../src/runtime/utils/normalize-
 import { collection } from '../src/config/collection'
 import { form } from '../src/config/form'
 import { field } from '../src/runtime/fields'
+import { resolveEponymeSeo } from '../src/runtime/fields/seo'
+import { isFieldVisible } from '../src/runtime/utils/is-field-visible'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas, isEponymeForm, isEponymeSchema } from '../src/runtime/utils/get-eponyme-schemas'
 import { findEponymeVariableRanges, interpolateEponymeText, interpolateEponymeValue, resolveEponymeVariables, summariseEponymeVariables } from '../src/runtime/utils/variables'
 import { applyPreviewSlug, readPreviewQuery, readPreviewVersion, resolvePreviewPath } from '../src/runtime/utils/preview'
 import { buildEponymeNavigationTree } from '../src/runtime/utils/build-navigation-tree'
-import { filterEponymeNavigationTree } from '../src/runtime/utils/filter-navigation-tree'
+import { filterEponymeNavigationTree, preloadEponymeNavigationSearch } from '../src/runtime/utils/filter-navigation-tree'
 import { cacheDuringHydrationOnly, cacheForPublicRead } from '../src/runtime/utils/hydration-cache'
 import { getEponymeCacheTags, tagPreviewPathRoutes } from '../src/runtime/utils/cache-tags'
 import { normalizeEponymePhone, toEponymePhoneValue } from '../src/runtime/utils/normalize-phone'
@@ -39,6 +41,13 @@ describe('humanizeLabel', () => {
     expect(humanizeLabel('launch_date')).toBe('Launch Date')
     expect(humanizeLabel('hero-title')).toBe('Hero Title')
     expect(humanizeLabel('title')).toBe('Title')
+  })
+
+  it('splits camel case', () => {
+    expect(humanizeLabel('productionPhoto')).toBe('Production Photo')
+    expect(humanizeLabel('production_photoGallery')).toBe('Production Photo Gallery')
+    expect(humanizeLabel('heroSEOTitle')).toBe('Hero SEO Title')
+    expect(humanizeLabel('SEO')).toBe('SEO')
   })
 
   it('prefers the configured label', () => {
@@ -172,6 +181,8 @@ describe('form()', () => {
     const contact = form({ fields: { email: field.email({ required: true }) } })
     expect(contact.__eponymeForm).toBe(true)
     expect(contact.submission.mode).toBe('custom')
+    expect(contact.submission.maxStored).toBe(10_000)
+    expect(contact.submission.retentionDays).toBe(365)
     expect(contact.honeypot).toBe('_eponyme_hp')
     expect(contact.maxBodyBytes).toBe(64 * 1024)
   })
@@ -179,11 +190,13 @@ describe('form()', () => {
   it('keeps an explicit managed mode and overrides', () => {
     const contact = form({
       fields: { email: field.email() },
-      submission: { mode: 'managed' },
+      submission: { mode: 'managed', maxStored: 50, retentionDays: false },
       honeypot: false,
       maxBodyBytes: 1024,
     })
     expect(contact.submission.mode).toBe('managed')
+    expect(contact.submission.maxStored).toBe(50)
+    expect(contact.submission.retentionDays).toBe(false)
     expect(contact.honeypot).toBe(false)
     expect(contact.maxBodyBytes).toBe(1024)
   })
@@ -216,6 +229,10 @@ describe('form()', () => {
     expect(() => form({ fields: { cover: field.image() } })).toThrow(/field\.image\(\)/)
     // @ts-expect-error date is not a public form field
     expect(() => form({ fields: { day: field.date() } })).toThrow(/field\.date\(\)/)
+    // @ts-expect-error datetime is not a public form field
+    expect(() => form({ fields: { startsAt: field.datetime() } })).toThrow(/field\.datetime\(\)/)
+    // @ts-expect-error duration is not a public form field
+    expect(() => form({ fields: { runtime: field.duration() } })).toThrow(/field\.duration\(\)/)
     // @ts-expect-error color is not a public form field
     expect(() => form({ fields: { tint: field.color() } })).toThrow(/field\.color\(\)/)
     // @ts-expect-error array is not a public form field
@@ -226,6 +243,11 @@ describe('form()', () => {
 
   it('refuses a honeypot that shadows a declared field', () => {
     expect(() => form({ fields: { website: field.url() }, honeypot: 'website' })).toThrow(/collides with a declared field/)
+  })
+
+  it('refuses invalid submission retention limits', () => {
+    expect(() => form({ fields: { email: field.email() }, submission: { maxStored: 0 } })).toThrow(/maxStored/)
+    expect(() => form({ fields: { email: field.email() }, submission: { retentionDays: Number.NaN } })).toThrow(/retentionDays/)
   })
 })
 
@@ -251,6 +273,15 @@ describe('form discovery', () => {
     expect(isEponymeSchema(config.contact)).toBe(false)
     expect(isEponymeForm(config.contact)).toBe(true)
     expect(isEponymeForm(config.articles)).toBe(false)
+  })
+
+  it('builds route-facing registries without an Object prototype', () => {
+    for (const registry of [getEponymeSchemas(config), getEponymeCollections(config), getEponymeForms(config)]) {
+      expect(Object.getPrototypeOf(registry)).toBeNull()
+      expect(registry.constructor).toBeUndefined()
+      expect(registry.toString).toBeUndefined()
+      expect(registry.__proto__).toBeUndefined()
+    }
   })
 })
 
@@ -384,6 +415,12 @@ describe('navigation tree', () => {
 })
 
 describe('filterEponymeNavigationTree', () => {
+  // Fuse is fetched on demand, so the fuzzy assertions below need it resolved first. Without
+  // this the filter answers by substring, which is deliberate but not what they check.
+  beforeAll(async () => {
+    await preloadEponymeNavigationSearch()
+  })
+
   const tree = () => buildEponymeNavigationTree({
     schemas: { 'pages/homepage': {}, 'pages/legal/terms': {} },
     collections: { articles: { label: 'Articles' } },
@@ -673,5 +710,56 @@ describe('field.mediaPlayer()', () => {
     expect(validate({}, 'https://youtu.be/dQw4w9WgXcQ')).toEqual(['Must be a video.'])
     expect(validate({}, { provider: '', url: 'not a url', id: '' }))
       .toEqual(['Must be a YouTube link, a Vimeo link or a direct video URL.'])
+  })
+})
+
+describe('field.seo', () => {
+  it('emits the classic fields, and the sharing ones only when asked', () => {
+    expect(Object.keys(field.seo().options.fields)).toEqual([
+      'title',
+      'description',
+      'image',
+      'shareSameAsPage',
+      'ogTitle',
+      'ogDescription',
+    ])
+    expect(Object.keys(field.seo({ image: false, social: false }).options.fields)).toEqual(['title', 'description'])
+  })
+
+  it('hides the sharing overrides behind the switch', () => {
+    const fields = field.seo().options.fields
+    expect(fields.ogTitle!.options.visibleWhen).toEqual({ field: 'shareSameAsPage', equals: false })
+    expect(isFieldVisible(fields.ogTitle!.options, { shareSameAsPage: true })).toBe(false)
+    expect(isFieldVisible(fields.ogTitle!.options, { shareSameAsPage: false })).toBe(true)
+  })
+
+  it('keeps the site-wide constants off the fields', () => {
+    const definition = field.seo({ siteName: 'Karibsen', themeColor: '#111111' })
+    expect(definition.seo).toEqual({ siteName: 'Karibsen', themeColor: '#111111' })
+    expect(Object.keys(definition.options.fields)).not.toContain('siteName')
+  })
+})
+
+describe('resolveEponymeSeo', () => {
+  it('falls back to the page values while the switch is on', () => {
+    const resolved = resolveEponymeSeo({ title: 'Homepage', description: 'A page', ogTitle: 'Stale' })
+    expect(resolved.ogTitle).toBe('Homepage')
+    expect(resolved.ogDescription).toBe('A page')
+  })
+
+  it('uses the overrides once the switch is off, and falls back when one is left empty', () => {
+    const value = { title: 'Homepage', description: 'A page', shareSameAsPage: false, ogTitle: 'Shared' }
+    const resolved = resolveEponymeSeo(value)
+    expect(resolved.ogTitle).toBe('Shared')
+    expect(resolved.ogDescription).toBe('A page')
+  })
+
+  it('reads the constants back from the definition, and tolerates an empty entry', () => {
+    const definition = field.seo({ siteName: 'Karibsen', themeColor: '#111111' })
+    expect(resolveEponymeSeo(undefined, definition)).toMatchObject({
+      siteName: 'Karibsen',
+      themeColor: '#111111',
+      title: undefined,
+    })
   })
 })

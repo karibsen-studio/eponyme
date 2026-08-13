@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { useRequestFetch, useRoute, useSeoMeta } from '#app'
+import { t } from '#eponyme/locale'
+import { useRequestFetch, useSeoMeta } from '#app'
 import type { FetchError } from 'ofetch'
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import type { EponymeAuthUser, EponymeManagedUserResult, EponymeRole } from '../types'
 import EponymeCopy from '../components/editor/EponymeCopy.vue'
-import EponymeSidebar from '../components/editor/EponymeSidebar.vue'
+import { useEponymeAuth } from '../composables/useEponymeAuth'
 import { useEponymeFavicon } from '../composables/useEponymeFavicon'
+import EPAlertDialog from '../components/ui/EPAlertDialog.vue'
 import EPButton from '../components/ui/EPButton.vue'
 import EPDialog from '../components/ui/EPDialog.vue'
 import EPFormField from '../components/ui/EPFormField.vue'
@@ -14,11 +16,14 @@ import EPSelect from '../components/ui/EPSelect.vue'
 import EPSwitch from '../components/ui/EPSwitch.vue'
 import EPTooltip from '../components/ui/EPTooltip.vue'
 import EPAvatar from '../components/ui/EPAvatar.vue'
+import '../assets/dashboard.css'
 
 useEponymeFavicon()
-useSeoMeta({ title: 'Users · Eponyme' })
+const auth = useEponymeAuth()
+/** The server refuses it either way; disabling the controls says so before the attempt. */
+const isSelf = (user: EponymeAuthUser) => user.id === auth.user.value?.id
+useSeoMeta({ title: t('users.title') })
 
-const route = useRoute()
 const requestFetch = useRequestFetch()
 const users = ref<EponymeAuthUser[]>([])
 const pending = ref(true)
@@ -27,11 +32,13 @@ const createOpen = ref(false)
 const username = ref('')
 const role = ref<EponymeRole>('editor')
 const temporaryCredentials = ref<EponymeManagedUserResult>()
-const basePath = computed(() => route.path.replace(/\/users\/?$/, ''))
+const resetTarget = ref<EponymeAuthUser>()
+const resetPending = ref(false)
+const resetError = ref('')
 const roleOptions = [
-  { label: 'Viewer', value: 'viewer' },
-  { label: 'Editor', value: 'editor' },
-  { label: 'Owner', value: 'owner' },
+  { label: t('role.viewer'), value: 'viewer' },
+  { label: t('role.editor'), value: 'editor' },
+  { label: t('role.owner'), value: 'owner' },
 ]
 
 await loadUsers()
@@ -61,7 +68,7 @@ async function createUser() {
     role.value = 'editor'
   }
   catch (caught) {
-    error.value = (caught as FetchError).statusMessage ?? 'Unable to create user.'
+    error.value = (caught as FetchError).statusMessage ?? t('server.userCreateFailed')
   }
 }
 
@@ -75,23 +82,40 @@ async function updateUser(user: EponymeAuthUser, changes: { role?: EponymeRole, 
     replaceUser(response.user)
   }
   catch (caught) {
-    error.value = (caught as FetchError).statusMessage ?? 'Unable to update user.'
+    error.value = (caught as FetchError).statusMessage ?? t('users.updateFailed')
     await loadUsers()
   }
 }
 
-async function resetPassword(user: EponymeAuthUser) {
-  if (!confirm(`Reset the password for ${user.username}?`)) return
-  error.value = ''
+function requestPasswordReset(user: EponymeAuthUser) {
+  resetTarget.value = user
+  resetError.value = ''
+}
+
+function setResetOpen(open: boolean) {
+  if (open || resetPending.value) return
+  resetTarget.value = undefined
+  resetError.value = ''
+}
+
+async function resetPassword() {
+  const user = resetTarget.value
+  if (!user || resetPending.value) return
+  resetPending.value = true
+  resetError.value = ''
   try {
     const result = await requestFetch<EponymeManagedUserResult>(`/api/eponyme-users/${user.id}/reset-password`, {
       method: 'POST',
     })
     replaceUser(result.user)
+    resetTarget.value = undefined
     temporaryCredentials.value = result
   }
   catch (caught) {
-    error.value = (caught as FetchError).statusMessage ?? 'Unable to reset password.'
+    resetError.value = (caught as FetchError).statusMessage ?? t('users.resetFailed')
+  }
+  finally {
+    resetPending.value = false
   }
 }
 
@@ -101,41 +125,38 @@ function replaceUser(user: EponymeAuthUser) {
 </script>
 
 <template>
-  <main class="eponyme-root ep:flex ep:min-h-screen ep:flex-col ep:bg-theme-ep ep:font-sans ep:text-text-ep ep:md:flex-row">
-    <EponymeSidebar :base-path="basePath" />
+  <div class="ep:contents">
     <section class="ep:mx-auto ep:w-full ep:max-w-4xl ep:px-6 ep:py-8 ep:md:px-10 ep:md:py-12">
       <header class="ep:flex ep:flex-wrap ep:items-end ep:justify-between ep:gap-4">
         <div>
-          <p class="ep:m-0 ep:text-[11px] ep:font-semibold ep:tracking-widest ep:text-muted-ep ep:uppercase">
-            Access
-          </p>
-          <h1 class="ep:mt-2 ep:mb-0 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-white">
-            Users
+          <h1 class="ep:mt-2 ep:mb-0 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-text-strong">
+            {{ t('users.heading') }}
           </h1>
-          <p class="ep:mt-2 ep:mb-0 ep:text-sm ep:text-muted-ep">
-            Manage dashboard access and content permissions.
+          <p class="ep:mt-2 ep:mb-0 ep:text-sm ep:text-text-muted">
+            {{ t('users.subheading') }}
           </p>
         </div>
         <EPButton
+          size="sm"
           variant="primary"
           @click="createOpen = true"
         >
-          Add user
+          {{ t('users.add') }}
         </EPButton>
       </header>
 
       <p
         v-if="error"
-        class="ep:mt-6 ep:rounded-xl ep:bg-danger-ep/10 ep:p-4 ep:text-sm ep:text-danger-ep"
+        class="ep:mt-6 ep:rounded-xl ep:bg-danger/10 ep:p-4 ep:text-sm ep:text-danger"
         role="alert"
       >
         {{ error }}
       </p>
       <p
         v-if="pending"
-        class="ep:mt-8 ep:text-sm ep:text-muted-ep"
+        class="ep:mt-8 ep:text-sm ep:text-text-muted"
       >
-        Loading users…
+        {{ t('users.loading') }}
       </p>
       <div
         v-else
@@ -144,19 +165,19 @@ function replaceUser(user: EponymeAuthUser) {
         <article
           v-for="user in users"
           :key="user.id"
-          class="ep:grid ep:gap-4 ep:rounded-xl ep:bg-selected-ep/50 ep:p-4 ep:sm:grid-cols-[minmax(0,1fr)_10rem_auto_auto] ep:sm:items-center"
+          class="ep:grid ep:gap-4 ep:rounded-xl ep:bg-surface-active/50 ep:p-4 ep:sm:grid-cols-[minmax(0,1fr)_10rem_auto_auto] ep:sm:items-center"
         >
           <div class="ep:flex ep:min-w-0 ep:items-center ep:gap-3">
-            <EPAvatar :fallback="user.username" />
+            <EPAvatar :username="user.username" />
             <div class="ep:min-w-0">
-              <p class="ep:m-0 ep:truncate ep:text-sm ep:font-semibold ep:text-white">
+              <p class="ep:m-0 ep:truncate ep:text-sm ep:font-semibold ep:text-text-strong">
                 {{ user.username }}
               </p>
               <p
                 v-if="user.mustChangePassword"
-                class="ep:m-0 ep:mt-1 ep:text-xs ep:text-muted-ep"
+                class="ep:m-0 ep:mt-1 ep:text-xs ep:text-text-muted"
               >
-                Password change required
+                {{ t('users.mustChangePassword') }}
               </p>
             </div>
           </div>
@@ -164,19 +185,21 @@ function replaceUser(user: EponymeAuthUser) {
             size="sm"
             :model-value="user.role"
             :options="roleOptions"
-            aria-label="Role"
+            :aria-label="t('users.role')"
+            :disabled="isSelf(user)"
             @update:model-value="updateUser(user, { role: $event as EponymeRole })"
           />
           <EPButton
             size="sm"
-            @click="resetPassword(user)"
+            @click="requestPasswordReset(user)"
           >
-            Reset password
+            {{ t('users.resetPassword') }}
           </EPButton>
-          <EPTooltip :content="user.active ? 'Active' : 'Disabled'">
+          <EPTooltip :content="isSelf(user) ? t('users.selfHint') : user.active ? t('users.active') : t('users.disabled')">
             <EPSwitch
               :model-value="user.active"
-              :aria-label="user.active ? `Deactivate ${user.username}` : `Activate ${user.username}`"
+              :disabled="isSelf(user)"
+              :aria-label="user.active ? t('users.deactivate', { user: user.username }) : t('users.activate', { user: user.username })"
               @update:model-value="updateUser(user, { active: $event })"
             />
           </EPTooltip>
@@ -186,8 +209,8 @@ function replaceUser(user: EponymeAuthUser) {
 
     <EPDialog
       :open="createOpen"
-      title="Add user"
-      description="A temporary password will be generated and shown once."
+      :title="t('users.add')"
+      :description="t('users.addDescription')"
       @update:open="createOpen = $event"
     >
       <form
@@ -196,8 +219,8 @@ function replaceUser(user: EponymeAuthUser) {
       >
         <EPFormField
           id="eponyme-user-username"
-          label="Username"
-          description="3 to 50 letters, numbers, dots, underscores or hyphens."
+          :label="t('users.username')"
+          :description="t('users.usernameHint')"
           required
         >
           <EPInputText
@@ -209,7 +232,7 @@ function replaceUser(user: EponymeAuthUser) {
         </EPFormField>
         <EPFormField
           id="eponyme-user-role"
-          label="Role"
+          :label="t('users.role')"
           required
         >
           <EPSelect
@@ -220,14 +243,14 @@ function replaceUser(user: EponymeAuthUser) {
         </EPFormField>
         <div class="ep:flex ep:justify-end ep:gap-2">
           <EPButton @click="createOpen = false">
-            Cancel
+            {{ t('action.cancel') }}
           </EPButton>
           <EPButton
             type="submit"
             variant="primary"
             :disabled="!username"
           >
-            Create user
+            {{ t('users.create') }}
           </EPButton>
         </div>
       </form>
@@ -235,45 +258,59 @@ function replaceUser(user: EponymeAuthUser) {
 
     <EPDialog
       :open="Boolean(temporaryCredentials)"
-      title="Temporary credentials"
-      description="Copy this password now. It cannot be displayed again."
+      :title="t('users.credentials')"
+      :description="t('users.credentialsHint')"
       @update:open="!$event && (temporaryCredentials = undefined)"
     >
       <div v-if="temporaryCredentials">
         <dl class="ep:grid ep:gap-3">
           <div>
-            <dt class="ep:text-xs ep:text-muted-ep">
-              Username
+            <dt class="ep:text-xs ep:text-text-muted">
+              {{ t('users.username') }}
             </dt>
             <dd class="ep:mt-1 ep:mb-0">
               <EponymeCopy
                 :value="temporaryCredentials.user.username"
-                label="Copy"
+                :label="t('action.copy')"
               />
             </dd>
           </div>
           <div>
-            <dt class="ep:text-xs ep:text-muted-ep">
-              Temporary password
+            <dt class="ep:text-xs ep:text-text-muted">
+              {{ t('users.temporaryPassword') }}
             </dt>
             <dd class="ep:mt-1 ep:mb-0">
               <EponymeCopy
                 :value="temporaryCredentials.temporaryPassword"
-                label="Copy"
+                :label="t('action.copy')"
               />
             </dd>
           </div>
         </dl>
-        <p class="ep:mt-4 ep:mb-0 ep:text-xs ep:leading-relaxed ep:text-muted-ep">
-          The user must replace it immediately after signing in.
+        <p class="ep:mt-4 ep:mb-0 ep:text-xs ep:leading-relaxed ep:text-text-muted">
+          {{ t('users.credentialsFooter') }}
         </p>
       </div>
     </EPDialog>
-  </main>
-</template>
 
-<style scoped>
-:global(body) {
-  margin: 0;
-}
-</style>
+    <EPAlertDialog
+      :open="Boolean(resetTarget)"
+      :label="t('users.resetTitle')"
+      :description="resetTarget ? t('users.resetDescription', { user: resetTarget.username }) : ''"
+      :confirm-label="t('users.resetAction')"
+      confirm-variant="primary"
+      :confirm-loading="resetPending"
+      :close-on-confirm="false"
+      @update:open="setResetOpen"
+      @confirm="resetPassword"
+    >
+      <p
+        v-show="resetError"
+        role="alert"
+        class="ep:m-0 ep:rounded-lg ep:bg-danger/10 ep:p-3 ep:text-sm ep:text-danger"
+      >
+        {{ resetError }}
+      </p>
+    </EPAlertDialog>
+  </div>
+</template>

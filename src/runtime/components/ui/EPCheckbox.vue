@@ -9,7 +9,7 @@ const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
   <CheckboxRoot
     :model-value="modelValue"
     :disabled="disabled"
-    class="ep:flex ep:h-5 ep:w-5 ep:shrink-0 ep:cursor-pointer ep:items-center ep:justify-center ep:rounded-md ep:border ep:border-border-ep ep:bg-selected-ep ep:text-theme-ep ep:outline-none ep:transition ep:focus-visible:ring-2 ep:focus-visible:ring-white/20 ep:data-[state=checked]:border-white ep:data-[state=checked]:bg-white ep:disabled:cursor-not-allowed ep:disabled:opacity-50"
+    class="ep:flex ep:h-5 ep:w-5 ep:shrink-0 ep:cursor-pointer ep:items-center ep:justify-center ep:rounded-md ep:border ep:border-border-default ep:bg-surface-input ep:text-surface-raised ep:outline-none ep:transition ep:focus-visible:ring-2 ep:focus-visible:ring-contrast/20 ep:data-[state=checked]:border-contrast ep:data-[state=checked]:bg-contrast ep:disabled:cursor-not-allowed ep:disabled:opacity-50"
     @update:model-value="emit('update:modelValue', $event === true)"
   >
     <CheckboxIndicator class="ep:text-xs ep:font-bold">

@@ -1,8 +1,9 @@
+import { t } from '#eponyme/locale'
 import { createError, defineEventHandler, getQuery, getRequestURL } from 'h3'
 import { useEponymeService } from '../../services/eponyme-service'
 import { requireEponymeUser } from '../../utils/auth'
 import { getEponymeCacheTags, setEponymePublicCache } from '../../utils/eponyme-cache'
-import { interpolateEponymeContent } from '../../utils/eponyme-variables'
+import { interpolateEponymeContent, interpolateEponymeEntry } from '../../utils/eponyme-variables'
 import type { EponymeFilterCondition, EponymeFilterOperators, EponymeFilterRange } from '../../services/eponyme-store'
 
 const MAX_TAKE = 200
@@ -35,7 +36,7 @@ function readFilter(query: Record<string, unknown>, allowed: string[] | undefine
     if (!allowed?.includes(key)) {
       throw createError({
         statusCode: 400,
-        statusMessage: `Unknown filter key "${key}". Available keys: ${allowed?.join(', ') || 'none'}.`,
+        statusMessage: t('server.unknownFilterKey', { key, keys: allowed?.join(', ') || t('server.noKeys') }),
       })
     }
     if (operator === undefined) {
@@ -46,7 +47,7 @@ function readFilter(query: Record<string, unknown>, allowed: string[] | undefine
     if (!(OPERATORS as readonly string[]).includes(operator)) {
       throw createError({
         statusCode: 400,
-        statusMessage: `Unknown filter operator "${operator}". Available operators: ${OPERATORS.join(', ')}.`,
+        statusMessage: t('server.unknownFilterOperator', { operator, operators: OPERATORS.join(', ') }),
       })
     }
     const existing = where[key]
@@ -73,19 +74,19 @@ export default defineEventHandler(async (event) => {
   // it out of every cache, so only the published listing declares anything here.
   if (version === 'draft') await requireEponymeUser(event)
   else if (!query.raw) setEponymePublicCache(event, getEponymeCacheTags(name))
-  if (!name) throw createError({ statusCode: 404, statusMessage: 'Eponyme collection not found.' })
+  if (!name) throw createError({ statusCode: 404, statusMessage: t('server.collectionNotFound') })
 
   const service = useEponymeService()
   const orderBy = query.orderBy === undefined || query.orderBy === '' ? undefined : String(query.orderBy)
   if (orderBy) {
     const allowed = service.collectionSortKeys(name)
-    if (!allowed) throw createError({ statusCode: 404, statusMessage: 'Eponyme collection not found.' })
+    if (!allowed) throw createError({ statusCode: 404, statusMessage: t('server.collectionNotFound') })
     // Rejected rather than ignored, so a typo cannot return an arbitrary order the
     // caller believes is sorted.
     if (!allowed.includes(orderBy)) {
       throw createError({
         statusCode: 400,
-        statusMessage: `Unknown sort key "${orderBy}". Available keys: ${allowed.join(', ')}.`,
+        statusMessage: t('server.unknownSortKey', { key: orderBy, keys: allowed.join(', ') }),
       })
     }
   }
@@ -97,6 +98,13 @@ export default defineEventHandler(async (event) => {
     order: query.order === 'asc' ? 'asc' : query.order === 'desc' ? 'desc' : undefined,
     where: readFilter(query, service.collectionFilterKeys(name)),
   })
-  if (!page) throw createError({ statusCode: 404, statusMessage: 'Eponyme collection not found.' })
-  return query.raw ? page : interpolateEponymeContent(page)
+  if (!page) throw createError({ statusCode: 404, statusMessage: t('server.collectionNotFound') })
+  if (query.raw) return page
+  // The entry's own schema is what tells rich text apart from plain text; the envelope
+  // around it — a title carrying a variable — goes through the general pass as before.
+  const fields = service.getCollection(name)?.fields
+  return {
+    ...page,
+    entries: page.entries.map(entry => interpolateEponymeContent({ ...entry, data: interpolateEponymeEntry(fields, entry.data) })),
+  }
 })

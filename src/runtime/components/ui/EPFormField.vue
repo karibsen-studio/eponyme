@@ -32,18 +32,18 @@ const describedBy = computed(() => [
       <label
         v-if="label"
         :for="id"
-        class="ep:mb-1.5 ep:inline-block ep:w-fit ep:font-medium ep:text-text-ep"
+        class="ep:mb-1.5 ep:inline-block ep:w-fit ep:font-medium ep:text-text-default"
         :class="compact ? 'ep:text-xs' : 'ep:text-sm'"
       >
         {{ label }}<span
           v-if="required"
-          class="ep:text-danger-ep"
+          class="ep:text-danger"
         > *</span>
       </label>
       <p
         v-if="description"
         :id="descriptionId"
-        class="ep:mt-0 ep:mb-2 ep:text-xs ep:leading-relaxed ep:text-muted-ep"
+        class="ep:mt-0 ep:mb-2 ep:text-xs ep:leading-relaxed ep:text-text-muted"
       >
         {{ description }}
       </p>
@@ -59,7 +59,7 @@ const describedBy = computed(() => [
       :id="index === 0 ? errorId : undefined"
       :key="error"
       role="alert"
-      class="ep:mt-1.5 ep:text-xs ep:text-danger-ep"
+      class="ep:mt-1.5 ep:text-xs ep:text-danger"
     >
       {{ error }}
     </p>

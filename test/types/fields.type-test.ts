@@ -10,6 +10,11 @@ export const config = defineEponymeConfig({
     free: field.tags(),
     video: field.mediaPlayer(),
     videos: field.array({ of: { video: field.mediaPlayer() } }),
+    price: field.number({ min: 0, prefix: '€', suffix: '/month' }),
+    amount: field.money({ currency: 'JPY' }),
+    startsAt: field.datetime(),
+    runtime: field.duration({ defaultValue: '1h 10min' }),
+    chapters: field.array({ of: { runtime: field.duration() } }),
   },
 })
 
@@ -22,3 +27,8 @@ export type CustomTagsWidenToStrings = Expect<Equals<Data['open'], string[]>>
 export type TagsWithoutSuggestionsAreStrings = Expect<Equals<Data['free'], string[]>>
 export type MediaPlayerIsItsOwnValue = Expect<Equals<Data['video'], MediaPlayerValue>>
 export type MediaPlayerSurvivesAnArray = Expect<Equals<Data['videos'], Array<{ readonly video: MediaPlayerValue }>>>
+export type AdornmentsLeaveTheValueANumber = Expect<Equals<Data['price'], number>>
+export type MoneyIsStillANumber = Expect<Equals<Data['amount'], number>>
+export type DateTimeIsAString = Expect<Equals<Data['startsAt'], string>>
+export type DurationIsANumber = Expect<Equals<Data['runtime'], number>>
+export type DurationSurvivesAnArray = Expect<Equals<Data['chapters'], Array<{ readonly runtime: number }>>>

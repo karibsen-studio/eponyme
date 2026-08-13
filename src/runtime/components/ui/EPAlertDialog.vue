@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import EPButton from './EPButton.vue'
 import EPDialog from './EPDialog.vue'
 
@@ -13,8 +14,8 @@ const props = withDefaults(defineProps<{
   confirmDisabled?: boolean
   closeOnConfirm?: boolean
 }>(), {
-  cancelLabel: 'Cancel',
-  confirmLabel: 'Confirm',
+  cancelLabel: t('action.cancel'),
+  confirmLabel: t('action.confirm'),
   confirmVariant: 'primary',
   closeOnConfirm: true,
 })
@@ -32,13 +33,20 @@ defineSlots<{
 }>()
 
 function cancel() {
+  if (props.confirmLoading) return
   emit('cancel')
   emit('update:open', false)
 }
 
-function confirm() {
+function confirmAction() {
+  if (props.confirmLoading || props.confirmDisabled) return
   emit('confirm')
   if (props.closeOnConfirm) emit('update:open', false)
+}
+
+function updateOpen(open: boolean) {
+  if (!open && props.confirmLoading) return
+  emit('update:open', open)
 }
 </script>
 
@@ -48,7 +56,7 @@ function confirm() {
     :title="label"
     :description="description"
     role="alertdialog"
-    @update:open="emit('update:open', $event)"
+    @update:open="updateOpen"
   >
     <template
       v-if="$slots.trigger"
@@ -63,11 +71,13 @@ function confirm() {
       <EPButton
         :label="cancelLabel"
         variant="ghost"
+        :disabled="confirmLoading"
+        autofocus
         @click="cancel"
       />
       <slot
         name="confirm"
-        :confirm="confirm"
+        :confirm="confirmAction"
         :loading="confirmLoading"
         :disabled="confirmDisabled"
       >
@@ -76,7 +86,7 @@ function confirm() {
           :variant="confirmVariant"
           :loading="confirmLoading"
           :disabled="confirmDisabled"
-          @click="confirm"
+          @click="confirmAction"
         />
       </slot>
     </div>

@@ -22,13 +22,13 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
     <label
       v-for="option in options"
       :key="option.value"
-      class="ep:flex ep:cursor-pointer ep:items-center ep:gap-3 ep:rounded-xl ep:bg-selected-ep/40 ep:px-4 ep:py-3 ep:text-sm ep:text-text-ep ep:transition ep:hover:border-muted-ep"
+      class="ep:flex ep:cursor-pointer ep:items-center ep:gap-3 ep:rounded-xl ep:border ep:border-border-default ep:bg-surface-input ep:px-4 ep:py-3 ep:text-sm ep:text-text-default ep:transition"
     >
       <RadioGroupItem
         :value="option.value"
-        class="ep:flex ep:h-5 ep:w-5 ep:items-center ep:justify-center ep:rounded-full ep:border ep:border-border-ep ep:bg-selected-ep ep:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-white/20"
+        class="ep:flex ep:h-5 ep:w-5 ep:items-center ep:justify-center ep:rounded-full ep:border ep:border-border-default ep:bg-surface-input ep:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-contrast/20"
       >
-        <RadioGroupIndicator class="ep:block ep:aspect-square ep:h-2.5 ep:w-2.5 ep:rounded-full ep:bg-white" />
+        <RadioGroupIndicator class="ep:block ep:aspect-square ep:h-2.5 ep:w-2.5 ep:rounded-full ep:bg-contrast" />
       </RadioGroupItem>
       {{ option.label }}
     </label>

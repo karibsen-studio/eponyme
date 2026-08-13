@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import type { UrlValue } from '../../types'
 import { computed, ref } from 'vue'
 import { middleEllipsis } from '../../utils/middle-ellipsis'
@@ -50,39 +51,39 @@ function openLink() {
 
 <template>
   <div
-    class="ep:flex ep:min-h-12 ep:items-center ep:gap-3 ep:rounded-xl ep:border ep:bg-selected-ep ep:px-3 ep:py-2"
-    :class="invalid ? 'ep:border-danger-ep' : 'ep:border-0'"
+    class="ep:flex ep:min-h-12 ep:items-center ep:gap-3 ep:rounded-xl ep:border ep:border-border-default ep:bg-surface-active ep:px-3 ep:py-2"
+    :class="invalid ? 'ep:border-danger' : ''"
   >
     <Icon
       name="mingcute:link-2-line"
       size="20"
-      class="ep:shrink-0 ep:text-muted-ep"
+      class="ep:shrink-0 ep:text-text-muted"
       aria-hidden="true"
     />
     <div class="ep:min-w-0 ep:flex-1">
-      <p class="ep:m-0 ep:truncate ep:text-sm ep:text-white">
-        {{ value.href ? middleEllipsis(value.href, 40) : 'No link configured' }}
+      <p class="ep:m-0 ep:truncate ep:text-sm ep:text-text-strong">
+        {{ value.href ? middleEllipsis(value.href, 40) : t('link.none') }}
       </p>
-      <p class="ep:mt-0.5 ep:mb-0 ep:text-[11px] ep:text-muted-ep">
-        {{ value.type === 'internal' ? 'Internal' : 'External' }} · {{ value.download ? 'Download' : value.openInNewTab ? 'New tab' : 'Same tab' }}
+      <p class="ep:mt-0.5 ep:mb-0 ep:text-[11px] ep:text-text-muted">
+        {{ value.type === 'internal' ? t('link.kindInternal') : t('link.kindExternal') }} · {{ value.download ? t('link.stateDownload') : value.openInNewTab ? t('link.stateNewTab') : t('link.stateSameTab') }}
       </p>
     </div>
-    <EPTooltip content="Open link">
+    <EPTooltip :content="t('link.open')">
       <EPButton
         variant="ghost"
         icon="mingcute:external-link-line"
         :disabled="!value.href"
-        :aria-label="`Open ${label}`"
+        :aria-label="t('link.openNamed', { field: label })"
         @click="openLink"
       />
     </EPTooltip>
-    <EPTooltip content="Configure link">
+    <EPTooltip :content="t('link.configure')">
       <EPButton
         :id="id"
         variant="ghost"
         icon="mingcute:settings-3-line"
         :disabled="disabled"
-        :aria-label="`Configure ${label}`"
+        :aria-label="t('link.configureNamed', { field: label })"
         @click="openDialog"
       />
     </EPTooltip>

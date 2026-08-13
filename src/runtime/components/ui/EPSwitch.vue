@@ -9,10 +9,10 @@ const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
   <SwitchRoot
     :model-value="modelValue"
     :disabled="disabled"
-    class="eponyme-switch ep:relative ep:inline-flex ep:h-6 ep:w-11 ep:shrink-0 ep:cursor-pointer ep:items-center ep:rounded-full ep:border ep:border-border-ep ep:bg-selected-ep ep:p-0.5 ep:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-white/20 ep:data-[state=checked]:border-white ep:data-[state=checked]:bg-white ep:disabled:cursor-not-allowed ep:disabled:opacity-50"
+    class="eponyme-switch ep:relative ep:inline-flex ep:h-6 ep:w-11 ep:shrink-0 ep:cursor-pointer ep:items-center ep:rounded-full ep:border ep:border-border-default ep:bg-surface-input ep:p-0.5 ep:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-contrast/20 ep:data-[state=checked]:border-contrast ep:data-[state=checked]:bg-contrast ep:disabled:cursor-not-allowed ep:disabled:opacity-50"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <SwitchThumb class="eponyme-switch-thumb ep:block ep:h-[18px] ep:w-[18px] ep:rounded-full ep:bg-muted-ep ep:data-[state=checked]:bg-theme-ep" />
+    <SwitchThumb class="eponyme-switch-thumb ep:block ep:h-[18px] ep:w-[18px] ep:rounded-full ep:bg-text-muted ep:data-[state=checked]:bg-surface-raised" />
   </SwitchRoot>
 </template>
 

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import type { UrlType, UrlValue } from '../../types'
 import { computed, ref, watch } from 'vue'
 import EPButton from './EPButton.vue'
@@ -40,8 +41,8 @@ const value = computed<UrlValue>(() => {
 const downloadableExtension = computed(() => getDownloadableExtension(draftHref.value))
 
 const typeOptions = [
-  { label: 'Internal link', value: 'internal' },
-  { label: 'External link', value: 'external' },
+  { label: t('link.internal'), value: 'internal' },
+  { label: t('link.external'), value: 'external' },
 ]
 
 watch(() => props.open, (open) => {
@@ -75,14 +76,14 @@ function apply() {
 <template>
   <EPDialog
     :open="open"
-    title="Configure link"
-    description="Choose where the link points and how it should open."
+    :title="t('link.configure')"
+    :description="t('link.configureDescription')"
     @update:open="emit('update:open', $event)"
   >
     <div class="ep:grid ep:gap-5">
       <div>
-        <p class="ep:mt-0 ep:mb-2 ep:text-sm ep:font-medium ep:text-white">
-          Link type
+        <p class="ep:mt-0 ep:mb-2 ep:text-sm ep:font-medium ep:text-text-strong">
+          {{ t('link.type') }}
         </p>
         <EPRadioButton
           :model-value="draftType"
@@ -92,28 +93,28 @@ function apply() {
       </div>
 
       <label class="ep:block">
-        <span class="ep:mb-2 ep:block ep:text-sm ep:font-medium ep:text-white">Destination</span>
+        <span class="ep:mb-2 ep:block ep:text-sm ep:font-medium ep:text-text-strong">{{ t('link.destination') }}</span>
         <EPInputText
           :model-value="draftHref"
           :type="draftType === 'external' ? 'url' : 'text'"
-          :placeholder="draftType === 'internal' ? '/contact' : (placeholder || 'https://example.com')"
+          :placeholder="draftType === 'internal' ? t('link.internalPlaceholder') : (placeholder || t('link.externalPlaceholder'))"
           @update:model-value="updateHref"
         />
-        <span class="ep:mt-1.5 ep:block ep:text-xs ep:text-muted-ep">
-          {{ draftType === 'internal' ? 'Use a path beginning with / or an anchor beginning with #.' : 'Use a complete HTTP(S) address.' }}
+        <span class="ep:mt-1.5 ep:block ep:text-xs ep:text-text-muted">
+          {{ draftType === 'internal' ? t('link.internalHint') : t('link.externalHint') }}
         </span>
       </label>
 
       <div
         v-if="downloadableExtension"
-        class="ep:flex ep:items-center ep:justify-between ep:gap-4 ep:rounded-xl ep:bg-selected-ep/40 ep:px-4 ep:py-3"
+        class="ep:flex ep:items-center ep:justify-between ep:gap-4 ep:rounded-xl ep:bg-surface-active/40 ep:px-4 ep:py-3 ep:border ep:border-border-default"
       >
         <div>
-          <p class="ep:m-0 ep:text-sm ep:font-medium ep:text-white">
-            Download file
+          <p class="ep:m-0 ep:text-sm ep:font-medium ep:text-text-strong">
+            {{ t('link.download') }}
           </p>
-          <p class="ep:mt-1 ep:mb-0 ep:text-xs ep:text-muted-ep">
-            A .{{ downloadableExtension }} file was detected. Ask the browser to download it instead of opening it.
+          <p class="ep:mt-1 ep:mb-0 ep:text-xs ep:text-text-muted">
+            {{ t('link.downloadHint', { extension: downloadableExtension ?? '' }) }}
           </p>
         </div>
         <EPSwitch
@@ -122,13 +123,13 @@ function apply() {
         />
       </div>
 
-      <div class="ep:flex ep:items-center ep:justify-between ep:gap-4 ep:rounded-xl ep:bg-selected-ep/40 ep:px-4 ep:py-3">
+      <div class="ep:flex ep:items-center ep:justify-between ep:gap-4 ep:rounded-xl ep:bg-surface-active/40 ep:px-4 ep:py-3 ep:border ep:border-border-default">
         <div>
-          <p class="ep:m-0 ep:text-sm ep:font-medium ep:text-white">
-            Open in new tab
+          <p class="ep:m-0 ep:text-sm ep:font-medium ep:text-text-strong">
+            {{ t('link.newTab') }}
           </p>
-          <p class="ep:mt-1 ep:mb-0 ep:text-xs ep:text-muted-ep">
-            Keep the current page open when visitors follow this link.
+          <p class="ep:mt-1 ep:mb-0 ep:text-xs ep:text-text-muted">
+            {{ t('link.newTabHint') }}
           </p>
         </div>
         <EPSwitch
@@ -142,13 +143,13 @@ function apply() {
           variant="ghost"
           @click="emit('update:open', false)"
         >
-          Cancel
+          {{ t('action.cancel') }}
         </EPButton>
         <EPButton
           variant="primary"
           @click="apply"
         >
-          Apply link
+          {{ t('link.apply') }}
         </EPButton>
       </div>
     </div>

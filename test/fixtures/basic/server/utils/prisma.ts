@@ -1,7 +1,24 @@
-type EponymeColumns = { draft: Record<string, unknown>, published: Record<string, unknown>, status: string, publishedAt: Date | null }
+type EponymeColumns = {
+  draft: Record<string, unknown>
+  published: Record<string, unknown>
+  status: string
+  publishedAt: Date | null
+  scheduledPublishAt: Date | null
+  scheduledUnpublishAt: Date | null
+}
 type EponymeRow = EponymeColumns & { name: string, updatedAt?: Date, deletedAt?: Date | null }
 type DeletedAtFilter = null | { not: null }
-type EponymeWhere = { name: { startsWith: string } | { in: string[] }, deletedAt?: DeletedAtFilter, publishedAt?: { not: null } }
+type DateFilter = null | { lte?: Date, gt?: Date }
+type EponymeWhere = {
+  name?: string | { startsWith: string } | { in: string[] }
+  deletedAt?: DeletedAtFilter
+  publishedAt?: { not: null }
+  status?: string
+  scheduledPublishAt?: DateFilter
+  scheduledUnpublishAt?: DateFilter
+  AND?: EponymeWhere[]
+  OR?: EponymeWhere[]
+}
 type EponymeOrderBy = Record<string, 'asc' | 'desc' | { sort: 'asc' | 'desc', nulls?: 'last' }>
 
 const matchesDeleted = (row: EponymeRow, filter: DeletedAtFilter | undefined) => {
@@ -10,9 +27,27 @@ const matchesDeleted = (row: EponymeRow, filter: DeletedAtFilter | undefined) =>
 }
 
 const matchesWhere = (row: EponymeRow, where: EponymeWhere) => {
-  const byName = 'in' in where.name ? where.name.in.includes(row.name) : row.name.startsWith(where.name.startsWith)
+  const byName = where.name === undefined
+    || (typeof where.name === 'string'
+      ? row.name === where.name
+      : 'in' in where.name ? where.name.in.includes(row.name) : row.name.startsWith(where.name.startsWith))
   if (!byName || !matchesDeleted(row, where.deletedAt)) return false
-  return where.publishedAt === undefined || row.publishedAt !== null
+  if (where.publishedAt !== undefined && row.publishedAt === null) return false
+  if (where.status !== undefined && row.status !== where.status) return false
+  if (!matchesDate(row.scheduledPublishAt, where.scheduledPublishAt)) return false
+  if (!matchesDate(row.scheduledUnpublishAt, where.scheduledUnpublishAt)) return false
+  if (where.AND && !where.AND.every(clause => matchesWhere(row, clause))) return false
+  if (where.OR && !where.OR.some(clause => matchesWhere(row, clause))) return false
+  return true
+}
+
+const matchesDate = (value: Date | null, filter: DateFilter | undefined) => {
+  if (filter === undefined) return true
+  if (filter === null) return value === null
+  if (value === null) return false
+  if (filter.lte !== undefined && value > filter.lte) return false
+  if (filter.gt !== undefined && value <= filter.gt) return false
+  return true
 }
 
 /** Mirrors the ordering the store sends, `nulls: 'last'` included. */
@@ -91,7 +126,28 @@ const matchesValue = (value: string, filter: string | StringRange) => {
 // The recorded fingerprint per configured name, which decides what a boot rebuilds.
 const indexState = new Map<string, string>()
 type FormSubmissionRow = { id: string, formName: string, data: Record<string, unknown>, createdAt: Date }
+type SubmissionWhere = {
+  formName: string
+  OR?: Array<{ data: { path: string[], string_contains: string, mode?: 'insensitive' } }>
+}
+
+/** Mirrors Prisma's JSON `string_contains` with `mode: 'insensitive'`. */
+const matchesSubmission = (row: FormSubmissionRow, where: SubmissionWhere) => {
+  if (row.formName !== where.formName) return false
+  if (!where.OR) return true
+  return where.OR.some((clause) => {
+    const value = clause.data.path.reduce<unknown>((current, key) => (
+      current && typeof current === 'object' ? (current as Record<string, unknown>)[key] : undefined
+    ), row.data)
+    if (typeof value !== 'string') return false
+    return clause.data.mode === 'insensitive'
+      ? value.toLowerCase().includes(clause.data.string_contains.toLowerCase())
+      : value.includes(clause.data.string_contains)
+  })
+}
 const formSubmissions = new Map<string, FormSubmissionRow>()
+type RateLimitRow = { key: string, count: number, expiresAt: Date }
+const rateLimits = new Map<string, RateLimitRow>()
 
 type PrismaDouble = typeof delegates
 
@@ -225,14 +281,21 @@ const delegates = {
       formSubmissions.set(row.id, row)
       return row
     },
-    async findMany({ where, skip, take }: { where: { formName: string }, skip: number, take: number }) {
-      return [...formSubmissions.values()]
-        .filter(row => row.formName === where.formName)
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    async findMany({ where, skip = 0, take, orderBy, select }: {
+      where: SubmissionWhere
+      skip?: number
+      take: number
+      orderBy: { createdAt: 'asc' | 'desc' }
+      select?: { id: true }
+    }) {
+      const found = [...formSubmissions.values()]
+        .filter(row => matchesSubmission(row, where))
+        .sort((a, b) => (a.createdAt.getTime() - b.createdAt.getTime()) * (orderBy.createdAt === 'asc' ? 1 : -1))
         .slice(skip, skip + take)
+      return select ? found.map(row => ({ id: row.id })) as FormSubmissionRow[] : found
     },
-    async count({ where }: { where: { formName: string } }) {
-      return [...formSubmissions.values()].filter(row => row.formName === where.formName).length
+    async count({ where }: { where: SubmissionWhere }) {
+      return [...formSubmissions.values()].filter(row => matchesSubmission(row, where)).length
     },
     async findUnique({ where }: { where: { id: string } }) {
       return formSubmissions.get(where.id) ?? null
@@ -243,11 +306,48 @@ const delegates = {
       formSubmissions.delete(where.id)
       return row
     },
-    async deleteMany({ where }: { where: { formName: string } }) {
+    async deleteMany({ where }: {
+      where: { formName: string, createdAt?: { lt: Date } } | { id: { in: string[] } }
+    }) {
       let count = 0
       for (const row of [...formSubmissions.values()]) {
-        if (row.formName !== where.formName) continue
+        const matches = 'id' in where
+          ? where.id.in.includes(row.id)
+          : row.formName === where.formName && (!where.createdAt || row.createdAt < where.createdAt.lt)
+        if (!matches) continue
         formSubmissions.delete(row.id)
+        count++
+      }
+      return { count }
+    },
+  },
+  // A correctly migrated database, which is what the rest of this fixture represents.
+  // Written out rather than imported from the module: this file is bundled into the fixture's
+  // Nitro build, and reaching back into `src/` there hangs it. Raising `EPONYME_SCHEMA_VERSION`
+  // therefore fails these tests until this number follows, which is the reminder wanted.
+  eponymeSchema: {
+    async findUnique({ where }: { where: { key: string } }) {
+      return where.key === 'eponyme' ? { key: 'eponyme', version: 2, updatedAt: new Date() } : null
+    },
+  },
+  eponymeRateLimit: {
+    async upsert({ where, create, update }: {
+      where: { key: string }
+      create: RateLimitRow
+      update: { count: { increment: number } }
+    }) {
+      const current = rateLimits.get(where.key)
+      const row = current
+        ? { ...current, count: current.count + update.count.increment }
+        : { ...create }
+      rateLimits.set(row.key, row)
+      return row
+    },
+    async deleteMany({ where }: { where: { expiresAt: { lte: Date } } }) {
+      let count = 0
+      for (const [key, row] of rateLimits) {
+        if (row.expiresAt > where.expiresAt.lte) continue
+        rateLimits.delete(key)
         count++
       }
       return { count }

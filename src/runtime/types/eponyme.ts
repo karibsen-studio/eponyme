@@ -5,6 +5,8 @@ export interface EponymeCollectionDefinitionBase {
   __eponymeCollection: true
   label?: string
   description?: string
+  addLabel?: string
+  publication?: boolean
   fields: EponymeSchema
   slugField: string
   titleField: string
@@ -13,6 +15,13 @@ export interface EponymeCollectionDefinitionBase {
 export interface EponymeCollectionOptions<T extends EponymeSchema = EponymeSchema> {
   label?: string
   description?: string
+  /** Replaces the whole text of the create button. Defaults to `+ New <singular label>`. */
+  addLabel?: string
+  /**
+   * Whether entries of this collection offer the publication tab. Overrides the module-wide
+   * `publication` option, whether that one is a boolean or a per-name record.
+   */
+  publication?: boolean
   fields: T
   slugField: keyof T & string
   titleField: keyof T & string
@@ -27,7 +36,7 @@ export interface EponymeCollectionDefinition<T extends EponymeSchema = EponymeSc
 
 /**
  * A public form only accepts field types a visitor can meaningfully fill in.
- * `slug`, `richText`, `image`, `date`, `color`, `array`, `section` and `tabs` are
+ * `slug`, `richText`, `image`, `date`, `datetime`, `duration`, `color`, `array`, `section` and `tabs` are
  * authoring concerns and are rejected by `form()`.
  */
 export type EponymeFormFieldDefinition
@@ -49,6 +58,15 @@ export type EponymeFormMode = 'custom' | 'managed'
 
 export interface EponymeFormSubmissionOptions {
   mode?: EponymeFormMode
+  /**
+   * Whether the dashboard collects submissions a `custom` route stored itself with
+   * `storeEponymeFormSubmission()`. Implied by `managed`, which does the storing.
+   */
+  store?: boolean
+  /** Maximum retained rows for this form. `false` disables the cap. @default 10000 */
+  maxStored?: number | false
+  /** Delete rows older than this many days. `false` disables age retention. @default 365 */
+  retentionDays?: number | false
 }
 
 export interface EponymeFormOptions<T extends EponymeFormSchema = EponymeFormSchema> {
@@ -85,7 +103,7 @@ export type CollectionSlugField<T extends EponymeSchema> = {
 }[keyof T & string]
 
 export type FieldValue<T extends FieldDefinition>
-  = T extends { type: 'number' } ? number
+  = T extends { type: 'number' | 'duration' } ? number
     : T extends { type: 'boolean' } ? boolean
       : T extends UrlFieldDefinition ? UrlValue
         : T extends MediaPlayerFieldDefinition ? MediaPlayerValue
@@ -127,17 +145,17 @@ export type EponymeCollectionDataByName<
  *
  * The two lists are separate because one runs on values and the other on types, but they
  * describe the same rule: a filterable field is one whose stored form compares correctly as
- * text. That is why `date` is here — validation pins it to `YYYY-MM-DD` — and `number` is
- * not, since `'10'` sorts before `'9'`.
+ * text. That is why `date` and canonical UTC `datetime` are here, while `number` and
+ * `duration` are not, since `'10'` sorts before `'9'`.
  */
-type FilterableFieldType = 'tags' | 'checkboxGroup' | 'select' | 'radio' | 'boolean' | 'date'
+type FilterableFieldType = 'tags' | 'checkboxGroup' | 'select' | 'radio' | 'boolean' | 'date' | 'datetime'
 
 /** A multi-valued field is filtered by one of its items, not by the whole list. */
 type FilterOperand<T extends FieldDefinition> = FieldValue<T> extends readonly (infer Item)[] ? Item : FieldValue<T>
 
 /**
  * Bounds, offered only where alphabetical order is the value's natural order — which is
- * `field.date()`, pinned by validation to `YYYY-MM-DD`. On a tag or a select, comparing
+ * `field.date()` and `field.datetime()`, both pinned to chronological strings. On a tag or a select, comparing
  * with `gte` would sort labels, which answers no question anyone asks.
  */
 export interface EponymeFilterBounds {
@@ -160,7 +178,7 @@ type FilterOperators<T extends FieldDefinition> = {
    * scale the way the others do.
    */
   contains?: string
-} & (T extends { type: 'date' } ? EponymeFilterBounds : unknown)
+} & (T extends { type: 'date' | 'datetime' } ? EponymeFilterBounds : unknown)
 
 /** The values of one key are ORed; the keys of a `where` are ANDed. */
 export type EponymeFieldFilter<T extends FieldDefinition>

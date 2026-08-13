@@ -11,6 +11,9 @@ export default defineNitroPlugin((nitroApp) => {
 
   nitroApp.hooks.hook('eponyme:entry:saved', context => void seen.push(`saved:${context.name}`))
   nitroApp.hooks.hook('eponyme:entry:published', context => void seen.push(`published:${context.name}:${context.collection?.name ?? '-'}`))
+  nitroApp.hooks.hook('eponyme:entry:unpublished', context => void seen.push(`unpublished:${context.name}`))
+  nitroApp.hooks.hook('eponyme:entry:scheduled', context => void seen.push(`scheduled:${context.name}`))
+  nitroApp.hooks.hook('eponyme:entry:unscheduled', context => void seen.push(`unscheduled:${context.name}`))
   nitroApp.hooks.hook('eponyme:entry:restored', context => void seen.push(`restored:${context.name}`))
   nitroApp.hooks.hook('eponyme:form:beforeSubmit', (context) => {
     if (context.data?.email === 'blocked@example.com') throw new Error('This address is not allowed.')

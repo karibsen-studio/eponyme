@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { computed } from 'vue'
 import EponymeNavigationLink from './EponymeNavigationLink.vue'
 import { useEponymeConfig } from '../../composables/useEponymeConfig'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas } from '../../utils/get-eponyme-schemas'
+import { humanizeLabel } from '../../utils/humanize-label'
 
 const props = defineProps<{ basePath: string, folder: string }>()
 const config = useEponymeConfig()
@@ -22,32 +24,29 @@ const children = computed(() => {
 })
 
 function label(name: string) {
-  return name.replace(/[-_]/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
+  return humanizeLabel(name)
 }
 
 function descriptionFor(kind: 'folder' | 'entry' | 'collection' | 'form') {
-  if (kind === 'folder') return 'Folder'
-  if (kind === 'collection') return 'Collection'
-  return kind === 'form' ? 'Form' : 'Page'
+  if (kind === 'folder') return t('kind.folder')
+  if (kind === 'collection') return t('kind.collection')
+  return kind === 'form' ? t('kind.form') : t('kind.page')
 }
 </script>
 
 <template>
   <section class="ep:mx-auto ep:max-w-3xl ep:px-6 ep:py-8 ep:md:px-10 ep:md:py-12">
     <header class="ep:mb-8">
-      <p class="ep:m-0 ep:text-[11px] ep:font-semibold ep:tracking-widest ep:text-muted-ep ep:uppercase">
-        Folder
-      </p>
-      <h1 class="ep:mt-2 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-white">
+      <h1 class="ep:mt-2 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-text-strong">
         {{ label(folder.split('/').at(-1) ?? folder) }}
       </h1>
-      <p class="ep:mt-2 ep:text-sm ep:text-muted-ep">
-        Choose a page or open a nested folder.
+      <p class="ep:mt-2 ep:text-sm ep:text-text-muted">
+        {{ t('folder.choose') }}
       </p>
     </header>
     <nav
       class="ep:grid ep:gap-3 ep:sm:grid-cols-2"
-      :aria-label="`${label(folder)} entries`"
+      :aria-label="t('folder.entries', { folder: label(folder) })"
     >
       <EponymeNavigationLink
         v-for="child in children"

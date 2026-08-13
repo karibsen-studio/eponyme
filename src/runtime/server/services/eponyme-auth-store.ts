@@ -1,11 +1,11 @@
+import { t } from '#eponyme/locale'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import type { EponymeAuthUser, EponymeRole } from '../../types'
 import { isEponymeRole } from '../../types'
 import { generateTemporaryPassword, hashPassword, validatePassword, verifyPassword } from '../utils/password'
 
 const OWNER_USERNAME = 'EponymeOwner'
-const MAX_LOGIN_ATTEMPTS = 5
-const LOGIN_LOCK_MS = 15 * 60 * 1000
+const PASSWORD_MAX_LENGTH = 128
 const USERNAME_PATTERN = /^[\w.-]{3,50}$/
 
 type DateValue = Date | string
@@ -59,7 +59,7 @@ export interface CreatedSession {
 
 export type LoginResult
   = | { ok: true, session: CreatedSession }
-    | { ok: false, reason: 'invalid' | 'locked' }
+    | { ok: false, reason: 'invalid' }
 
 const dummyPasswordHash = hashPassword('Eponyme timing-safe dummy password')
 
@@ -101,19 +101,15 @@ export class EponymeAuthService {
 
   async login(username: unknown, password: unknown): Promise<LoginResult> {
     const normalized = typeof username === 'string' ? normalizeUsername(username) : ''
-    const submittedPassword = typeof password === 'string' ? password : ''
+    // Do not hand an attacker-controlled multi-megabyte string to scrypt. The route also has
+    // a byte limit; this guard protects direct service consumers and future login transports.
+    const submittedPassword = typeof password === 'string' && password.length <= PASSWORD_MAX_LENGTH ? password : ''
     const user = normalized
       ? await this.client.eponymeUser.findUnique({ where: { usernameNormalized: normalized } })
       : null
 
     const validPassword = await verifyPassword(submittedPassword, user?.passwordHash ?? await dummyPasswordHash)
-    if (!user || !user.active || !validPassword) {
-      if (user?.active) await this.recordFailedLogin(user)
-      return { ok: false, reason: 'invalid' }
-    }
-
-    if (user.lockedUntil && new Date(user.lockedUntil).getTime() > Date.now())
-      return { ok: false, reason: 'locked' }
+    if (!user || !user.active || !validPassword) return { ok: false, reason: 'invalid' }
 
     if (user.failedLoginAttempts || user.lockedUntil) {
       await this.client.eponymeUser.update({
@@ -155,15 +151,15 @@ export class EponymeAuthService {
     newPassword: unknown,
   ): Promise<{ session?: CreatedSession, error?: string }> {
     const user = await this.client.eponymeUser.findUnique({ where: { id: userId } })
-    if (!user || !user.active) return { error: 'User account is unavailable.' }
+    if (!user || !user.active) return { error: t('server.userUnavailable') }
     if (typeof currentPassword !== 'string' || !(await verifyPassword(currentPassword, user.passwordHash)))
-      return { error: 'Current password is incorrect.' }
+      return { error: t('server.currentPasswordWrong') }
     const passwordError = validatePassword(newPassword)
     if (passwordError) return { error: passwordError }
     if (normalizeUsername(String(newPassword)).includes(user.usernameNormalized))
-      return { error: 'Password must not contain the username.' }
+      return { error: t('server.passwordContainsUsername') }
     if (await verifyPassword(String(newPassword), user.passwordHash))
-      return { error: 'New password must be different from the current password.' }
+      return { error: t('server.passwordUnchanged') }
 
     const updated = await this.client.eponymeUser.update({
       where: { id: userId },
@@ -186,7 +182,7 @@ export class EponymeAuthService {
   async createUser(username: unknown, role: unknown): Promise<{ result?: { user: EponymeAuthUser, temporaryPassword: string }, error?: string }> {
     const usernameError = validateUsername(username)
     if (usernameError) return { error: usernameError }
-    if (!isEponymeRole(role)) return { error: 'A valid role is required.' }
+    if (!isEponymeRole(role)) return { error: t('server.roleRequired') }
 
     const cleanUsername = String(username).trim()
     const temporaryPassword = generateTemporaryPassword()
@@ -207,7 +203,7 @@ export class EponymeAuthService {
     }
     catch (error) {
       // Only a unique-constraint violation means the username is taken; anything else is a real failure.
-      if (isUniqueConstraintViolation(error)) return { error: 'This username is already in use.' }
+      if (isUniqueConstraintViolation(error)) return { error: t('server.usernameTaken') }
       throw error
     }
   }
@@ -215,16 +211,20 @@ export class EponymeAuthService {
   async updateUser(
     id: string,
     changes: { role?: unknown, active?: unknown },
+    actorId?: string,
   ): Promise<{ user?: EponymeAuthUser, error?: string, notFound?: boolean }> {
     const user = await this.client.eponymeUser.findUnique({ where: { id } })
-    if (!user) return { error: 'User not found.', notFound: true }
+    if (!user) return { error: t('server.userNotFound'), notFound: true }
     if (changes.role !== undefined && !isEponymeRole(changes.role))
-      return { error: 'A valid role is required.' }
+      return { error: t('server.roleRequired') }
     if (changes.active !== undefined && typeof changes.active !== 'boolean')
-      return { error: 'Active must be a boolean.' }
+      return { error: t('server.activeMustBeBoolean') }
 
     const nextRole = (changes.role ?? user.role) as EponymeRole
     const nextActive = (changes.active ?? user.active) as boolean
+
+    if (actorId === id && (nextRole !== user.role || nextActive !== user.active))
+      return { error: t('server.selfUpdate') }
     const removesActiveOwner = user.role === 'owner' && user.active && (nextRole !== 'owner' || !nextActive)
 
     // Counting owners and demoting must be atomic: two concurrent demotions could otherwise
@@ -232,7 +232,7 @@ export class EponymeAuthService {
     const apply = async (tx: PrismaEponymeAuthClient): Promise<{ user?: EponymeAuthUser, error?: string }> => {
       if (removesActiveOwner) {
         const activeOwnerCount = await tx.eponymeUser.count({ where: { role: 'owner', active: true } })
-        if (activeOwnerCount <= 1) return { error: 'The last active owner cannot be disabled or demoted.' }
+        if (activeOwnerCount <= 1) return { error: t('server.lastOwner') }
       }
       const updated = await tx.eponymeUser.update({
         where: { id },
@@ -244,7 +244,7 @@ export class EponymeAuthService {
     const result = removesActiveOwner && this.client.$transaction
       ? await this.client.$transaction(apply, { isolationLevel: 'Serializable' })
           .catch(error => isSerializationFailure(error)
-            ? { error: 'Another change was applied at the same time. Please try again.' }
+            ? { error: t('server.concurrentChange') }
             : Promise.reject(error))
       : await apply(this.client)
     if (result.error) return result
@@ -254,7 +254,7 @@ export class EponymeAuthService {
 
   async resetPassword(id: string): Promise<{ result?: { user: EponymeAuthUser, temporaryPassword: string }, error?: string }> {
     const user = await this.client.eponymeUser.findUnique({ where: { id } })
-    if (!user) return { error: 'User not found.' }
+    if (!user) return { error: t('server.userNotFound') }
     const temporaryPassword = generateTemporaryPassword()
     const updated = await this.client.eponymeUser.update({
       where: { id },
@@ -281,18 +281,6 @@ export class EponymeAuthService {
       },
     })
     return { token, expiresAt, user: toAuthUser(user) }
-  }
-
-  private async recordFailedLogin(user: PrismaEponymeUserRow): Promise<void> {
-    if (user.lockedUntil && new Date(user.lockedUntil).getTime() > Date.now()) return
-    const attempts = user.failedLoginAttempts + 1
-    await this.client.eponymeUser.update({
-      where: { id: user.id },
-      data: {
-        failedLoginAttempts: attempts >= MAX_LOGIN_ATTEMPTS ? 0 : attempts,
-        lockedUntil: attempts >= MAX_LOGIN_ATTEMPTS ? new Date(Date.now() + LOGIN_LOCK_MS) : null,
-      },
-    })
   }
 }
 

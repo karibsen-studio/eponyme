@@ -1,17 +1,20 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import Image from '@tiptap/extension-image'
 import Placeholder from '@tiptap/extension-placeholder'
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
+import TextAlign from '@tiptap/extension-text-align'
 import { EditorContent, Extension, useEditor } from '@tiptap/vue-3'
 import type { UrlValue } from '../../types'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useEponymeVariables } from '../../composables/useEponymeVariables'
 import { findEponymeVariableRanges } from '../../utils/variables'
 import EPDropdownMenu from '../ui/EPDropdownMenu.vue'
 import EPFormField from '../ui/EPFormField.vue'
+import EPImageDialog from '../ui/EPImageDialog.vue'
 import EPLinkDialog from '../ui/EPLinkDialog.vue'
 
 const DownloadableLinkAttribute = Extension.create({
@@ -81,13 +84,16 @@ const props = withDefaults(defineProps<{
   disabled?: boolean
 }>(), {
   errors: () => [],
-  placeholder: 'Start writing…',
+  placeholder: t('richText.placeholder'),
 })
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 const revision = ref(0)
 const linkDialogOpen = ref(false)
+const imageDialogOpen = ref(false)
 const linkValue = ref<UrlValue>({ href: '', type: 'external', openInNewTab: false, download: false })
+const imageValue = ref({ src: '', alt: '' })
+const editingImage = ref(false)
 const initialContent = typeof props.modelValue === 'string' ? props.modelValue : ''
 const editor = useEditor({
   content: initialContent,
@@ -106,6 +112,9 @@ const editor = useEditor({
     EponymeVariableHighlight,
     Placeholder.configure({ placeholder: props.placeholder }),
     Image.configure({ HTMLAttributes: { class: 'eponyme-rich-text-image' } }),
+    // Only the blocks the toolbar exposes, and only the alignments the sanitiser allows
+    // through — anything wider would be written here and dropped on save.
+    TextAlign.configure({ types: ['heading', 'paragraph'], alignments: ['left', 'center', 'right'] }),
   ],
   onTransaction: () => revision.value++,
   onUpdate: ({ editor }) => emit('update:modelValue', editor.isEmpty ? '' : editor.getHTML()),
@@ -130,9 +139,13 @@ watch(() => props.modelValue, (value) => {
 
 watch(() => props.disabled, disabled => editor.value?.setEditable(!disabled))
 
-function isActive(name: string, attributes: Record<string, unknown> = {}) {
+/** An alignment is an attribute of whatever block holds it, so it is asked for without a name. */
+function isActive(name: string | Record<string, unknown>, attributes: Record<string, unknown> = {}) {
   trackEditorRevision()
-  return editor.value?.isActive(name, attributes) ?? false
+  const active = typeof name === 'string'
+    ? editor.value?.isActive(name, attributes)
+    : editor.value?.isActive(name)
+  return active ?? false
 }
 
 function openLinkDialog() {
@@ -168,15 +181,22 @@ function applyLink(value: UrlValue) {
 function setImage() {
   const instance = editor.value
   if (!instance) return
-  const src = window.prompt('Image URL', 'https://')
-  if (src === null || !src.trim()) return
-  // Same rule and wording as the image field validator, so both reject the same inputs.
-  if (!/^https?:\/\//i.test(src.trim())) {
-    window.alert('Must be an HTTP(S) URL.')
-    return
+  editingImage.value = instance.isActive('image')
+  const attributes = editingImage.value ? instance.getAttributes('image') : {}
+  imageValue.value = {
+    src: typeof attributes.src === 'string' ? attributes.src : '',
+    alt: typeof attributes.alt === 'string' ? attributes.alt : '',
   }
-  const alt = window.prompt('Alt text (describe the image)', '') ?? ''
-  instance.chain().focus().setImage({ src: src.trim(), alt: alt.trim() }).run()
+  imageDialogOpen.value = true
+}
+
+function insertImage(image: { src: string, alt: string }) {
+  const instance = editor.value
+  if (!instance) return
+  const chain = instance.chain().focus()
+  if (editingImage.value) chain.updateAttributes('image', image).run()
+  else chain.setImage(image).run()
+  void nextTick(() => instance.commands.focus())
 }
 
 interface Tool {
@@ -193,7 +213,7 @@ const variables = useEponymeVariables()
 // The preview shows what the variable resolves to today, so an editor can tell
 // `currentYear` from `nextYear` without leaving the page.
 const variableItems = computed(() => variables.map(variable => ({
-  label: variable.preview ? `${variable.label} — ${variable.preview}` : variable.label,
+  label: variable.preview ? t('richText.variablePreview', { label: variable.label, preview: variable.preview }) : variable.label,
   value: variable.name,
 })))
 
@@ -207,19 +227,22 @@ const tools = computed<Tool[]>(() => {
   if (!instance) return []
   trackEditorRevision()
   return [
-    { icon: 'mingcute:paragraph-line', title: 'Paragraph', active: isActive('paragraph'), run: () => instance.chain().focus().setParagraph().run() },
-    { icon: 'mingcute:heading-2-line', title: 'Heading 2', active: isActive('heading', { level: 2 }), run: () => instance.chain().focus().toggleHeading({ level: 2 }).run() },
-    { icon: 'mingcute:heading-3-line', title: 'Heading 3', active: isActive('heading', { level: 3 }), run: () => instance.chain().focus().toggleHeading({ level: 3 }).run() },
-    { icon: 'mingcute:bold-line', title: 'Bold', active: isActive('bold'), separated: true, run: () => instance.chain().focus().toggleBold().run() },
-    { icon: 'mingcute:italic-line', title: 'Italic', active: isActive('italic'), run: () => instance.chain().focus().toggleItalic().run() },
-    { icon: 'mingcute:strikethrough-line', title: 'Strikethrough', active: isActive('strike'), run: () => instance.chain().focus().toggleStrike().run() },
-    { icon: 'mingcute:link-line', title: 'Link', active: isActive('link'), run: openLinkDialog },
-    { icon: 'mingcute:pic-line', title: 'Image', active: isActive('image'), run: setImage },
-    { icon: 'mingcute:list-check-line', title: 'Bullet list', active: isActive('bulletList'), separated: true, run: () => instance.chain().focus().toggleBulletList().run() },
-    { icon: 'mingcute:list-ordered-line', title: 'Numbered list', active: isActive('orderedList'), run: () => instance.chain().focus().toggleOrderedList().run() },
-    { icon: 'mingcute:quote-left-line', title: 'Quote', active: isActive('blockquote'), run: () => instance.chain().focus().toggleBlockquote().run() },
-    { icon: 'mingcute:back-2-line', title: 'Undo', separated: true, disabled: !instance.can().chain().focus().undo().run(), run: () => instance.chain().focus().undo().run() },
-    { icon: 'mingcute:forward-2-line', title: 'Redo', disabled: !instance.can().chain().focus().redo().run(), run: () => instance.chain().focus().redo().run() },
+    { icon: 'mingcute:paragraph-line', title: t('richText.paragraph'), active: isActive('paragraph'), run: () => instance.chain().focus().setParagraph().run() },
+    { icon: 'mingcute:heading-2-line', title: t('richText.heading2'), active: isActive('heading', { level: 2 }), run: () => instance.chain().focus().toggleHeading({ level: 2 }).run() },
+    { icon: 'mingcute:heading-3-line', title: t('richText.heading3'), active: isActive('heading', { level: 3 }), run: () => instance.chain().focus().toggleHeading({ level: 3 }).run() },
+    { icon: 'mingcute:bold-line', title: t('richText.bold'), active: isActive('bold'), separated: true, run: () => instance.chain().focus().toggleBold().run() },
+    { icon: 'mingcute:italic-line', title: t('richText.italic'), active: isActive('italic'), run: () => instance.chain().focus().toggleItalic().run() },
+    { icon: 'mingcute:strikethrough-line', title: t('richText.strike'), active: isActive('strike'), run: () => instance.chain().focus().toggleStrike().run() },
+    { icon: 'mingcute:link-line', title: t('richText.link'), active: isActive('link'), run: openLinkDialog },
+    { icon: 'mingcute:pic-line', title: t('richText.image'), active: isActive('image'), run: setImage },
+    { icon: 'mingcute:align-left-line', title: t('richText.alignLeft'), active: isActive({ textAlign: 'left' }), separated: true, run: () => instance.chain().focus().setTextAlign('left').run() },
+    { icon: 'mingcute:align-center-line', title: t('richText.alignCenter'), active: isActive({ textAlign: 'center' }), run: () => instance.chain().focus().setTextAlign('center').run() },
+    { icon: 'mingcute:align-right-line', title: t('richText.alignRight'), active: isActive({ textAlign: 'right' }), run: () => instance.chain().focus().setTextAlign('right').run() },
+    { icon: 'mingcute:list-check-line', title: t('richText.bulletList'), active: isActive('bulletList'), separated: true, run: () => instance.chain().focus().toggleBulletList().run() },
+    { icon: 'mingcute:list-ordered-line', title: t('richText.orderedList'), active: isActive('orderedList'), run: () => instance.chain().focus().toggleOrderedList().run() },
+    { icon: 'mingcute:quote-left-line', title: t('richText.quote'), active: isActive('blockquote'), run: () => instance.chain().focus().toggleBlockquote().run() },
+    { icon: 'mingcute:back-2-line', title: t('richText.undo'), separated: true, disabled: !instance.can().chain().focus().undo().run(), run: () => instance.chain().focus().undo().run() },
+    { icon: 'mingcute:forward-2-line', title: t('richText.redo'), disabled: !instance.can().chain().focus().redo().run(), run: () => instance.chain().focus().redo().run() },
   ]
 })
 </script>
@@ -233,14 +256,14 @@ const tools = computed<Tool[]>(() => {
     :errors="errors"
   >
     <div
-      class="eponyme-rich-text ep:overflow-hidden ep:rounded-xl ep:bg-selected-ep ep:ring-white/10 ep:focus-within:ring-2"
-      :class="{ 'ep:opacity-60': disabled, 'ep:ring-2 ep:ring-danger-ep/40': errors.length }"
+      class="eponyme-rich-text ep:overflow-hidden ep:rounded-xl ep:bg-surface-active ep:ring-contrast/10 ep:focus-within:ring-2"
+      :class="{ 'ep:opacity-60': disabled, 'ep:ring-2 ep:ring-danger/40': errors.length }"
     >
       <div
         v-if="editor"
-        class="ep:flex ep:flex-wrap ep:items-center ep:gap-1 ep:border-b ep:border-border-ep ep:p-2"
+        class="ep:flex ep:flex-wrap ep:items-center ep:gap-1 ep:border-b ep:border-border-default ep:p-2"
         role="toolbar"
-        :aria-label="`${label} formatting`"
+        :aria-label="t('richText.toolbar', { field: label })"
       >
         <template
           v-for="tool in tools"
@@ -248,7 +271,7 @@ const tools = computed<Tool[]>(() => {
         >
           <span
             v-if="tool.separated"
-            class="ep:mx-1 ep:h-5 ep:w-px ep:bg-border-ep"
+            class="ep:mx-1 ep:h-5 ep:w-px ep:bg-border-default"
           />
           <button
             type="button"
@@ -277,8 +300,8 @@ const tools = computed<Tool[]>(() => {
               type="button"
               class="rich-text-tool"
               :disabled="disabled"
-              title="Insert a variable"
-              aria-label="Insert a variable"
+              :title="t('richText.variable')"
+              :aria-label="t('richText.variable')"
             >
               <Icon
                 name="mingcute:code-line"
@@ -297,14 +320,14 @@ const tools = computed<Tool[]>(() => {
       />
       <div
         v-else
-        class="ep:min-h-72 ep:p-5 ep:text-sm ep:text-muted-ep"
+        class="ep:min-h-72 ep:p-5 ep:text-sm ep:text-text-muted"
       >
-        Loading editor…
+        {{ t('richText.loading') }}
       </div>
     </div>
     <p
       v-if="maxLength !== undefined && showCounter !== false"
-      class="ep:mt-1.5 ep:mb-0 ep:text-right ep:text-[11px] ep:text-muted-ep"
+      class="ep:mt-1.5 ep:mb-0 ep:text-right ep:text-[11px] ep:text-text-muted"
     >
       {{ characterCount }} / {{ maxLength }}
     </p>
@@ -313,6 +336,13 @@ const tools = computed<Tool[]>(() => {
       :model-value="linkValue"
       @update:open="linkDialogOpen = $event"
       @update:model-value="applyLink"
+    />
+    <EPImageDialog
+      :open="imageDialogOpen"
+      :model-value="imageValue"
+      :editing="editingImage"
+      @update:open="imageDialogOpen = $event"
+      @insert="insertImage"
     />
   </EPFormField>
 </template>
@@ -325,7 +355,7 @@ const tools = computed<Tool[]>(() => {
   border: 0;
   border-radius: .45rem;
   background: transparent;
-  color: var(--ep-color-muted-ep, #8d8d8d);
+  color: var(--ep-color-text-muted, #8d8d8d);
   cursor: pointer;
   font-family: inherit;
   font-size: .75rem;
@@ -338,8 +368,8 @@ const tools = computed<Tool[]>(() => {
 
 .rich-text-tool:hover,
 .rich-text-tool.is-active {
-  background: var(--ep-color-theme-ep, #1c1c1c);
-  color: white;
+  background: var(--ep-color-richtext-tool-active, #1c1c1c);
+  color: var(--ep-color-text-strong, #ffffff);
 }
 
 .rich-text-tool:disabled {
@@ -350,7 +380,7 @@ const tools = computed<Tool[]>(() => {
 .eponyme-rich-text :deep(.tiptap) {
   min-height: 18rem;
   padding: 1.25rem;
-  color: var(--ep-color-text-ep, #e7e7e7);
+  color: var(--ep-color-richtext-text, #e7e7e7);
   font-size: .925rem;
   line-height: 1.75;
   outline: none;
@@ -390,8 +420,8 @@ const tools = computed<Tool[]>(() => {
 
 .eponyme-rich-text :deep(.tiptap blockquote) {
   padding-left: 1rem;
-  border-left: 2px solid var(--ep-color-muted-ep, #8d8d8d);
-  color: var(--ep-color-muted-ep, #8d8d8d);
+  border-left: 2px solid var(--ep-color-text-muted, #8d8d8d);
+  color: var(--ep-color-text-muted, #8d8d8d);
 }
 
 .eponyme-rich-text :deep(.tiptap img) {
@@ -401,12 +431,12 @@ const tools = computed<Tool[]>(() => {
 }
 
 .eponyme-rich-text :deep(.tiptap img.ProseMirror-selectednode) {
-  outline: 2px solid white;
+  outline: 2px solid var(--ep-color-contrast, #ffffff);
   outline-offset: 2px;
 }
 
 .eponyme-rich-text :deep(.tiptap a) {
-  color: white;
+  color: var(--ep-color-text-strong, #ffffff);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -453,7 +483,7 @@ const tools = computed<Tool[]>(() => {
 
 .eponyme-rich-text :deep(.tiptap p.is-editor-empty:first-child::before) {
   height: 0;
-  color: var(--ep-color-muted-ep, #8d8d8d);
+  color: var(--ep-color-text-muted, #8d8d8d);
   content: attr(data-placeholder);
   float: left;
   pointer-events: none;

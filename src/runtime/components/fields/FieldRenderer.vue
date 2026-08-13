@@ -4,17 +4,19 @@ import BooleanField from './BooleanField.vue'
 import CheckboxGroupField from './CheckboxGroupField.vue'
 import ColorField from './ColorField.vue'
 import DateField from './DateField.vue'
+import DateTimeField from './DateTimeField.vue'
+import DurationField from './DurationField.vue'
 import MediaPlayerField from './MediaPlayerField.vue'
 import NumberField from './NumberField.vue'
 import PhoneField from './PhoneField.vue'
 import RadioField from './RadioField.vue'
-import RichTextField from './RichTextField.vue'
 import SelectField from './SelectField.vue'
 import SlugField from './SlugField.vue'
 import TagsField from './TagsField.vue'
 import TextareaField from './TextareaField.vue'
 import TextField from './TextField.vue'
 import UrlField from './UrlField.vue'
+import { LazyRichTextField } from './lazy'
 import { formFieldContextKey } from '../ui/form-field-context'
 import type { FieldDefinition } from '../../types'
 import { humanizeLabel } from '../../utils/humanize-label'
@@ -51,7 +53,7 @@ const multiline = computed(() => props.field.type === 'textarea' || props.field.
 
 const component = computed(() => {
   switch (props.field.type) {
-    case 'richText': return RichTextField
+    case 'richText': return LazyRichTextField
     case 'textarea': return TextareaField
     case 'slug': return SlugField
     case 'boolean': return BooleanField
@@ -60,6 +62,8 @@ const component = computed(() => {
     case 'number': return NumberField
     case 'select': return SelectField
     case 'date': return DateField
+    case 'datetime': return DateTimeField
+    case 'duration': return DurationField
     case 'color': return ColorField
     case 'url': return UrlField
     case 'mediaPlayer': return MediaPlayerField
@@ -101,8 +105,13 @@ const specificProps = computed<Record<string, unknown>>(() => {
         max: field.options.max,
         step: field.options.step,
         slider: field.options.slider,
+        prefix: field.options.prefix,
+        suffix: field.options.suffix,
       }
     case 'date':
+    case 'datetime':
+      return { min: field.options.min, max: field.options.max }
+    case 'duration':
       return { min: field.options.min, max: field.options.max }
     case 'boolean':
       return {}
@@ -126,6 +135,7 @@ const specificProps = computed<Record<string, unknown>>(() => {
       const options = field.options as Record<string, unknown>
       return {
         inputType: field.type === 'image' ? 'url' : field.type === 'email' ? 'email' : 'text',
+        mask: options.mask,
         placeholder: options.placeholder,
         minLength: options.minLength,
         maxLength: options.maxLength,

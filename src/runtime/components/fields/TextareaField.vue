@@ -41,7 +41,7 @@ const value = () => typeof props.modelValue === 'string' ? props.modelValue : ''
     />
     <p
       v-if="maxLength !== undefined && showCounter !== false"
-      class="ep:mt-1.5 ep:mb-0 ep:text-right ep:text-[11px] ep:text-muted-ep"
+      class="ep:mt-1.5 ep:mb-0 ep:text-right ep:text-[11px] ep:text-text-muted"
     >
       {{ value().length }} / {{ maxLength }}
     </p>

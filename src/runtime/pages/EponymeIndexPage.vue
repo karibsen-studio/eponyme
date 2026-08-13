@@ -1,9 +1,9 @@
 <script setup lang="ts">
+import { t } from '#eponyme/locale'
 import { nextTick, ref } from 'vue'
 import { refreshNuxtData, useRequestFetch, useRoute, useSeoMeta } from '#app'
 import type { FetchError } from 'ofetch'
 import EponymeNavigationLink from '../components/editor/EponymeNavigationLink.vue'
-import EponymeSidebar from '../components/editor/EponymeSidebar.vue'
 import EPButton from '../components/ui/EPButton.vue'
 import EPDialog from '../components/ui/EPDialog.vue'
 import EPToast from '../components/ui/EPToast.vue'
@@ -12,6 +12,8 @@ import { useEponymeConfig } from '../composables/useEponymeConfig'
 import { useEponymeFavicon } from '../composables/useEponymeFavicon'
 import type { EponymeExportFile, EponymeImportResult } from '../server/services/eponyme-store'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas } from '../utils/get-eponyme-schemas'
+import { humanizeLabel } from '../utils/humanize-label'
+import '../assets/dashboard.css'
 
 const config = useEponymeConfig()
 const route = useRoute()
@@ -23,7 +25,7 @@ const forms = getEponymeForms(config)
 const entries = { ...eponymes, ...collections, ...forms }
 
 useEponymeFavicon()
-useSeoMeta({ title: 'Eponyme' })
+useSeoMeta({ title: t('index.title') })
 
 const fileInput = ref<HTMLInputElement>()
 const exporting = ref(false)
@@ -38,7 +40,7 @@ const toast = ref<{
 }>({ open: false, title: '', description: '', variant: 'success' })
 
 function label(name: string) {
-  return name.replace(/[-_]/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
+  return humanizeLabel(name)
 }
 
 /** Closing then reopening lets two consecutive toasts animate instead of merging. */
@@ -53,7 +55,7 @@ function describeError(caught: unknown, fallback: string) {
   const error = caught as FetchError<{ statusMessage?: string, data?: { schemaMismatch?: string[] } }>
   const mismatch = error?.data?.data?.schemaMismatch
   const message = error?.statusMessage || error?.data?.statusMessage || fallback
-  return mismatch?.length ? `${message} (${mismatch.join(', ')})` : message
+  return mismatch?.length ? t('index.mismatch', { message, entries: mismatch.join(', ') }) : message
 }
 
 async function exportContent() {
@@ -68,7 +70,7 @@ async function exportContent() {
     URL.revokeObjectURL(url)
   }
   catch (caught) {
-    await showToast('error', 'Export failed', describeError(caught, 'Unable to export the content.'))
+    await showToast('error', t('index.exportFailed'), describeError(caught, t('index.exportFailedBody')))
   }
   finally {
     exporting.value = false
@@ -92,9 +94,9 @@ async function reviewFile(event: Event) {
   catch (caught) {
     pendingFile.value = undefined
     preview.value = undefined
-    await showToast('error', 'Import refused', caught instanceof SyntaxError
-      ? 'This file is not valid JSON.'
-      : describeError(caught, 'Unable to read this export file.'))
+    await showToast('error', t('index.importRefused'), caught instanceof SyntaxError
+      ? t('index.importInvalidJson')
+      : describeError(caught, t('index.importUnreadable')))
   }
   finally {
     importing.value = false
@@ -111,12 +113,14 @@ async function confirmImport() {
     await refreshNuxtData()
     await showToast(
       'success',
-      'Content imported',
-      `${result.created} created, ${result.updated} updated${result.skipped.length ? `, ${result.skipped.length} skipped` : ''}.`,
+      t('index.imported'),
+      result.skipped.length
+        ? t('index.importedBodySkipped', { created: result.created, updated: result.updated, skipped: result.skipped.length })
+        : t('index.importedBody', { created: result.created, updated: result.updated }),
     )
   }
   catch (caught) {
-    await showToast('error', 'Import failed', describeError(caught, 'Unable to import this file.'))
+    await showToast('error', t('index.importFailed'), describeError(caught, t('index.importFailedBody')))
   }
   finally {
     importing.value = false
@@ -130,16 +134,15 @@ function closePreview() {
 </script>
 
 <template>
-  <main class="eponyme-root ep:flex ep:min-h-screen ep:flex-col ep:bg-theme-ep ep:font-sans ep:text-text-ep ep:md:flex-row">
-    <EponymeSidebar :base-path="route.path" />
+  <div class="ep:contents">
     <section class="ep:mx-auto ep:w-full ep:max-w-3xl ep:px-6 ep:py-8 ep:md:px-10 ep:md:py-12">
       <div class="ep:flex ep:flex-wrap ep:items-start ep:justify-between ep:gap-4">
         <div>
-          <h1 class="ep:mt-2 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-white">
-            Content entries
+          <h1 class="ep:mt-2 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-text-strong">
+            {{ t('index.heading') }}
           </h1>
-          <p class="ep:mt-2 ep:text-sm ep:text-muted-ep">
-            Choose the content area you want to update.
+          <p class="ep:mt-2 ep:text-sm ep:text-text-muted">
+            {{ t('index.subheading') }}
           </p>
         </div>
         <div
@@ -147,22 +150,22 @@ function closePreview() {
           class="ep:flex ep:shrink-0 ep:items-center ep:gap-2"
         >
           <EPButton
-            label="Export"
+            :label="t('action.export')"
             icon="mingcute:download-2-line"
             size="sm"
             :loading="exporting"
             :disabled="exporting"
-            title="Download every entry as a JSON file"
+            :title="t('index.exportTitle')"
             @click="exportContent"
           />
           <EPButton
             v-if="auth.isOwner.value"
-            label="Import"
+            :label="t('action.import')"
             icon="mingcute:upload-2-line"
             size="sm"
             :loading="importing"
             :disabled="importing"
-            title="Apply an export file from another environment"
+            :title="t('index.importTitle')"
             @click="fileInput?.click()"
           />
           <input
@@ -176,14 +179,14 @@ function closePreview() {
       </div>
       <nav
         class="ep:mt-8 ep:grid ep:gap-3 ep:sm:grid-cols-2"
-        aria-label="Content entries"
+        :aria-label="t('index.heading')"
       >
         <EponymeNavigationLink
           v-for="(_, name) in entries"
           :key="name"
           :to="`${route.path.replace(/\/$/, '')}/${name}`"
           :label="label(name.split('/').at(-1) ?? name)"
-          :description="collections[name] ? 'Collection' : forms[name] ? 'Form' : undefined"
+          :description="collections[name] ? t('kind.collection') : forms[name] ? t('kind.form') : undefined"
           variant="card"
         />
       </nav>
@@ -191,35 +194,35 @@ function closePreview() {
     <ClientOnly>
       <EPDialog
         :open="Boolean(preview)"
-        title="Import content"
-        description="Entries in the file overwrite their counterpart. Nothing is ever deleted."
+        :title="t('index.importDialog')"
+        :description="t('index.importDialogDescription')"
         @update:open="!$event && closePreview()"
       >
         <div v-if="preview">
-          <ul class="ep:m-0 ep:list-none ep:space-y-1 ep:p-0 ep:text-sm ep:text-muted-ep">
-            <li><span class="ep:font-semibold ep:text-white">{{ preview.created }}</span> to create</li>
-            <li><span class="ep:font-semibold ep:text-white">{{ preview.updated }}</span> to overwrite</li>
-            <li><span class="ep:font-semibold ep:text-white">{{ preview.skipped.length }}</span> skipped</li>
+          <ul class="ep:m-0 ep:list-none ep:space-y-1 ep:p-0 ep:text-sm ep:text-text-muted">
+            <li><span class="ep:font-semibold ep:text-text-strong">{{ preview.created }}</span> {{ t('index.toCreate') }}</li>
+            <li><span class="ep:font-semibold ep:text-text-strong">{{ preview.updated }}</span> {{ t('index.toOverwrite') }}</li>
+            <li><span class="ep:font-semibold ep:text-text-strong">{{ preview.skipped.length }}</span> {{ t('index.skipped') }}</li>
           </ul>
           <ul
             v-if="preview.skipped.length"
-            class="ep:mt-4 ep:max-h-40 ep:list-none ep:space-y-2 ep:overflow-y-auto ep:p-0 ep:text-xs ep:text-muted-ep"
+            class="ep:mt-4 ep:max-h-40 ep:list-none ep:space-y-2 ep:overflow-y-auto ep:p-0 ep:text-xs ep:text-text-muted"
           >
             <li
               v-for="skipped in preview.skipped"
               :key="skipped.name"
             >
-              <span class="ep:font-medium ep:text-white">{{ skipped.name }}</span> — {{ skipped.reason }}
+              <span class="ep:font-medium ep:text-text-strong">{{ skipped.name }}</span> — {{ skipped.reason }}
             </li>
           </ul>
           <div class="ep:mt-6 ep:flex ep:justify-end ep:gap-2">
             <EPButton
-              label="Cancel"
+              :label="t('action.cancel')"
               variant="ghost"
               @click="closePreview"
             />
             <EPButton
-              label="Import"
+              :label="t('action.import')"
               variant="primary"
               :loading="importing"
               :disabled="importing || (!preview.created && !preview.updated)"
@@ -236,11 +239,5 @@ function closePreview() {
         @update:open="toast.open = $event"
       />
     </ClientOnly>
-  </main>
+  </div>
 </template>
-
-<style scoped>
-:global(body) {
-  margin: 0;
-}
-</style>

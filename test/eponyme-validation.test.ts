@@ -116,6 +116,40 @@ describe('validateEponymeData — per field type', () => {
     expect(validate(schema, { size: 3, enabled: false })).toEqual({})
   })
 
+  it('validates durations as non-negative safe integer milliseconds', () => {
+    const schema = { runtime: field.duration({ min: '1s', max: '2h' }) } satisfies EponymeSchema
+    expect(validate(schema, { runtime: 1_000 })).toEqual({})
+    expect(validate(schema, { runtime: 999 })).toEqual({ runtime: ['Must be at least 1000 ms.'] })
+    expect(validate(schema, { runtime: 7_200_001 })).toEqual({ runtime: ['Must be at most 7200000 ms.'] })
+    for (const runtime of [-1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1, '1h'])
+      expect(validate(schema, { runtime })).toEqual({ runtime: ['Must be a non-negative whole number of milliseconds.'] })
+  })
+
+  it('validates canonical minute-precision datetimes and their bounds', () => {
+    const schema = {
+      startsAt: field.datetime({ min: '2026-08-08T10:00Z', max: '2026-08-08T12:00Z' }),
+    } satisfies EponymeSchema
+    expect(validate(schema, { startsAt: '2026-08-08T11:00:00.000Z' })).toEqual({})
+    expect(validate(schema, { startsAt: '2026-08-08T09:59:00.000Z' })).toEqual({
+      startsAt: ['Must be on or after 2026-08-08T10:00:00.000Z.'],
+    })
+    expect(validate(schema, { startsAt: '2026-08-08T12:01:00.000Z' })).toEqual({
+      startsAt: ['Must be on or before 2026-08-08T12:00:00.000Z.'],
+    })
+    expect(validate(schema, { startsAt: '2026-08-08T11:00:01.000Z' })).toEqual({
+      startsAt: ['Must be a valid date and time with minute precision.'],
+    })
+    expect(validate(schema, { startsAt: '2026-08-08T11:00' })).toEqual({
+      startsAt: ['Must be a valid date and time with minute precision.'],
+    })
+  })
+
+  it('ignores the display-only prefix and suffix of a number', () => {
+    const schema = { price: field.number({ min: 0, prefix: '€', suffix: '/month' }) } satisfies EponymeSchema
+    expect(validate(schema, { price: 12 })).toEqual({})
+    expect(validate(schema, { price: '€12' })).toEqual({ price: ['Must be a number.'] })
+  })
+
   it('restricts select and radio values to the configured options', () => {
     const schema = {
       theme: field.select({ options: [{ label: 'Dark', value: 'dark' }] }),
@@ -341,6 +375,9 @@ describe('validateEponymePatch', () => {
 
   it('rejects unknown fields and non-object bodies', () => {
     expect(validateEponymePatch(schema, { nope: 1 })).toEqual({ nope: ['Unknown field.'] })
+    expect(validateEponymePatch(schema, JSON.parse('{"constructor":true,"toString":true,"__proto__":true}'))).toEqual(
+      JSON.parse('{"constructor":["Unknown field."],"toString":["Unknown field."],"__proto__":["Unknown field."]}'),
+    )
     expect(validateEponymePatch(schema, 'not an object')).toEqual({ _form: ['Body must be an object.'] })
     expect(validateEponymePatch(schema, [])).toEqual({ _form: ['Body must be an object.'] })
   })

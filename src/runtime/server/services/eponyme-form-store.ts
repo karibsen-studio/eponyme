@@ -29,16 +29,44 @@ export interface PrismaEponymeFormSubmissionRow {
   createdAt: DateValue
 }
 
+/**
+ * One clause per searchable field, ORed together. `path` is the Postgres form, a key list.
+ *
+ * `mode` is not decoration: without it Postgres matches the JSON string case-sensitively, so
+ * searching `grace` would miss `Grace Hopper` and no one would find an address they typed in
+ * lower case. Verified against Postgres 16 rather than assumed.
+ */
+export interface EponymeSubmissionSearch {
+  OR: Array<{ data: { path: string[], string_contains: string, mode: 'insensitive' } }>
+}
+
+export type EponymeSubmissionWhere = { formName: string } & Partial<EponymeSubmissionSearch>
+
 export type PrismaEponymeFormClient = {
   eponymeFormSubmission: {
     create(args: { data: { id: string, formName: string, data: Record<string, unknown> } }): Promise<PrismaEponymeFormSubmissionRow>
-    findMany(args: { where: { formName: string }, orderBy: { createdAt: 'desc' }, skip: number, take: number }): Promise<PrismaEponymeFormSubmissionRow[]>
-    count(args: { where: { formName: string } }): Promise<number>
+    findMany(args: {
+      where: EponymeSubmissionWhere
+      orderBy: { createdAt: 'asc' | 'desc' }
+      skip?: number
+      take: number
+      select?: { id: true }
+    }): Promise<PrismaEponymeFormSubmissionRow[]>
+    count(args: { where: EponymeSubmissionWhere }): Promise<number>
     findUnique(args: { where: { id: string } }): Promise<PrismaEponymeFormSubmissionRow | null>
     delete(args: { where: { id: string } }): Promise<PrismaEponymeFormSubmissionRow>
-    deleteMany(args: { where: { formName: string } }): Promise<{ count: number }>
+    deleteMany(args: {
+      where: { formName: string, createdAt?: { lt: Date } } | { id: { in: string[] } }
+    }): Promise<{ count: number }>
   }
 }
+
+/**
+ * Types whose stored value is free text a person would search for. `select`, `radio` and
+ * `checkboxGroup` are left out on purpose: they store the option value, not the label an
+ * editor reads in the table, so matching them would answer on a word nobody can see.
+ */
+const SEARCHABLE_TYPES = new Set(['string', 'textarea', 'email', 'phone', 'url'])
 
 const DEFAULT_PER_PAGE = 25
 const MAX_PER_PAGE = 100
@@ -84,7 +112,7 @@ export class EponymeFormService {
     // The honeypot is transport, not content: it must not reach validation, which only
     // knows about declared fields.
     const { [definition.honeypot || '']: _honeypot, ...submitted } = input
-    const unknownKeys = Object.keys(submitted).filter(key => !(key in definition.fields))
+    const unknownKeys = Object.keys(submitted).filter(key => !Object.hasOwn(definition.fields, key))
     if (unknownKeys.length)
       return { errors: Object.fromEntries(unknownKeys.map(key => [key, ['Unknown field.']])) }
 
@@ -109,28 +137,69 @@ export class EponymeFormService {
 
     const validated = this.validate(name, payload)
     if (!validated || 'errors' in validated) return validated
+    await this.pruneSubmissions(name, definition, 1)
     const row = await this.submissions().create({
       data: { id: randomUUID(), formName: name, data: validated.data },
     })
     return { submission: toSubmission(row) }
   }
 
-  async listSubmissions(name: string, options: { page?: number, perPage?: number } = {}): Promise<EponymeFormSubmissionPage | undefined> {
+  /**
+   * The counterpart of `submit` for a `custom` form: the host route has already decided
+   * to accept the submission, so this only validates and writes. Returns `undefined`
+   * when the form does not collect submissions, which the caller reports as a mistake.
+   */
+  async store(name: string, payload: unknown): Promise<{ submission: EponymeFormSubmission } | { errors: ValidationErrors } | undefined> {
     const definition = this.forms[name]
-    if (!definition || definition.submission.mode !== 'managed') return undefined
+    if (!definition || !definition.submission.store) return undefined
+
+    const validated = this.validate(name, payload)
+    if (!validated || 'errors' in validated) return validated
+    await this.pruneSubmissions(name, definition, 1)
+    const row = await this.submissions().create({
+      data: { id: randomUUID(), formName: name, data: validated.data },
+    })
+    return { submission: toSubmission(row) }
+  }
+
+  async listSubmissions(
+    name: string,
+    options: { page?: number, perPage?: number, search?: string } = {},
+  ): Promise<EponymeFormSubmissionPage | undefined> {
+    const definition = this.forms[name]
+    if (!definition || !definition.submission.store) return undefined
 
     const perPage = clamp(options.perPage ?? DEFAULT_PER_PAGE, 1, MAX_PER_PAGE)
     const page = Math.max(1, Math.trunc(options.page ?? 1) || 1)
+    const where = this.submissionWhere(definition, name, options.search)
+    // The count carries the same clause, or the pager would offer pages the filter empties.
     const [rows, total] = await Promise.all([
       this.submissions().findMany({
-        where: { formName: name },
+        where,
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * perPage,
         take: perPage,
       }),
-      this.submissions().count({ where: { formName: name } }),
+      this.submissions().count({ where }),
     ])
     return { submissions: rows.map(toSubmission), total, page, perPage }
+  }
+
+  /**
+   * An empty `OR` matches nothing in Prisma, so a form with no free-text field must fall
+   * back to the unfiltered clause rather than answer that it has no submissions.
+   */
+  private submissionWhere(definition: EponymeFormDefinitionBase, name: string, search?: string): EponymeSubmissionWhere {
+    const query = search?.trim()
+    if (!query) return { formName: name }
+    const fields = Object.entries(definition.fields)
+      .filter(([, field]) => SEARCHABLE_TYPES.has(field.type))
+      .map(([field]) => field)
+    if (!fields.length) return { formName: name }
+    return {
+      formName: name,
+      OR: fields.map(field => ({ data: { path: [field], string_contains: query, mode: 'insensitive' as const } })),
+    }
   }
 
   async getSubmission(name: string, id: string): Promise<EponymeFormSubmission | undefined> {
@@ -149,9 +218,37 @@ export class EponymeFormService {
 
   async deleteAllSubmissions(name: string): Promise<number | undefined> {
     const definition = this.forms[name]
-    if (!definition || definition.submission.mode !== 'managed') return undefined
+    if (!definition || !definition.submission.store) return undefined
     const { count } = await this.submissions().deleteMany({ where: { formName: name } })
     return count
+  }
+
+  /** Applies retention and quotas at boot, even when a form no longer receives traffic. */
+  async pruneStoredSubmissions(): Promise<void> {
+    for (const [name, definition] of Object.entries(this.forms)) {
+      if (!definition.submission.store) continue
+      await this.pruneSubmissions(name, definition, 0)
+    }
+  }
+
+  private async pruneSubmissions(name: string, definition: EponymeFormDefinitionBase, reservedRows: 0 | 1): Promise<void> {
+    if (definition.submission.retentionDays !== false) {
+      const cutoff = new Date(Date.now() - definition.submission.retentionDays * 24 * 60 * 60 * 1000)
+      await this.submissions().deleteMany({ where: { formName: name, createdAt: { lt: cutoff } } })
+    }
+
+    if (definition.submission.maxStored === false) return
+    const total = await this.submissions().count({ where: { formName: name } })
+    const overflow = total - definition.submission.maxStored + reservedRows
+    if (overflow <= 0) return
+    const oldest = await this.submissions().findMany({
+      where: { formName: name },
+      orderBy: { createdAt: 'asc' },
+      take: overflow,
+      select: { id: true },
+    })
+    if (oldest.length)
+      await this.submissions().deleteMany({ where: { id: { in: oldest.map(row => row.id) } } })
   }
 }
 

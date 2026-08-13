@@ -16,5 +16,6 @@ export default createConfigForNuxt({
   },
 })
   .append(
-    // your custom flat config here...
+    // Emitted by `prisma generate`, rewritten on every run and never edited by hand.
+    { ignores: ['playground/generated/**'] },
   )

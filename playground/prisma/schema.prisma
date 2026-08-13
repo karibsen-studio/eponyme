@@ -1,10 +1,10 @@
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 model Eponyme {
@@ -18,6 +18,8 @@ model Eponyme {
   /// A real column rather than a key inside the payload, which is what lets a listing
   /// filter, order and paginate published entries in SQL instead of in memory.
   publishedAt DateTime?
+  scheduledPublishAt   DateTime?
+  scheduledUnpublishAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
@@ -26,6 +28,8 @@ model Eponyme {
 
   @@index([deletedAt])
   @@index([publishedAt])
+  @@index([scheduledPublishAt])
+  @@index([scheduledUnpublishAt])
   @@map("eponyme_entries")
 }
 
@@ -113,4 +117,21 @@ model EponymeFormSubmission {
 
   @@index([formName, createdAt])
   @@map("eponyme_form_submissions")
+}
+
+model EponymeRateLimit {
+  key       String   @id
+  count     Int      @default(1)
+  expiresAt DateTime
+
+  @@index([expiresAt])
+  @@map("eponyme_rate_limits")
+}
+
+model EponymeSchema {
+  key       String   @id @default("eponyme")
+  version   Int
+  updatedAt DateTime @updatedAt
+
+  @@map("_eponyme_schema")
 }

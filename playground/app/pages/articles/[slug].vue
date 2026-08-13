@@ -1,14 +1,21 @@
 <!-- eslint-disable vue/multi-word-component-names vue/no-v-html -->
 <script setup lang="ts">
+import { resolveEponymeSeo, type EponymeSeoValue } from '@karibsen/eponyme/config'
+
 const route = useRoute()
 const slug = String(route.params.slug)
 const { data: response, pending, error } = useEponymeCollectionEntry('articles', slug)
 const article = computed(() => response.value?.data)
 
+// The sharing values are derived on read, so `ogTitle` is never a stale copy of the title.
+const seo = computed(() => resolveEponymeSeo(article.value?.seo as EponymeSeoValue | undefined))
+
 useSeoMeta({
-  title: () => article.value ? `${article.value.title} · Eponyme Playground` : 'Article · Eponyme Playground',
-  description: () => article.value?.excerpt,
-  ogImage: () => article.value?.cover,
+  title: () => seo.value.title || (article.value ? `${article.value.title} · Eponyme Playground` : 'Article · Eponyme Playground'),
+  description: () => seo.value.description || article.value?.excerpt,
+  ogTitle: () => seo.value.ogTitle,
+  ogDescription: () => seo.value.ogDescription,
+  ogImage: () => seo.value.image || article.value?.cover,
 })
 </script>
 
@@ -64,9 +71,9 @@ useSeoMeta({
           allowfullscreen
         />
       </div>
-      <div
+      <EponymeRichText
         class="body"
-        v-html="article.body"
+        :html="article.body"
       />
     </article>
   </main>

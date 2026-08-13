@@ -1,6 +1,6 @@
 import type { CountryCode } from 'libphonenumber-js/min'
 
-export type EponymeFieldType = 'string' | 'slug' | 'email' | 'phone' | 'url' | 'mediaPlayer' | 'textarea' | 'richText' | 'number' | 'boolean' | 'image' | 'select' | 'radio' | 'checkboxGroup' | 'tags' | 'date' | 'color' | 'array' | 'section' | 'tabs'
+export type EponymeFieldType = 'string' | 'slug' | 'email' | 'phone' | 'url' | 'mediaPlayer' | 'textarea' | 'richText' | 'number' | 'boolean' | 'image' | 'select' | 'radio' | 'checkboxGroup' | 'tags' | 'date' | 'datetime' | 'duration' | 'color' | 'array' | 'section' | 'tabs'
 
 export type FieldVisibilityCondition
   = | { field: string, equals: unknown, notEquals?: never }
@@ -27,6 +27,7 @@ export interface TextFieldOptions extends DefaultFieldOptions<string> {
   placeholder?: string
   trim?: boolean
   regex?: RegExp
+  mask?: string
 }
 
 export type StringFieldOptions = TextFieldOptions
@@ -148,7 +149,7 @@ export interface UrlFieldDefinition {
 export type MediaPlayerProvider = 'youtube' | 'vimeo' | 'url'
 
 export interface MediaPlayerValue {
-  /** Detected from `url`. Empty while nothing has been entered, or when nothing recognised it. */
+  /** Detected from `url`. Empty while nothing has been entered, or when nothing recognized it. */
   provider: MediaPlayerProvider | ''
   /** Address as it was entered. */
   url: string
@@ -177,6 +178,9 @@ export interface NumberFieldOptions extends DefaultFieldOptions<number> {
   max?: number
   step?: number
   slider?: boolean
+  /** Displayed inside the input. The stored value stays the bare number. */
+  prefix?: string
+  suffix?: string
 }
 
 export interface NumberFieldDefinition {
@@ -286,6 +290,40 @@ export interface DateFieldDefinition {
   options: DateFieldOptions
 }
 
+export interface DateTimeFieldOptions extends DefaultFieldOptions<string> {
+  /** Inclusive lower bound, as an ISO 8601 instant with an explicit time zone. */
+  min?: string
+  /** Inclusive upper bound, as an ISO 8601 instant with an explicit time zone. */
+  max?: string
+}
+
+export interface DateTimeFieldDefinition {
+  type: 'datetime'
+  options: DateTimeFieldOptions
+}
+
+export type DurationInput = number | string
+
+export interface DurationFieldOptions extends Omit<DefaultFieldOptions<number>, 'defaultValue'> {
+  /** Milliseconds, or a readable duration such as `1h 10min`. */
+  defaultValue?: DurationInput
+  /** Inclusive lower bound, in milliseconds or as a readable duration. */
+  min?: DurationInput
+  /** Inclusive upper bound, in milliseconds or as a readable duration. */
+  max?: DurationInput
+}
+
+export interface NormalizedDurationFieldOptions extends Omit<DurationFieldOptions, 'defaultValue' | 'min' | 'max'> {
+  defaultValue?: number
+  min?: number
+  max?: number
+}
+
+export interface DurationFieldDefinition {
+  type: 'duration'
+  options: NormalizedDurationFieldOptions
+}
+
 export interface ColorPreset {
   label: string
   value: string
@@ -318,13 +356,15 @@ export type ArrayItemFieldDefinition
     | CheckboxGroupFieldDefinition
     | TagsFieldDefinition
     | DateFieldDefinition
+    | DateTimeFieldDefinition
+    | DurationFieldDefinition
     | ColorFieldDefinition
 
 export type ArrayItemSchema = Record<string, ArrayItemFieldDefinition>
 export type ArrayItemDefinition = ArrayItemFieldDefinition | ArrayItemSchema
 
 export type ArrayItemValue<T extends ArrayItemDefinition>
-  = T extends NumberFieldDefinition ? number
+  = T extends NumberFieldDefinition | DurationFieldDefinition ? number
     : T extends BooleanFieldDefinition ? boolean
       : T extends UrlFieldDefinition ? UrlValue
         : T extends MediaPlayerFieldDefinition ? MediaPlayerValue

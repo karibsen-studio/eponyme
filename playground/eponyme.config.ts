@@ -1,4 +1,4 @@
-import { collection, defineEponymeConfig, field, form, today } from '../src/eponyme'
+import { collection, defineEponymeConfig, field, form, today, toMs } from '../src/eponyme'
 
 export default defineEponymeConfig({
   pages: {
@@ -153,6 +153,20 @@ export default defineEponymeConfig({
                   min: '2026-01-01',
                   visibleWhen: { field: 'showLaunchDate', equals: true },
                 }),
+                launchDateTime: field.datetime({
+                  label: 'Launch date and time',
+                  description: 'Displayed in your local time zone and stored as UTC.',
+                  defaultValue: '2026-09-01T08:30:00.000Z',
+                  min: '2026-01-01T00:00:00.000Z',
+                  visibleWhen: { field: 'showLaunchDate', equals: true },
+                }),
+                launchDuration: field.duration({
+                  label: 'Launch duration',
+                  description: 'Entered as hours, minutes, seconds and milliseconds; stored in milliseconds.',
+                  defaultValue: '1h 10min',
+                  min: '1min',
+                  max: toMs('24h'),
+                }),
                 accentColor: field.color({
                   label: 'Accent color',
                   description: 'Uses the palette declared in nuxt.config.ts.',
@@ -175,7 +189,26 @@ export default defineEponymeConfig({
                   max: 1440,
                   step: 20,
                   slider: true,
+                  suffix: 'px',
                   defaultValue: 960,
+                }),
+                heroPrice: field.number({
+                  label: 'Hero price',
+                  min: 0,
+                  step: 0.5,
+                  prefix: '€',
+                  suffix: '/month',
+                }),
+                heroBudget: field.money({
+                  label: 'Hero budget',
+                  currency: 'USD',
+                  min: 0,
+                }),
+                heroReference: field.masked({
+                  label: 'Hero reference',
+                  description: 'Preset built on field.string(). Stored the way it is displayed.',
+                  mask: '@@-###-@@',
+                  placeholder: 'AB-123-CD',
                 }),
                 published: field.boolean({
                   label: 'Published',
@@ -189,6 +222,8 @@ export default defineEponymeConfig({
       },
       contact: {
         title: field.string({ defaultValue: 'Contact' }),
+        // The trimmed form: no sharing image, no Open Graph overrides.
+        seo: field.seo({ label: 'SEO (title and description only)', image: false, social: false }),
       },
     },
   },
@@ -227,12 +262,25 @@ export default defineEponymeConfig({
   articles: collection({
     label: 'Articles',
     description: 'Create and publish articles displayed on the public playground.',
+    addLabel: 'Écrire un article',
     titleField: 'title',
     slugField: 'slug',
     fields: {
       title: field.string({ label: 'Title', required: true, maxLength: 100 }),
       slug: field.slug({ label: 'Slug', required: true, maxLength: 120 }),
       excerpt: field.textarea({ label: 'Excerpt', required: true, maxLength: 220 }),
+      category: field.select({
+        label: 'Category',
+        placeholder: 'Select a category',
+        options: [
+          { label: 'Business', value: 'business' },
+          { label: 'Design', value: 'design' },
+          { label: 'Engineering', value: 'engineering' },
+          { label: 'Guides', value: 'guides' },
+          { label: 'News', value: 'news' },
+          { label: 'Product', value: 'product' },
+        ],
+      }),
       cover: field.image({ label: 'Cover image' }),
       video: field.mediaPlayer({
         label: 'Video',
@@ -245,6 +293,11 @@ export default defineEponymeConfig({
         description: 'Format the article with headings, lists, quotes and links.',
         required: true,
         placeholder: 'Write your article…',
+      }),
+      seo: field.seo({
+        description: 'Preset built on field.section(), the way field.money() is built on field.number().',
+        siteName: 'Eponyme Playground',
+        themeColor: '#171714',
       }),
       publishedOn: field.date({ label: 'Publication date', defaultValue: today() }),
       tags: field.tags({
