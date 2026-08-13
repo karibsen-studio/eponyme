@@ -6,6 +6,7 @@ import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
+import TextAlign from '@tiptap/extension-text-align'
 import { EditorContent, Extension, useEditor } from '@tiptap/vue-3'
 import type { UrlValue } from '../../types'
 import { computed, nextTick, ref, watch } from 'vue'
@@ -111,6 +112,9 @@ const editor = useEditor({
     EponymeVariableHighlight,
     Placeholder.configure({ placeholder: props.placeholder }),
     Image.configure({ HTMLAttributes: { class: 'eponyme-rich-text-image' } }),
+    // Only the blocks the toolbar exposes, and only the alignments the sanitiser allows
+    // through — anything wider would be written here and dropped on save.
+    TextAlign.configure({ types: ['heading', 'paragraph'], alignments: ['left', 'center', 'right'] }),
   ],
   onTransaction: () => revision.value++,
   onUpdate: ({ editor }) => emit('update:modelValue', editor.isEmpty ? '' : editor.getHTML()),
@@ -135,9 +139,13 @@ watch(() => props.modelValue, (value) => {
 
 watch(() => props.disabled, disabled => editor.value?.setEditable(!disabled))
 
-function isActive(name: string, attributes: Record<string, unknown> = {}) {
+/** An alignment is an attribute of whatever block holds it, so it is asked for without a name. */
+function isActive(name: string | Record<string, unknown>, attributes: Record<string, unknown> = {}) {
   trackEditorRevision()
-  return editor.value?.isActive(name, attributes) ?? false
+  const active = typeof name === 'string'
+    ? editor.value?.isActive(name, attributes)
+    : editor.value?.isActive(name)
+  return active ?? false
 }
 
 function openLinkDialog() {
@@ -227,6 +235,9 @@ const tools = computed<Tool[]>(() => {
     { icon: 'mingcute:strikethrough-line', title: t('richText.strike'), active: isActive('strike'), run: () => instance.chain().focus().toggleStrike().run() },
     { icon: 'mingcute:link-line', title: t('richText.link'), active: isActive('link'), run: openLinkDialog },
     { icon: 'mingcute:pic-line', title: t('richText.image'), active: isActive('image'), run: setImage },
+    { icon: 'mingcute:align-left-line', title: t('richText.alignLeft'), active: isActive({ textAlign: 'left' }), separated: true, run: () => instance.chain().focus().setTextAlign('left').run() },
+    { icon: 'mingcute:align-center-line', title: t('richText.alignCenter'), active: isActive({ textAlign: 'center' }), run: () => instance.chain().focus().setTextAlign('center').run() },
+    { icon: 'mingcute:align-right-line', title: t('richText.alignRight'), active: isActive({ textAlign: 'right' }), run: () => instance.chain().focus().setTextAlign('right').run() },
     { icon: 'mingcute:list-check-line', title: t('richText.bulletList'), active: isActive('bulletList'), separated: true, run: () => instance.chain().focus().toggleBulletList().run() },
     { icon: 'mingcute:list-ordered-line', title: t('richText.orderedList'), active: isActive('orderedList'), run: () => instance.chain().focus().toggleOrderedList().run() },
     { icon: 'mingcute:quote-left-line', title: t('richText.quote'), active: isActive('blockquote'), run: () => instance.chain().focus().toggleBlockquote().run() },

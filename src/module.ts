@@ -282,6 +282,7 @@ const CLIENT_DEPENDENCIES = [
   '@tiptap/vue-3',
   '@tiptap/starter-kit',
   '@tiptap/extension-image',
+  '@tiptap/extension-text-align',
   '@tiptap/extension-placeholder',
   '@tiptap/pm/model',
   '@tiptap/pm/state',
