@@ -1,0 +1,56 @@
+name: "🚀 Feature request"
+description: Suggest something Eponyme should be able to do
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion.
+
+        If you are unsure whether it belongs in the module, or want to talk it through first,
+        [discussions](https://github.com/karibsen-studio/eponyme/discussions) are a better place to start.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does it solve?
+      description: |
+        Describe the situation you are in, not the solution you have in mind. What are you trying to build,
+        and where does Eponyme get in the way today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: |
+        What would it look like from the outside? A snippet of `eponyme.config.ts`, a field signature, an option —
+        whatever makes the shape concrete.
+      render: ts
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you have considered
+      description: Including what you do today to work around it. A workaround that is good enough is useful to know about.
+
+  - type: checkboxes
+    id: additional
+    attributes:
+      label: Additional information
+      options:
+        - label: I would be willing to help implement this.
+        - label: This could live outside the module, in application code or a hook.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have read the [documentation](https://eponyme-docs.vercel.app) and this is not already possible.
+          required: true
+        - label: I have searched the existing issues and discussions.
+          required: true

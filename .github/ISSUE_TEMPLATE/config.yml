@@ -1,0 +1,17 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 📖 Documentation
+    url: https://eponyme-docs.vercel.app
+    about: Configuration, fields, composables and the editorial lifecycle.
+  - name: 💬 Questions and help
+    url: https://github.com/karibsen-studio/eponyme/discussions
+    about: Ask before you are sure it is a bug — most questions are answered faster here.
+  - name: 🗣️ Discord
+    url: https://discord.gg/m2tkscPNfn
+    about: Talk to the people using Eponyme.
+  - name: 🌍 Translations
+    url: https://github.com/eponymejs/locale/issues
+    about: The dashboard catalogues live in their own repository, on their own release schedule.
+  - name: 🔒 Security
+    url: https://github.com/karibsen-studio/eponyme/security/advisories/new
+    about: Report a vulnerability privately, never in a public issue.
