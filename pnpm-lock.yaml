@@ -146,10 +146,14 @@ importers:
         version: 3.3.7(typescript@6.0.3)
 
   docs:
+    dependencies:
+      '@vercel/analytics':
+        specifier: ^1.4.1
+        version: 1.6.1(react@19.2.8)(vue@3.5.40(typescript@6.0.3))
     devDependencies:
       undocs:
         specifier: latest
-        version: 0.4.17(3fee0fe8f14f3ea52b6887ddd0ea2fb6)
+        version: 0.4.17(a3a62db2018ad8d918f441e62fc6a7c6)
 
   packages/cli:
     dependencies:
@@ -3563,6 +3567,32 @@ packages:
 
   '@upsetjs/venn.js@2.0.0':
     resolution: {integrity: sha512-WbBhLrooyePuQ1VZxrJjtLvTc4NVfpOyKx0sKqioq9bX1C1m7Jgykkn8gLrtwumBioXIqam8DLxp88Adbue6Hw==}
+
+  '@vercel/analytics@1.6.1':
+    resolution: {integrity: sha512-oH9He/bEM+6oKlv3chWuOOcp8Y6fo6/PSro8hEkgCW3pu9/OiCXiUpRUogDh3Fs3LH2sosDrx8CxeOLBEE+afg==}
+    peerDependencies:
+      '@remix-run/react': ^2
+      '@sveltejs/kit': ^1 || ^2
+      next: '>= 13'
+      react: ^18 || ^19 || ^19.0.0-rc
+      svelte: '>= 4'
+      vue: ^3
+      vue-router: ^4
+    peerDependenciesMeta:
+      '@remix-run/react':
+        optional: true
+      '@sveltejs/kit':
+        optional: true
+      next:
+        optional: true
+      react:
+        optional: true
+      svelte:
+        optional: true
+      vue:
+        optional: true
+      vue-router:
+        optional: true
 
   '@vercel/nft@1.10.2':
     resolution: {integrity: sha512-w+WyX5Ulmj4dtTZrxaulqrjaLZHSbnPzx75SJsTNYmotKsqn1JlLnDJa+lz5hn90HJofhl/2MAtw0mCrgM3qYw==}
@@ -10787,7 +10817,7 @@ snapshots:
       - vite
       - webpack
 
-  '@nuxt/ui@4.10.0(5a412721bfd03668c8defcd61c2711ed)':
+  '@nuxt/ui@4.10.0(1b761aa9e502b78b9ffc2e463b457902)':
     dependencies:
       '@floating-ui/dom': 1.8.0
       '@iconify/vue': 5.0.1(vue@3.5.40(typescript@6.0.3))
@@ -10858,7 +10888,6 @@ snapshots:
       '@internationalized/number': 3.6.7
       '@nuxt/content': 3.15.2(@electric-sql/pglite@0.4.3)(esbuild@0.28.1)(magic-string@0.30.21)(magicast@0.5.4)(mysql2@3.15.3)(oxc-parser@0.139.0)(rolldown@1.2.3)(rollup@4.62.2)(valibot@1.4.2(typescript@6.0.3))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))
       valibot: 1.4.2(typescript@6.0.3)
-      vue-router: 5.2.0(@vue/compiler-sfc@3.5.40)(esbuild@0.28.1)(rolldown@1.2.3)(rollup@4.62.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))(vue@3.5.40(typescript@6.0.3))
       zod: 3.25.76
     transitivePeerDependencies:
       - '@azure/app-configuration'
@@ -12836,6 +12865,11 @@ snapshots:
     optionalDependencies:
       d3-selection: 3.0.0
       d3-transition: 3.0.1(d3-selection@3.0.0)
+
+  '@vercel/analytics@1.6.1(react@19.2.8)(vue@3.5.40(typescript@6.0.3))':
+    optionalDependencies:
+      react: 19.2.8
+      vue: 3.5.40(typescript@6.0.3)
 
   '@vercel/nft@1.10.2(rollup@4.62.2)':
     dependencies:
@@ -18580,13 +18614,13 @@ snapshots:
 
   undici@8.10.0: {}
 
-  undocs@0.4.17(3fee0fe8f14f3ea52b6887ddd0ea2fb6):
+  undocs@0.4.17(a3a62db2018ad8d918f441e62fc6a7c6):
     dependencies:
       '@headlessui/vue': 1.7.23(vue@3.5.40(typescript@6.0.3))
       '@nuxt/content': 3.15.2(@electric-sql/pglite@0.4.3)(esbuild@0.28.1)(magic-string@0.30.21)(magicast@0.5.4)(mysql2@3.15.3)(oxc-parser@0.139.0)(rolldown@1.2.3)(rollup@4.62.2)(valibot@1.4.2(typescript@6.0.3))(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))
       '@nuxt/fonts': 0.14.0(aws4fetch@1.0.20)(db0@0.3.4(@electric-sql/pglite@0.4.3)(mysql2@3.15.3))(esbuild@0.28.1)(ioredis@5.11.1)(magic-string@0.30.21)(magicast@0.5.4)(oxc-parser@0.139.0)(rolldown@1.2.3)(rollup@4.62.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))
       '@nuxt/kit': 4.5.1(magic-string@0.30.21)(magicast@0.5.4)(oxc-parser@0.139.0)(rolldown@1.2.3)(unplugin@3.3.0(esbuild@0.28.1)(rolldown@1.2.3)(rollup@4.62.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0)))
-      '@nuxt/ui': 4.10.0(5a412721bfd03668c8defcd61c2711ed)
+      '@nuxt/ui': 4.10.0(1b761aa9e502b78b9ffc2e463b457902)
       '@nuxtjs/mdc': 0.22.2(magic-string@0.30.21)(magicast@0.5.4)(oxc-parser@0.139.0)(rolldown@1.2.3)(unplugin@3.3.0(esbuild@0.28.1)(rolldown@1.2.3)(rollup@4.62.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0)))
       '@nuxtjs/plausible': 3.0.2(magic-string@0.30.21)(magicast@0.5.4)(oxc-parser@0.139.0)(rolldown@1.2.3)(unplugin@3.3.0(esbuild@0.28.1)(rolldown@1.2.3)(rollup@4.62.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0)))
       automd: 0.4.3(magicast@0.5.4)
