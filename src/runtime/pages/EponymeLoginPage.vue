@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { t } from '#eponyme/locale'
 import { navigateTo, useRoute, useRuntimeConfig, useSeoMeta } from '#app'
-import type { FetchError } from 'ofetch'
 import { computed, ref } from 'vue'
 import { useEponymeAuth } from '../composables/useEponymeAuth'
 import { useEponymeFavicon } from '../composables/useEponymeFavicon'
+import EponymeScreen from '../components/editor/EponymeScreen.vue'
 import EPButton from '../components/ui/EPButton.vue'
 import EPFormField from '../components/ui/EPFormField.vue'
 import EPInputPassword from '../components/ui/EPInputPassword.vue'
 import EPInputText from '../components/ui/EPInputText.vue'
+import { getEponymeErrorMessage } from '../utils/eponyme-error'
 import logoUrl from '../assets/logo.png?url'
-import '../assets/dashboard.css'
 
 const route = useRoute()
 const auth = useEponymeAuth()
@@ -33,8 +33,7 @@ async function submit() {
     await navigateAfterLogin(user.mustChangePassword)
   }
   catch (caught) {
-    const fetchError = caught as FetchError<{ statusMessage?: string }>
-    error.value = fetchError.data?.statusMessage || fetchError.statusMessage || t('server.badCredentials')
+    error.value = getEponymeErrorMessage(caught, t('server.badCredentials'))
   }
 }
 
@@ -50,7 +49,7 @@ async function navigateAfterLogin(mustChangePassword: boolean) {
 </script>
 
 <template>
-  <main class="eponyme-root ep:flex ep:min-h-screen ep:items-center ep:justify-center ep:bg-surface-page ep:px-6 ep:py-12 ep:font-sans ep:text-text-default">
+  <EponymeScreen class="ep:flex ep:items-center ep:justify-center ep:px-6 ep:py-12">
     <section class="ep:w-full ep:max-w-sm">
       <img
         :src="logoUrl"
@@ -109,11 +108,5 @@ async function navigateAfterLogin(mustChangePassword: boolean) {
         </EPButton>
       </form>
     </section>
-  </main>
+  </EponymeScreen>
 </template>
-
-<style scoped>
-:global(body) {
-  margin: 0;
-}
-</style>

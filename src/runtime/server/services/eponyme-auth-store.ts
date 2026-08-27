@@ -1,7 +1,7 @@
 import { t } from '#eponyme/locale'
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import type { EponymeAuthUser, EponymeRole } from '../../types'
-import { isEponymeRole } from '../../types'
+import { EPONYME_DEFAULT_ROLES } from '../../types'
 import { generateTemporaryPassword, hashPassword, validatePassword, verifyPassword } from '../utils/password'
 
 const OWNER_USERNAME = 'EponymeOwner'
@@ -33,7 +33,7 @@ export interface PrismaEponymeSessionRow {
   user?: PrismaEponymeUserRow
 }
 
-export interface PrismaEponymeAuthClient {
+export interface PrismaEponymeAuthDelegates {
   eponymeUser: {
     count(args?: { where?: Record<string, unknown> }): Promise<number>
     create(args: { data: Record<string, unknown> }): Promise<PrismaEponymeUserRow>
@@ -47,8 +47,13 @@ export interface PrismaEponymeAuthClient {
     delete(args: { where: Record<string, unknown> }): Promise<PrismaEponymeSessionRow>
     deleteMany(args: { where: Record<string, unknown> }): Promise<{ count: number }>
   }
-  /** Optional so tests can pass a plain fake client; real Prisma clients always provide it. */
-  $transaction?: <T>(fn: (tx: PrismaEponymeAuthClient) => Promise<T>, options?: { isolationLevel?: 'Serializable' }) => Promise<T>
+  eponymeAuditEvent: {
+    create(args: { data: Record<string, unknown> }): Promise<unknown>
+  }
+}
+
+export interface PrismaEponymeAuthClient extends PrismaEponymeAuthDelegates {
+  $transaction: <T>(fn: (tx: PrismaEponymeAuthDelegates) => Promise<T>, options?: { isolationLevel?: 'Serializable' }) => Promise<T>
 }
 
 export interface CreatedSession {
@@ -59,15 +64,20 @@ export interface CreatedSession {
 
 export type LoginResult
   = | { ok: true, session: CreatedSession }
-    | { ok: false, reason: 'invalid' }
+    | { ok: false, reason: 'invalid' | 'role' }
 
 const dummyPasswordHash = hashPassword('Eponyme timing-safe dummy password')
 
 export class EponymeAuthService {
+  private readonly validRoles: Set<string>
+
   constructor(
     private readonly client: PrismaEponymeAuthClient,
     private readonly sessionDurationDays = 7,
-  ) {}
+    roles: readonly string[] = EPONYME_DEFAULT_ROLES,
+  ) {
+    this.validRoles = new Set(roles)
+  }
 
   async bootstrapOwner(log: (message: string) => void = console.log): Promise<boolean> {
     if (await this.client.eponymeUser.count() > 0) return false
@@ -110,6 +120,8 @@ export class EponymeAuthService {
 
     const validPassword = await verifyPassword(submittedPassword, user?.passwordHash ?? await dummyPasswordHash)
     if (!user || !user.active || !validPassword) return { ok: false, reason: 'invalid' }
+    // A session opened here would only last one request, since `getSession` drops it.
+    if (!this.validRoles.has(user.role)) return { ok: false, reason: 'role' }
 
     if (user.failedLoginAttempts || user.lockedUntil) {
       await this.client.eponymeUser.update({
@@ -129,7 +141,9 @@ export class EponymeAuthService {
       include: { user: true },
     })
     if (!session?.user) return undefined
-    if (new Date(session.expiresAt).getTime() <= Date.now() || !session.user.active) {
+    if (new Date(session.expiresAt).getTime() <= Date.now()
+      || !session.user.active
+      || !this.validRoles.has(session.user.role)) {
       await this.client.eponymeUserSession.deleteMany({ where: { tokenHash } })
       return undefined
     }
@@ -179,25 +193,34 @@ export class EponymeAuthService {
     return users.map(toAuthUser)
   }
 
-  async createUser(username: unknown, role: unknown): Promise<{ result?: { user: EponymeAuthUser, temporaryPassword: string }, error?: string }> {
+  async createUser(
+    username: unknown,
+    role: unknown,
+    actor?: string | EponymeAuthUser,
+  ): Promise<{ result?: { user: EponymeAuthUser, temporaryPassword: string }, error?: string }> {
     const usernameError = validateUsername(username)
     if (usernameError) return { error: usernameError }
-    if (!isEponymeRole(role)) return { error: t('server.roleRequired') }
+    if (typeof role !== 'string' || !this.validRoles.has(role)) return { error: t('server.roleRequired') }
 
     const cleanUsername = String(username).trim()
     const temporaryPassword = generateTemporaryPassword()
     try {
-      const user = await this.client.eponymeUser.create({
-        data: {
-          id: randomUUID(),
-          username: cleanUsername,
-          usernameNormalized: normalizeUsername(cleanUsername),
-          passwordHash: await hashPassword(temporaryPassword),
-          role,
-          active: true,
-          mustChangePassword: true,
-          failedLoginAttempts: 0,
-        },
+      const passwordHash = await hashPassword(temporaryPassword)
+      const user = await this.client.$transaction(async (tx) => {
+        const created = await tx.eponymeUser.create({
+          data: {
+            id: randomUUID(),
+            username: cleanUsername,
+            usernameNormalized: normalizeUsername(cleanUsername),
+            passwordHash,
+            role,
+            active: true,
+            mustChangePassword: true,
+            failedLoginAttempts: 0,
+          },
+        })
+        await this.audit(tx, actor, 'user.created', created.id, { role, username: cleanUsername })
+        return created
       })
       return { result: { user: toAuthUser(user), temporaryPassword } }
     }
@@ -211,11 +234,11 @@ export class EponymeAuthService {
   async updateUser(
     id: string,
     changes: { role?: unknown, active?: unknown },
-    actorId?: string,
+    actor?: string | EponymeAuthUser,
   ): Promise<{ user?: EponymeAuthUser, error?: string, notFound?: boolean }> {
     const user = await this.client.eponymeUser.findUnique({ where: { id } })
     if (!user) return { error: t('server.userNotFound'), notFound: true }
-    if (changes.role !== undefined && !isEponymeRole(changes.role))
+    if (changes.role !== undefined && (typeof changes.role !== 'string' || !this.validRoles.has(changes.role)))
       return { error: t('server.roleRequired') }
     if (changes.active !== undefined && typeof changes.active !== 'boolean')
       return { error: t('server.activeMustBeBoolean') }
@@ -223,13 +246,13 @@ export class EponymeAuthService {
     const nextRole = (changes.role ?? user.role) as EponymeRole
     const nextActive = (changes.active ?? user.active) as boolean
 
-    if (actorId === id && (nextRole !== user.role || nextActive !== user.active))
+    if (auditActorId(actor) === id && (nextRole !== user.role || nextActive !== user.active))
       return { error: t('server.selfUpdate') }
     const removesActiveOwner = user.role === 'owner' && user.active && (nextRole !== 'owner' || !nextActive)
 
     // Counting owners and demoting must be atomic: two concurrent demotions could otherwise
     // both see two owners and leave the instance with none, locking everyone out of the admin.
-    const apply = async (tx: PrismaEponymeAuthClient): Promise<{ user?: EponymeAuthUser, error?: string }> => {
+    const apply = async (tx: PrismaEponymeAuthDelegates): Promise<{ user?: EponymeAuthUser, error?: string }> => {
       if (removesActiveOwner) {
         const activeOwnerCount = await tx.eponymeUser.count({ where: { role: 'owner', active: true } })
         if (activeOwnerCount <= 1) return { error: t('server.lastOwner') }
@@ -238,35 +261,69 @@ export class EponymeAuthService {
         where: { id },
         data: { role: nextRole, active: nextActive },
       })
+      if (!nextActive) await tx.eponymeUserSession.deleteMany({ where: { userId: id } })
+      if (nextRole !== user.role)
+        await this.audit(tx, actor, 'user.role_changed', id, { previousRole: user.role, nextRole })
+      if (nextActive !== user.active)
+        await this.audit(tx, actor, 'user.activation_changed', id, { previousActive: user.active, nextActive })
       return { user: toAuthUser(updated) }
     }
 
-    const result = removesActiveOwner && this.client.$transaction
-      ? await this.client.$transaction(apply, { isolationLevel: 'Serializable' })
-          .catch(error => isSerializationFailure(error)
-            ? { error: t('server.concurrentChange') }
-            : Promise.reject(error))
-      : await apply(this.client)
+    const result = await this.client.$transaction(
+      apply,
+      removesActiveOwner ? { isolationLevel: 'Serializable' } : undefined,
+    ).catch(error => isSerializationFailure(error)
+      ? { error: t('server.concurrentChange') }
+      : Promise.reject(error))
     if (result.error) return result
-    if (!nextActive) await this.client.eponymeUserSession.deleteMany({ where: { userId: id } })
     return result
   }
 
-  async resetPassword(id: string): Promise<{ result?: { user: EponymeAuthUser, temporaryPassword: string }, error?: string }> {
+  async resetPassword(
+    id: string,
+    actor?: string | EponymeAuthUser,
+  ): Promise<{ result?: { user: EponymeAuthUser, temporaryPassword: string }, error?: string }> {
     const user = await this.client.eponymeUser.findUnique({ where: { id } })
     if (!user) return { error: t('server.userNotFound') }
     const temporaryPassword = generateTemporaryPassword()
-    const updated = await this.client.eponymeUser.update({
-      where: { id },
+    const passwordHash = await hashPassword(temporaryPassword)
+    const updated = await this.client.$transaction(async (tx) => {
+      const changed = await tx.eponymeUser.update({
+        where: { id },
+        data: {
+          passwordHash,
+          mustChangePassword: true,
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+        },
+      })
+      await tx.eponymeUserSession.deleteMany({ where: { userId: id } })
+      await this.audit(tx, actor, 'user.password_reset', id)
+      return changed
+    })
+    return { result: { user: toAuthUser(updated), temporaryPassword } }
+  }
+
+  private async audit(
+    client: PrismaEponymeAuthDelegates,
+    actor: string | EponymeAuthUser | undefined,
+    action: string,
+    targetUserId: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<void> {
+    await client.eponymeAuditEvent.create({
       data: {
-        passwordHash: await hashPassword(temporaryPassword),
-        mustChangePassword: true,
-        failedLoginAttempts: 0,
-        lockedUntil: null,
+        id: randomUUID(),
+        actorUserId: auditActorId(actor),
+        actorUsername: typeof actor === 'string' ? null : actor?.username ?? null,
+        action,
+        outcome: 'success',
+        resourceType: 'system',
+        resourceName: 'users',
+        targetUserId,
+        metadata: metadata ?? null,
       },
     })
-    await this.client.eponymeUserSession.deleteMany({ where: { userId: id } })
-    return { result: { user: toAuthUser(updated), temporaryPassword } }
   }
 
   private async createSession(user: PrismaEponymeUserRow): Promise<CreatedSession> {
@@ -298,6 +355,10 @@ function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex')
 }
 
+function auditActorId(actor: string | EponymeAuthUser | undefined): string | undefined {
+  return typeof actor === 'string' ? actor : actor?.id
+}
+
 function isUniqueConstraintViolation(error: unknown) {
   return Boolean(error && typeof error === 'object' && (error as { code?: unknown }).code === 'P2002')
 }
@@ -311,7 +372,7 @@ function toAuthUser(user: PrismaEponymeUserRow): EponymeAuthUser {
   return {
     id: user.id,
     username: user.username,
-    role: isEponymeRole(user.role) ? user.role : 'viewer',
+    role: user.role as EponymeRole,
     active: user.active,
     mustChangePassword: user.mustChangePassword,
     createdAt: new Date(user.createdAt).toISOString(),
