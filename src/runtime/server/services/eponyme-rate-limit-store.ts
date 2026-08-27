@@ -37,7 +37,7 @@ const CLEANUP_INTERVAL_MS = 60 * 60 * 1000
  *
  * The increment has to be atomic across instances, which is the property the whole limiter
  * rests on: a read-then-write loses hits under concurrency, and losing hits is precisely what
- * parallel requests produce. Only a backend that can add and read in one operation qualifies —
+ * parallel requests produce. Only a backend that can add and read in one operation qualifies –
  * hence this narrow interface rather than a generic key-value one, which an ordinary unstorage
  * mount could satisfy without being safe.
  */
@@ -50,8 +50,8 @@ export interface EponymeRateLimitCounter {
  * Fixed windows shared by every Nitro instance, counted in Redis when one is wired and in
  * PostgreSQL otherwise.
  *
- * Redis is the better home for this — an `INCR` on an expiring key costs far less than an upsert
- * plus a periodic sweep — but Postgres is not a degraded fallback here. It is equally correct,
+ * Redis is the better home for this – an `INCR` on an expiring key costs far less than an upsert
+ * plus a periodic sweep – but Postgres is not a degraded fallback here. It is equally correct,
  * and it stays the default so a deployment without Redis still gets a limiter shared across
  * instances rather than a per-process one.
  */
@@ -132,13 +132,13 @@ export interface EponymeRedisRateLimitClient {
  *
  * `prefix` is passed in whole because this talks to the client directly rather than through
  * unstorage, and going around the storage API means going around the key prefixing it would
- * have done — neither the mount point nor the driver's `base` is applied to a command issued
+ * have done – neither the mount point nor the driver's `base` is applied to a command issued
  * here. The caller rebuilds it so the keys still land in the namespace the deployment
  * configured instead of at the root of a shared Redis.
  *
  * The expiry is rewritten on every hit rather than only on the first. The key already carries
  * its window index, so it can only ever describe one fixed window, which makes the rewrite
- * idempotent — and it avoids the race an `if (count === 1)` guard leaves open: a process dying
+ * idempotent – and it avoids the race an `if (count === 1)` guard leaves open: a process dying
  * between the two commands would strand a key with no expiry, and that key would then refuse
  * its scope forever.
  */

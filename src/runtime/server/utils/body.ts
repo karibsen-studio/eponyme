@@ -8,30 +8,30 @@ export const EPONYME_MUTATION_BODY_BYTES = 1024 * 1024
 export async function readEponymeBody<T>(
   event: H3Event,
   limit = EPONYME_MUTATION_BODY_BYTES,
-  statusMessage?: string,
+  message?: string,
 ): Promise<T | undefined> {
-  const raw = await readEponymeRawBody(event, limit, statusMessage)
+  const raw = await readEponymeRawBody(event, limit, message)
   if (!raw) return undefined
 
   try {
     return JSON.parse(raw) as T
   }
   catch {
-    throw createError({ statusCode: 400, statusMessage: t('server.invalidJson') })
+    throw createError({ status: 400, message: t('server.invalidJson') })
   }
 }
 
 export async function readEponymeRawBody(
   event: H3Event,
   limit: number,
-  statusMessage?: string,
+  message?: string,
 ): Promise<string | undefined> {
   if (!Number.isSafeInteger(limit) || limit < 1)
     throw new RangeError('Request body limit must be a positive safe integer.')
 
   const contentLength = Number(getRequestHeader(event, 'content-length'))
   if (Number.isFinite(contentLength) && contentLength > limit)
-    throw bodyTooLarge(statusMessage)
+    throw bodyTooLarge(message)
 
   const stream = getRequestWebStream(event)
   if (!stream) return undefined
@@ -48,7 +48,7 @@ export async function readEponymeRawBody(
       size += chunk.byteLength
       if (size > limit) {
         await reader.cancel('Request body is too large.')
-        throw bodyTooLarge(statusMessage)
+        throw bodyTooLarge(message)
       }
       chunks.push(chunk)
     }
@@ -67,6 +67,6 @@ export async function readEponymeRawBody(
   return new TextDecoder().decode(body)
 }
 
-function bodyTooLarge(statusMessage = t('server.bodyTooLarge')) {
-  return createError({ statusCode: 413, statusMessage })
+function bodyTooLarge(message = t('server.bodyTooLarge')) {
+  return createError({ status: 413, message })
 }

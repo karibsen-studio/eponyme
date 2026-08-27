@@ -1,5 +1,5 @@
 /**
- * Dotted paths of every leaf that differs between two documents — `hero.title`,
+ * Dotted paths of every leaf that differs between two documents – `hero.title`,
  * `items.0.title`. Used to tell which fields the user actually edited, so inline
  * validation only flags those.
  */

@@ -4,5 +4,5 @@ import { EponymeSchemaService, type PrismaEponymeSchemaClient } from './eponyme-
 let schemaService: EponymeSchemaService | undefined
 
 export function useEponymeSchemaService(): EponymeSchemaService {
-  return schemaService ??= new EponymeSchemaService(prisma as PrismaEponymeSchemaClient)
+  return schemaService ??= new EponymeSchemaService(prisma as unknown as PrismaEponymeSchemaClient)
 }

@@ -5,15 +5,23 @@ import EponymeNavigationLink from './EponymeNavigationLink.vue'
 import { useEponymeConfig } from '../../composables/useEponymeConfig'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas } from '../../utils/get-eponyme-schemas'
 import { humanizeLabel } from '../../utils/humanize-label'
+import { useEponymeAuth } from '../../composables/useEponymeAuth'
 
 const props = defineProps<{ basePath: string, folder: string }>()
 const config = useEponymeConfig()
+const auth = useEponymeAuth()
 const children = computed(() => {
   const prefix = `${props.folder}/`
   const unique = new Map<string, 'folder' | 'entry' | 'collection' | 'form'>()
   const collections = getEponymeCollections(config)
   const forms = getEponymeForms(config)
-  for (const name of [...Object.keys(getEponymeSchemas(config)), ...Object.keys(collections), ...Object.keys(forms)]) {
+  const schemas = getEponymeSchemas(config)
+  const readableNames = [
+    ...Object.keys(schemas).filter(name => auth.can('content.read', { kind: 'singleton', name })),
+    ...Object.keys(collections).filter(name => auth.can('content.read', { kind: 'collection', name })),
+    ...Object.keys(forms).filter(name => auth.can('submissions.read', { kind: 'form', name })),
+  ]
+  for (const name of readableNames) {
     if (!name.startsWith(prefix)) continue
     const [child, ...rest] = name.slice(prefix.length).split('/')
     if (!child) continue

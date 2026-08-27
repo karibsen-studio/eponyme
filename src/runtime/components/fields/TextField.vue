@@ -16,7 +16,6 @@ const props = withDefaults(defineProps<{
   inputType?: 'text' | 'email' | 'url'
   mask?: string
   errors?: string[]
-  preview?: boolean
   disabled?: boolean
 }>(), { inputType: 'text', errors: () => [] })
 
@@ -62,11 +61,5 @@ const value = () => typeof props.modelValue === 'string' ? props.modelValue : ''
     >
       {{ value().length }} / {{ maxLength }}
     </p>
-    <img
-      v-if="preview && value()"
-      :src="value()"
-      :alt="label"
-      class="ep:mt-3 ep:block ep:max-h-64 ep:max-w-full ep:rounded-xl ep:border ep:border-border-default ep:object-contain"
-    >
   </EPFormField>
 </template>

@@ -2,14 +2,15 @@ import type { ArrayItemDefinition, FieldDefinition } from '../types/field'
 import type { EponymeSchema } from '../types'
 import { isArrayItemFieldDefinition } from './get-field-default-value'
 import { normalizeEponymeMediaPlayer } from './media-player'
-import { toEponymePhoneValue } from './normalize-phone'
+import { toEponymePhoneValue } from '#eponyme/phone'
 import { normalizeEponymeTags } from './normalize-tags'
 import { sanitizeEponymeRichText } from './sanitize-rich-text'
 import { normalizeEponymeDateTime } from './datetime'
+import { getEponymeCustomFieldType } from './eponyme-custom-field'
 
 /**
- * Rewrites every value that has a canonical form — a phone in E.164, a tag list deduplicated,
- * rich text reduced to the HTML the editor can produce — wherever it sits in the schema.
+ * Rewrites every value that has a canonical form – a phone in E.164, a tag list deduplicated,
+ * rich text reduced to the HTML the editor can produce – wherever it sits in the schema.
  *
  * Applied on the server before a write, which is what makes a stored format a guarantee rather
  * than a convention: the API accepts any JSON, so a client normalising on its own could always
@@ -27,7 +28,24 @@ export function normalizeEponymeValues(schema: EponymeSchema, data: Record<strin
   return result
 }
 
+/**
+ * Slugs, and nothing else: blanks are dropped and a list is deduplicated, so "the same entry
+ * twice" cannot be stored and then read back as two.
+ */
+function normalizeEponymeRelation(value: unknown, multiple: boolean | undefined): unknown {
+  if (multiple) {
+    if (!Array.isArray(value)) return value
+    return [...new Set(value.flatMap(item => typeof item === 'string' && item.trim() ? [item.trim()] : []))]
+  }
+  return typeof value === 'string' ? value.trim() : value
+}
+
 function normalizeField(definition: FieldDefinition, value: unknown): unknown {
+  if (definition.type === 'custom') {
+    const customField = getEponymeCustomFieldType(definition.name)
+    return customField.normalize ? customField.normalize(value, definition.options) : value
+  }
+
   if (definition.type === 'datetime' && typeof value === 'string')
     return normalizeEponymeDateTime(value) ?? value
 
@@ -38,6 +56,8 @@ function normalizeField(definition: FieldDefinition, value: unknown): unknown {
   if (definition.type === 'tags') return Array.isArray(value) ? normalizeEponymeTags(value, definition.options) : value
 
   if (definition.type === 'mediaPlayer') return normalizeEponymeMediaPlayer(value, definition.options)
+
+  if (definition.type === 'relation') return normalizeEponymeRelation(value, definition.options.multiple)
 
   if (definition.type === 'section')
     return normalizeNested(definition.options.fields, value)

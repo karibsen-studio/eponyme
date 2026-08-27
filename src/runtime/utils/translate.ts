@@ -16,7 +16,7 @@ export function defaultEponymePlural(count: number): number {
  * server route as readily as from a component.
  *
  * A key with no message returns the key itself. That only happens when the key exists in
- * neither the locale nor the English fallback, which the build already warns about — showing
+ * neither the locale nor the English fallback, which the build already warns about – showing
  * it raw is more useful than showing nothing.
  */
 export function createEponymeTranslator(

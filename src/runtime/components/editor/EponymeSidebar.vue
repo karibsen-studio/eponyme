@@ -11,6 +11,7 @@ import { getEponymeCollections, getEponymeForms, getEponymeSchemas } from '../..
 import { buildEponymeNavigationTree } from '../../utils/build-navigation-tree'
 import { filterEponymeNavigationTree, preloadEponymeNavigationSearch } from '../../utils/filter-navigation-tree'
 import { useEponymeAuth } from '../../composables/useEponymeAuth'
+import { useEponymeStorageSettings } from '../../composables/useEponymeMedia'
 import EPAvatar from '../ui/EPAvatar.vue'
 import EPDropdownMenu from '../ui/EPDropdownMenu.vue'
 import EPInputText from '../ui/EPInputText.vue'
@@ -26,12 +27,24 @@ const requestFetch = useRequestFetch()
 const searchInput = ref<{ $el?: HTMLInputElement }>()
 const searchQuery = ref('')
 const collectionEntries = useState<Record<string, EponymeCollectionEntry[]>>('eponyme:collection-entries', () => ({}))
-const collections = getEponymeCollections(config)
-const forms = getEponymeForms(config)
+const allSchemas = getEponymeSchemas(config)
+const allCollections = getEponymeCollections(config)
+const allForms = getEponymeForms(config)
 const normalizedBasePath = computed(() => props.basePath.replace(/\/$/, ''))
 const navigationElement = ref<HTMLElement>()
 const navigationScrollTop = useState<number>(`eponyme:sidebar-scroll:${normalizedBasePath.value}`, () => 0)
 const auth = useEponymeAuth()
+const schemas = computed(() => Object.fromEntries(Object.entries(allSchemas)
+  .filter(([name]) => auth.can('content.read', { kind: 'singleton', name }))))
+const collections = computed(() => Object.fromEntries(Object.entries(allCollections)
+  .filter(([name]) => auth.can('content.read', { kind: 'collection', name }))))
+const forms = computed(() => Object.fromEntries(Object.entries(allForms)
+  .filter(([name]) => auth.can('submissions.read', { kind: 'form', name }))))
+const canReadMedia = computed(() => auth.can('media.read', { kind: 'system', name: 'media' }))
+const canManageUsers = computed(() => auth.can('users.manage', { kind: 'system', name: 'users' }))
+const canReadAudit = computed(() => auth.can('audit.read', { kind: 'system', name: 'audit' }))
+const canCreateInCollection = (name: string) => auth.can('content.create', { kind: 'collection', name })
+const storage = useEponymeStorageSettings()
 const isMobile = useMediaQuery('(max-width: 767px)')
 const { setTheme } = useEponymeTheme()
 const profileItems = computed(() => [
@@ -65,10 +78,10 @@ onMounted(async () => {
   await restoreNavigationScroll()
   const [statusResponse, ...collectionResponses] = await Promise.all([
     requestFetch<{ statuses: Record<string, EponymeStatus> }>('/api/eponyme-statuses'),
-    ...Object.keys(collections).map(name => requestFetch<{ entries: EponymeCollectionEntry[] }>(`/api/eponyme-collections/${name}`, { query: { version: 'draft', raw: 1 } })),
+    ...Object.keys(collections.value).map(name => requestFetch<{ entries: EponymeCollectionEntry[] }>(`/api/eponyme-collections/${name}`, { query: { version: 'draft', raw: 1 } })),
   ])
   statuses.value = { ...statusResponse.statuses }
-  collectionEntries.value = Object.fromEntries(Object.keys(collections).map((name, index) => [name, collectionResponses[index]?.entries ?? []]))
+  collectionEntries.value = Object.fromEntries(Object.keys(collections.value).map((name, index) => [name, collectionResponses[index]?.entries ?? []]))
   for (const [name, entries] of Object.entries(collectionEntries.value)) {
     for (const entry of entries) statuses.value[`${name}/${entry.slug}`] = entry.status
   }
@@ -95,7 +108,7 @@ onKeyStroke('Escape', () => {
 const navigation = computed(() => {
   const items: Array<{ kind: 'folder' | 'entry', path: string }> = []
 
-  for (const entry of Object.keys(getEponymeSchemas(config))) {
+  for (const entry of Object.keys(schemas.value)) {
     const parts = entry.split('/')
     for (let depth = 0; depth < parts.length - 1; depth++) {
       const path = parts.slice(0, depth + 1).join('/')
@@ -104,7 +117,7 @@ const navigation = computed(() => {
     }
     items.push({ kind: 'entry', path: entry })
   }
-  for (const collection of Object.keys(collections)) {
+  for (const collection of Object.keys(collections.value)) {
     const parts = collection.split('/')
     for (let depth = 0; depth < parts.length; depth++) {
       const path = parts.slice(0, depth + 1).join('/')
@@ -112,7 +125,7 @@ const navigation = computed(() => {
       items.push({ kind: 'folder', path })
     }
   }
-  for (const formName of Object.keys(forms)) {
+  for (const formName of Object.keys(forms.value)) {
     const parts = formName.split('/')
     for (let depth = 0; depth < parts.length - 1; depth++) {
       const path = parts.slice(0, depth + 1).join('/')
@@ -125,9 +138,9 @@ const navigation = computed(() => {
   return items
 })
 const navigationTree = computed(() => buildEponymeNavigationTree({
-  schemas: getEponymeSchemas(config),
-  collections,
-  forms,
+  schemas: schemas.value,
+  collections: collections.value,
+  forms: forms.value,
   collectionEntries: collectionEntries.value,
 }))
 const isFiltering = computed(() => searchQuery.value.trim().length > 0)
@@ -219,10 +232,22 @@ watch(() => route.path, () => {
         :active="route.path === normalizedBasePath"
       />
       <EponymeNavigationLink
-        v-if="auth.isOwner.value"
+        v-if="storage.enabled && canReadMedia"
+        :to="`${normalizedBasePath}/media`"
+        :label="t('sidebar.media')"
+        :active="route.path === `${normalizedBasePath}/media`"
+      />
+      <EponymeNavigationLink
+        v-if="canManageUsers"
         :to="`${normalizedBasePath}/users`"
         :label="t('sidebar.users')"
         :active="route.path === `${normalizedBasePath}/users`"
+      />
+      <EponymeNavigationLink
+        v-if="canReadAudit"
+        :to="`${normalizedBasePath}/audit`"
+        :label="t('sidebar.audit')"
+        :active="route.path === `${normalizedBasePath}/audit`"
       />
       <div class="ep:mx-2 ep:h-px ep:bg-border-default ep:my-1.5" />
       <EponymeSidebarTree
@@ -232,7 +257,7 @@ watch(() => route.path, () => {
         :statuses="statuses"
         :open-folders="openFolders"
         :force-open="isFiltering"
-        :can-edit="auth.canEdit.value"
+        :can-create="canCreateInCollection"
         @update:open-folders="openFolders = $event"
       />
       <p

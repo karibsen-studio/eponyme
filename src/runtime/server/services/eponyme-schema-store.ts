@@ -7,7 +7,7 @@
  * that writes the number this one reads. The two are a contract with the same value written
  * twice, and a mismatch is what this check exists to surface.
  */
-export const EPONYME_SCHEMA_VERSION = 2
+export const EPONYME_SCHEMA_VERSION = 3
 
 interface PrismaEponymeSchemaRow {
   version: number

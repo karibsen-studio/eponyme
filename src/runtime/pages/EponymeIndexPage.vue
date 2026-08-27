@@ -1,8 +1,7 @@
 <script setup lang="ts">
 import { t } from '#eponyme/locale'
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { refreshNuxtData, useRequestFetch, useRoute, useSeoMeta } from '#app'
-import type { FetchError } from 'ofetch'
 import EponymeNavigationLink from '../components/editor/EponymeNavigationLink.vue'
 import EPButton from '../components/ui/EPButton.vue'
 import EPDialog from '../components/ui/EPDialog.vue'
@@ -11,6 +10,7 @@ import { useEponymeAuth } from '../composables/useEponymeAuth'
 import { useEponymeConfig } from '../composables/useEponymeConfig'
 import { useEponymeFavicon } from '../composables/useEponymeFavicon'
 import type { EponymeExportFile, EponymeImportResult } from '../server/services/eponyme-store'
+import { getEponymeErrorBody } from '../utils/eponyme-error'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas } from '../utils/get-eponyme-schemas'
 import { humanizeLabel } from '../utils/humanize-label'
 import '../assets/dashboard.css'
@@ -22,7 +22,14 @@ const request = useRequestFetch()
 const eponymes = getEponymeSchemas(config)
 const collections = getEponymeCollections(config)
 const forms = getEponymeForms(config)
-const entries = { ...eponymes, ...collections, ...forms }
+const entries = computed(() => Object.fromEntries([
+  ...Object.entries(eponymes).filter(([name]) => auth.can('content.read', { kind: 'singleton', name })),
+  ...Object.entries(collections).filter(([name]) => auth.can('content.read', { kind: 'collection', name })),
+  ...Object.entries(forms).filter(([name]) => auth.can('submissions.read', { kind: 'form', name })),
+]))
+const contentSystem = { kind: 'system' as const, name: 'content' }
+const canExport = computed(() => auth.can('content.export', contentSystem))
+const canImport = computed(() => auth.can('content.import', contentSystem))
 
 useEponymeFavicon()
 useSeoMeta({ title: t('index.title') })
@@ -52,9 +59,9 @@ async function showToast(variant: 'success' | 'error', title: string, descriptio
 
 /** An import refusal names the entries whose schema diverged, which is the whole point of the check. */
 function describeError(caught: unknown, fallback: string) {
-  const error = caught as FetchError<{ statusMessage?: string, data?: { schemaMismatch?: string[] } }>
-  const mismatch = error?.data?.data?.schemaMismatch
-  const message = error?.statusMessage || error?.data?.statusMessage || fallback
+  const error = getEponymeErrorBody<{ data?: { schemaMismatch?: string[] } }>(caught)
+  const mismatch = error?.data?.schemaMismatch
+  const message = error?.message || fallback
   return mismatch?.length ? t('index.mismatch', { message, entries: mismatch.join(', ') }) : message
 }
 
@@ -146,10 +153,11 @@ function closePreview() {
           </p>
         </div>
         <div
-          v-if="auth.canEdit.value"
+          v-if="canExport || canImport"
           class="ep:flex ep:shrink-0 ep:items-center ep:gap-2"
         >
           <EPButton
+            v-if="canExport"
             :label="t('action.export')"
             icon="mingcute:download-2-line"
             size="sm"
@@ -159,7 +167,7 @@ function closePreview() {
             @click="exportContent"
           />
           <EPButton
-            v-if="auth.isOwner.value"
+            v-if="canImport"
             :label="t('action.import')"
             icon="mingcute:upload-2-line"
             size="sm"
@@ -185,7 +193,7 @@ function closePreview() {
           v-for="(_, name) in entries"
           :key="name"
           :to="`${route.path.replace(/\/$/, '')}/${name}`"
-          :label="label(name.split('/').at(-1) ?? name)"
+          :label="label(String(name).split('/').at(-1) ?? String(name))"
           :description="collections[name] ? t('kind.collection') : forms[name] ? t('kind.form') : undefined"
           variant="card"
         />
@@ -212,7 +220,7 @@ function closePreview() {
               v-for="skipped in preview.skipped"
               :key="skipped.name"
             >
-              <span class="ep:font-medium ep:text-text-strong">{{ skipped.name }}</span> — {{ skipped.reason }}
+              <span class="ep:font-medium ep:text-text-strong">{{ skipped.name }}</span>: {{ skipped.reason }}
             </li>
           </ul>
           <div class="ep:mt-6 ep:flex ep:justify-end ep:gap-2">

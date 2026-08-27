@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { t } from '#eponyme/locale'
 import { useRequestFetch } from '#app'
-import type { FetchError } from 'ofetch'
 import { ref, watch } from 'vue'
 import EPBadge from '../ui/EPBadge.vue'
 import EPAlertDialog from '../ui/EPAlertDialog.vue'
@@ -9,6 +8,7 @@ import EPButton from '../ui/EPButton.vue'
 import EPDialog from '../ui/EPDialog.vue'
 import type { EponymeHistoryEntry } from '../../server/services/eponyme-store'
 import { formatVersionDate, useEponymeHistory } from '../../composables/useEponymeHistory'
+import { getEponymeErrorMessage } from '../../utils/eponyme-error'
 
 const props = withDefaults(defineProps<{ open: boolean, name: string, canRestore?: boolean }>(), { canRestore: false })
 const emit = defineEmits<{ 'update:open': [value: boolean], 'restored': [] }>()
@@ -41,7 +41,7 @@ async function restore() {
     emit('update:open', false)
   }
   catch (caught) {
-    restoreError.value = (caught as FetchError).statusMessage ?? t('history.restoreFailed')
+    restoreError.value = getEponymeErrorMessage(caught, t('history.restoreFailed'))
   }
   finally {
     restorePending.value = false

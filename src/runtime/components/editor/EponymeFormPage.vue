@@ -3,16 +3,17 @@ import { t } from '#eponyme/locale'
 import { useAsyncData, useRequestFetch } from '#app'
 import { FlexRender, createColumnHelper, getCoreRowModel, getSortedRowModel, useVueTable } from '@tanstack/vue-table'
 import type { ColumnDef, SortingState } from '@tanstack/vue-table'
-import type { FetchError } from 'ofetch'
 import { computed, ref, watch } from 'vue'
 import { refDebounced } from '@vueuse/core'
 import type { EponymeFormDefinitionBase } from '../../types'
 import type { EponymeFormSubmission, EponymeFormSubmissionPage } from '../../server/services/eponyme-form-store'
 import { humanizeLabel } from '../../utils/humanize-label'
+import { getEponymeErrorMessage } from '../../utils/eponyme-error'
 import { useEponymeAuth } from '../../composables/useEponymeAuth'
 import EPAlertDialog from '../ui/EPAlertDialog.vue'
 import EPBadge from '../ui/EPBadge.vue'
 import EPButton from '../ui/EPButton.vue'
+import EPCheckbox from '../ui/EPCheckbox.vue'
 import EPDialog from '../ui/EPDialog.vue'
 import EPInputText from '../ui/EPInputText.vue'
 import { EPONYME_DATE_LOCALE } from '../../utils/date-locale'
@@ -21,14 +22,20 @@ const props = defineProps<{ name: string, definition: EponymeFormDefinitionBase 
 
 const requestFetch = useRequestFetch()
 const auth = useEponymeAuth()
+const formResource = computed(() => ({ kind: 'form' as const, name: props.name }))
+const canDelete = computed(() => auth.can('submissions.delete', formResource.value))
 const collects = computed(() => props.definition.submission.store)
 const page = ref(1)
 const search = ref('')
-// The query is what the request keys on, so the debounce also bounds the round trips.
 const debouncedSearch = refDebounced(search, 300)
 const sorting = ref<SortingState>([{ id: 'createdAt', desc: true }])
 const selected = ref<EponymeFormSubmission>()
-const submissionAction = ref<{ type: 'clear' } | { type: 'delete', submission: EponymeFormSubmission }>()
+/**
+ * Ticked rows, by id. Kept to the page on screen: the pager loads one page at a time, so a
+ * selection spanning pages would be a promise the "select all" tickbox cannot keep.
+ */
+const selectedIds = ref(new Set<string>())
+const submissionAction = ref<{ type: 'clear' } | { type: 'deleteSelection' } | { type: 'delete', submission: EponymeFormSubmission }>()
 const submissionActionPending = ref(false)
 const submissionActionError = ref('')
 
@@ -55,6 +62,25 @@ const total = computed(() => response.value?.total ?? 0)
 const perPage = computed(() => response.value?.perPage ?? 25)
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / perPage.value)))
 
+const pageIds = computed(() => submissions.value.map(submission => submission.id))
+const selectionCount = computed(() => selectedIds.value.size)
+const allSelected = computed(() => pageIds.value.length > 0 && pageIds.value.every(id => selectedIds.value.has(id)))
+
+function isSelected(id: string) {
+  return selectedIds.value.has(id)
+}
+
+function toggleSelected(id: string, checked: boolean) {
+  const next = new Set(selectedIds.value)
+  if (checked) next.add(id)
+  else next.delete(id)
+  selectedIds.value = next
+}
+
+function toggleAllSelected(checked: boolean) {
+  selectedIds.value = checked ? new Set(pageIds.value) : new Set()
+}
+
 const columnHelper = createColumnHelper<EponymeFormSubmission>()
 
 // Values are stringified here so the table stays agnostic of the field types.
@@ -64,9 +90,6 @@ const columns = computed<Array<ColumnDef<EponymeFormSubmission, string>>>(() => 
     {
       id: fieldName,
       header: humanizeLabel(fieldName, field.options.label),
-      // Never empty: SSR emits nothing for an empty string while the client still
-      // builds a text node, which hydrates as a missing child. The dash also makes
-      // an unanswered optional field readable instead of looking like a broken cell.
       cell: info => truncate(info.getValue()) || t('action.empty'),
     },
   )),
@@ -102,6 +125,11 @@ watch(debouncedSearch, () => {
   page.value = 1
 })
 
+// Whatever replaces the rows on screen also replaces what "the selection" means.
+watch([page, debouncedSearch, () => props.name], () => {
+  selectedIds.value = new Set()
+})
+
 function formatValue(value: unknown): string {
   if (value == null) return ''
   if (Array.isArray(value)) return value.map(item => formatValue(item)).join(', ')
@@ -124,10 +152,46 @@ function requestClearAll() {
   submissionActionError.value = ''
 }
 
+function requestDeleteSelection() {
+  if (!selectionCount.value) return
+  submissionAction.value = { type: 'deleteSelection' }
+  submissionActionError.value = ''
+}
+
 function requestDeleteSubmission(submission: EponymeFormSubmission) {
   submissionAction.value = { type: 'delete', submission }
   submissionActionError.value = ''
 }
+
+/**
+ * Three confirmations share one dialog, so the wording is chosen here rather than in three
+ * nested ternaries in the template.
+ */
+const actionCopy = computed(() => {
+  const action = submissionAction.value
+  if (action?.type === 'clear') {
+    return {
+      title: 'submissions.clearTitle',
+      description: 'submissions.clearDescription',
+      confirm: 'submissions.clearAction',
+      params: { count: total.value, form: label.value },
+    }
+  }
+  if (action?.type === 'deleteSelection') {
+    return {
+      title: 'submissions.deleteSelectionTitle',
+      description: 'submissions.deleteSelectionDescription',
+      confirm: 'submissions.deleteSelection',
+      params: { count: selectionCount.value },
+    }
+  }
+  return {
+    title: 'submissions.deleteTitle',
+    description: 'submissions.deleteDescription',
+    confirm: 'submissions.deleteAction',
+    params: undefined,
+  }
+})
 
 function setSubmissionActionOpen(open: boolean) {
   if (open || submissionActionPending.value) return
@@ -144,12 +208,23 @@ async function confirmSubmissionAction() {
     if (action.type === 'clear') {
       await requestFetch(`/api/eponyme-forms/${props.name}/submissions`, { method: 'DELETE' })
       selected.value = undefined
+      selectedIds.value = new Set()
       page.value = 1
       await refresh()
+    }
+    else if (action.type === 'deleteSelection') {
+      const ids = [...selectedIds.value]
+      await requestFetch(`/api/eponyme-forms/${props.name}/submissions`, { method: 'DELETE', query: { ids } })
+      if (selected.value && ids.includes(selected.value.id)) selected.value = undefined
+      selectedIds.value = new Set()
+      // Emptying the page would otherwise leave a listing with nothing on it.
+      if (ids.length >= submissions.value.length && page.value > 1) page.value -= 1
+      else await refresh()
     }
     else {
       await requestFetch(`/api/eponyme-forms/${props.name}/submissions/${action.submission.id}`, { method: 'DELETE' })
       if (selected.value?.id === action.submission.id) selected.value = undefined
+      toggleSelected(action.submission.id, false)
       // Deleting the last row of a page would otherwise leave an empty view.
       if (submissions.value.length === 1 && page.value > 1) page.value -= 1
       else await refresh()
@@ -157,8 +232,10 @@ async function confirmSubmissionAction() {
     submissionAction.value = undefined
   }
   catch (caught) {
-    submissionActionError.value = (caught as FetchError).statusMessage
-      ?? t(action.type === 'clear' ? 'submissions.clearFailed' : 'submissions.deleteFailed')
+    submissionActionError.value = getEponymeErrorMessage(
+      caught,
+      t(action.type === 'clear' ? 'submissions.clearFailed' : 'submissions.deleteFailed'),
+    )
   }
   finally {
     submissionActionPending.value = false
@@ -185,7 +262,7 @@ async function confirmSubmissionAction() {
           {{ t(definition.submission.mode === 'managed' ? 'submissions.modeManaged' : 'submissions.modeCustom') }}
         </EPBadge>
         <EPButton
-          v-if="collects && auth.canEdit.value && total > 0"
+          v-if="collects && canDelete && total > 0"
           size="sm"
           variant="danger"
           @click="requestClearAll"
@@ -236,6 +313,31 @@ async function confirmSubmissionAction() {
       v-else-if="submissions.length"
       class="ep:mt-8"
     >
+      <div
+        v-if="selectionCount"
+        class="ep:mb-3 ep:flex ep:flex-wrap ep:items-center ep:justify-between ep:gap-3 ep:rounded-xl ep:bg-surface-active ep:px-4 ep:py-3"
+        role="status"
+      >
+        <p class="ep:m-0 ep:text-sm ep:text-text-strong">
+          {{ t('submissions.selected', { count: selectionCount }) }}
+        </p>
+        <div class="ep:flex ep:gap-2">
+          <EPButton
+            size="sm"
+            @click="toggleAllSelected(false)"
+          >
+            {{ t('submissions.clearSelection') }}
+          </EPButton>
+          <EPButton
+            v-if="canDelete"
+            size="sm"
+            variant="danger"
+            @click="requestDeleteSelection"
+          >
+            {{ t('submissions.deleteSelection') }}
+          </EPButton>
+        </div>
+      </div>
       <div class="ep:overflow-x-auto ep:rounded-xl ep:bg-surface-active/50">
         <table class="ep:w-full ep:table-fixed ep:border-collapse ep:text-left ep:text-sm">
           <thead>
@@ -243,6 +345,16 @@ async function confirmSubmissionAction() {
               v-for="headerGroup in table.getHeaderGroups()"
               :key="headerGroup.id"
             >
+              <th
+                scope="col"
+                class="ep:w-12 ep:border-b ep:border-border-default ep:p-3"
+              >
+                <EPCheckbox
+                  :model-value="allSelected"
+                  :aria-label="t('submissions.selectAll')"
+                  @update:model-value="toggleAllSelected"
+                />
+              </th>
               <th
                 v-for="header in headerGroup.headers"
                 :key="header.id"
@@ -275,7 +387,15 @@ async function confirmSubmissionAction() {
               v-for="row in table.getRowModel().rows"
               :key="row.id"
               class="ep:group ep:border-b ep:border-border-default/50 ep:last:border-0"
+              :class="{ 'ep:bg-contrast/5': isSelected(row.original.id) }"
             >
+              <td class="ep:p-3 ep:align-top">
+                <EPCheckbox
+                  :model-value="isSelected(row.original.id)"
+                  :aria-label="t('submissions.selectRow')"
+                  @update:model-value="toggleSelected(row.original.id, $event)"
+                />
+              </td>
               <td
                 v-for="cell in row.getVisibleCells()"
                 :key="cell.id"
@@ -294,7 +414,7 @@ async function confirmSubmissionAction() {
               </td>
               <td class="ep:p-3 ep:text-right ep:align-top">
                 <EPButton
-                  v-if="auth.canEdit.value"
+                  v-if="canDelete"
                   size="sm"
                   variant="danger"
                   class="ep:opacity-0 ep:group-hover:opacity-100 ep:focus-visible:opacity-100"
@@ -365,9 +485,9 @@ async function confirmSubmissionAction() {
 
     <EPAlertDialog
       :open="Boolean(submissionAction)"
-      :label="submissionAction ? t(submissionAction.type === 'clear' ? 'submissions.clearTitle' : 'submissions.deleteTitle') : ''"
-      :description="submissionAction ? t(submissionAction.type === 'clear' ? 'submissions.clearDescription' : 'submissions.deleteDescription', submissionAction.type === 'clear' ? { count: total, form: label } : undefined) : ''"
-      :confirm-label="submissionAction ? t(submissionAction.type === 'clear' ? 'submissions.clearAction' : 'submissions.deleteAction') : ''"
+      :label="submissionAction ? t(actionCopy.title) : ''"
+      :description="submissionAction ? t(actionCopy.description, actionCopy.params) : ''"
+      :confirm-label="submissionAction ? t(actionCopy.confirm) : ''"
       confirm-variant="danger"
       :confirm-loading="submissionActionPending"
       :close-on-confirm="false"

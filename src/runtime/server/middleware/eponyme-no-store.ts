@@ -5,8 +5,8 @@ import { EPONYME_PREVIEW_QUERY } from '../../utils/preview'
 /**
  * Every Eponyme route is uncacheable until it says otherwise.
  *
- * The routes that may be cached are a short, deliberate list — published content, the
- * collection listings, the sitemap — and each calls `setEponymePublicCache` to override
+ * The routes that may be cached are a short, deliberate list – published content, the
+ * collection listings, the sitemap – and each calls `setEponymePublicCache` to override
  * this. Everything else carries sessions, drafts, trashed entries, form submissions or
  * the user list, and none of it may ever be stored by a browser or a CDN.
  *

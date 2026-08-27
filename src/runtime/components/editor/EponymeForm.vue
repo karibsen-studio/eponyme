@@ -37,6 +37,10 @@ const previewPaths = eponymeOptions?.previewPaths ?? {}
 // from the collection's `:slug` pattern rather than an exact key match.
 const collections = getEponymeCollections(useEponymeConfig())
 const collectionNames = Object.keys(collections)
+const collectionEntry = computed(() => splitCollectionEntry(collectionNames, props.name))
+const resource = computed(() => collectionEntry.value
+  ? { kind: 'collection' as const, name: collectionEntry.value.collection }
+  : { kind: 'singleton' as const, name: props.name })
 const previewPath = computed(() => resolvePreviewPath(previewPaths, collectionNames, props.name))
 const publicationEnabled = computed(() => {
   const entry = splitCollectionEntry(collectionNames, props.name)
@@ -47,6 +51,12 @@ const publicationEnabled = computed(() => {
   )
 })
 const auth = useEponymeAuth()
+const canUpdate = computed(() => auth.can('content.update', resource.value))
+const canPublish = computed(() => auth.can('content.publish', resource.value))
+const canUnpublish = computed(() => auth.can('content.unpublish', resource.value))
+const canSchedule = computed(() => auth.can('content.schedule', resource.value))
+const canRestore = computed(() => auth.can('content.restore', resource.value))
+const canUsePublication = computed(() => canPublish.value || canUnpublish.value || canSchedule.value)
 const {
   data: eponymeData,
   errors: serverErrors,
@@ -86,10 +96,13 @@ const scheduleDirty = computed(() => schedulePublishValue.value !== toLocalDateT
   || scheduleUnpublishValue.value !== toLocalDateTime(scheduledUnpublishAt.value))
 const dirty = computed(() => contentDirty.value || scheduleDirty.value)
 const publicationStatus = computed<'draft' | 'published' | 'unpublished' | 'scheduled'>(() => hasSchedule.value ? 'scheduled' : status.value)
-const mainAction = computed<EponymeAction>(() => publicationEnabled.value && hasSchedule.value ? 'schedule' : 'publish')
+const mainAction = computed<EponymeAction>(() => canPublish.value
+  ? publicationEnabled.value && hasSchedule.value && canSchedule.value ? 'schedule' : 'publish'
+  : 'draft')
 const primaryActionLabel = computed(() => {
   if (pending.value) return t('form.saving')
   if (activePanel.value === 'publication' && scheduleDirty.value) return t('form.schedule')
+  if (mainAction.value === 'draft') return t('form.saveDraft')
   return status.value === 'published' || hasSchedule.value ? t('form.save') : t('form.publish')
 })
 const publicationBadgeVariant = computed<'neutral' | 'success' | 'warning'>(() => {
@@ -120,7 +133,7 @@ function label(name: string, configured?: string) {
 
 /** Applies to every field type, including the ones nested in sections, tabs and arrays. */
 function fieldDisabled(fieldName: string) {
-  return !auth.canEdit.value || props.readonlyFields.includes(fieldName)
+  return !canUpdate.value || props.readonlyFields.includes(fieldName)
 }
 
 // `flush: 'sync'` is what makes the server render the real values: during SSR the
@@ -159,7 +172,14 @@ async function showToast(
 }
 
 async function save(action: EponymeAction = 'draft', schedule: EponymeSchedule = {}) {
-  if (!auth.canEdit.value || pending.value) return false
+  const allowed = action === 'draft'
+    ? canUpdate.value
+    : action === 'publish'
+      ? canPublish.value
+      : action === 'unpublish' || action === 'revertToDraft'
+        ? canUnpublish.value
+        : canSchedule.value
+  if (!allowed || pending.value) return false
   // Publishing runs the full rules locally first, so an incomplete entry is reported
   // instantly and every message is revealed instead of only the touched fields.
   if ((action === 'publish' || action === 'schedule') && !validation.validateForPublish()) {
@@ -168,7 +188,12 @@ async function save(action: EponymeAction = 'draft', schedule: EponymeSchedule =
     return false
   }
   try {
-    const response = await persist(data.value as never, action, schedule)
+    if (action !== 'draft' && contentDirty.value && canUpdate.value) {
+      const saved = await persist(data.value as never, 'draft')
+      if (!saved) return false
+      savedData.value = cloneData(saved as Record<string, unknown>)
+    }
+    const response = await persist(action === 'draft' ? data.value as never : {} as never, action, schedule)
     if (response) {
       savedData.value = cloneData(response as Record<string, unknown>)
       validation.reset()
@@ -184,7 +209,7 @@ async function save(action: EponymeAction = 'draft', schedule: EponymeSchedule =
   }
   catch (error) {
     const hasValidationErrors = Object.keys(errors.value).length > 0
-    if ((error as { statusCode?: number }).statusCode === 409) {
+    if ((error as { status?: number }).status === 409) {
       await showToast(
         'error',
         t('form.conflictTitle'),
@@ -238,7 +263,7 @@ function currentSchedule(): EponymeSchedule {
 }
 
 async function submitSchedule() {
-  if (pending.value || !auth.canEdit.value) return
+  if (pending.value || !canSchedule.value) return
   const schedule = {
     scheduledPublishAt: schedulePublishValue.value ? new Date(schedulePublishValue.value).toISOString() : null,
     scheduledUnpublishAt: scheduleUnpublishValue.value ? new Date(scheduleUnpublishValue.value).toISOString() : null,
@@ -282,15 +307,9 @@ async function handleVersionRestored() {
   await showToast('success', t('form.restoredTitle'), t('form.restoredBody'))
 }
 
-/**
- * `⌘S` publishes and `⌘D` saves a draft.
- *
- * Both are browser shortcuts — save the page, bookmark it — so both are prevented rather than
- * left to fire alongside the write.
- */
 function shortcut(action: 'draft' | 'main') {
   return (event: KeyboardEvent) => {
-    if (!auth.canEdit.value || event.repeat || (!event.metaKey && !event.ctrlKey) || pending.value) return
+    if ((!canUpdate.value && action === 'draft') || event.repeat || (!event.metaKey && !event.ctrlKey) || pending.value) return
     event.preventDefault()
     if (action === 'main') {
       void submitPrimary()
@@ -304,7 +323,7 @@ onKeyStroke('s', shortcut('main'))
 onKeyStroke('d', shortcut('draft'))
 
 const removeNavigationGuard = useRouter().beforeEach(() => {
-  if (auth.canEdit.value && dirty.value && !confirm(t('form.leaveTitle'))) return false
+  if (canUpdate.value && dirty.value && !confirm(t('form.leaveTitle'))) return false
 })
 
 onScopeDispose(removeNavigationGuard)
@@ -347,8 +366,6 @@ useEventListener('beforeunload', (event) => {
     >
       {{ t('action.loading') }}
     </p>
-    <!-- The schema rules are the single source of truth; native bubbles would preempt them
-         with browser-locale messages and block the publish handler entirely. -->
     <form
       v-else
       novalidate
@@ -539,7 +556,7 @@ useEventListener('beforeunload', (event) => {
                 type="datetime-local"
                 :invalid="Boolean(scheduleError)"
                 :aria-describedby="scheduleError ? `${scheduleHintId} ${scheduleErrorId}` : scheduleHintId"
-                :disabled="!auth.canEdit.value"
+                :disabled="!canSchedule"
               />
             </div>
             <div>
@@ -553,7 +570,7 @@ useEventListener('beforeunload', (event) => {
                 type="datetime-local"
                 :invalid="Boolean(scheduleError)"
                 :aria-describedby="scheduleError ? `${scheduleHintId} ${scheduleErrorId}` : scheduleHintId"
-                :disabled="!auth.canEdit.value"
+                :disabled="!canSchedule"
               />
             </div>
           </div>
@@ -571,7 +588,7 @@ useEventListener('beforeunload', (event) => {
             {{ scheduleError }}
           </p>
           <div
-            v-if="auth.canEdit.value"
+            v-if="canSchedule"
             class="ep:mt-4 ep:flex ep:flex-wrap ep:gap-2"
           >
             <EPButton
@@ -601,7 +618,7 @@ useEventListener('beforeunload', (event) => {
         </section>
 
         <section
-          v-if="auth.canEdit.value"
+          v-if="canUsePublication"
           :aria-labelledby="`${publicationPanelId}-actions`"
         >
           <h3
@@ -612,6 +629,7 @@ useEventListener('beforeunload', (event) => {
           </h3>
           <div class="ep:mt-4 ep:flex ep:flex-wrap ep:gap-2">
             <EPButton
+              v-if="canPublish"
               size="sm"
               variant="primary"
               @click="save('publish')"
@@ -619,14 +637,14 @@ useEventListener('beforeunload', (event) => {
               {{ t('form.publish') }}
             </EPButton>
             <EPButton
-              v-if="status === 'published'"
+              v-if="status === 'published' && canUnpublish"
               size="sm"
               @click="save('revertToDraft')"
             >
               {{ t('form.revertToDraft') }}
             </EPButton>
             <EPButton
-              v-if="status === 'published'"
+              v-if="status === 'published' && canUnpublish"
               size="sm"
               variant="danger"
               @click="save('unpublish')"
@@ -649,7 +667,7 @@ useEventListener('beforeunload', (event) => {
       >
         <div class="ep:flex ep:flex-wrap ep:items-center ep:gap-2">
           <EPButton
-            v-if="auth.canEdit.value"
+            v-if="canUpdate || canPublish"
             type="submit"
             size="sm"
             variant="primary"
@@ -660,21 +678,13 @@ useEventListener('beforeunload', (event) => {
             {{ primaryActionLabel }}
           </EPButton>
           <EPButton
-            v-if="auth.canEdit.value && !hasSchedule && status !== 'published'"
+            v-if="canUpdate && mainAction !== 'draft' && !hasSchedule && status !== 'published'"
             size="sm"
             :disabled="pending"
             :title="t('form.saveShortcut')"
             @click="save('draft')"
           >
             {{ pending ? t('form.saving') : t('form.saveDraft') }}
-          </EPButton>
-          <EPButton
-            v-if="auth.canEdit.value && publicationEnabled"
-            size="sm"
-            variant="ghost"
-            @click="focusBoundaryPanel('publication')"
-          >
-            {{ t('form.publicationTab') }}
           </EPButton>
         </div>
         <div class="ep:flex ep:flex-wrap ep:items-center ep:gap-2">
@@ -703,7 +713,7 @@ useEventListener('beforeunload', (event) => {
       <EponymeHistoryDialog
         :open="historyOpen"
         :name="name"
-        :can-restore="auth.canEdit.value"
+        :can-restore="canRestore"
         @update:open="historyOpen = $event"
         @restored="handleVersionRestored"
       />

@@ -12,7 +12,7 @@ let rateLimitService: EponymeRateLimitService | undefined
 
 export function useEponymeRateLimitService(): EponymeRateLimitService {
   return rateLimitService ??= new EponymeRateLimitService(
-    prisma as PrismaEponymeRateLimitClient,
+    prisma as unknown as PrismaEponymeRateLimitClient,
     resolveCounter(useRuntimeConfig().eponymeContent.cacheStorage),
   )
 }
@@ -25,7 +25,7 @@ export function useEponymeRateLimitService(): EponymeRateLimitService {
  * thing to get wrong. The key prefixes keep the two apart inside it.
  *
  * The mount is asked for its underlying client rather than used through the unstorage API,
- * because that API cannot express an atomic increment — `getItem` then `setItem` drops hits
+ * because that API cannot express an atomic increment – `getItem` then `setItem` drops hits
  * under exactly the concurrency a limiter exists to survive. A driver that exposes no such
  * client, or one that is not Redis-shaped, is left alone and the database keeps counting.
  */

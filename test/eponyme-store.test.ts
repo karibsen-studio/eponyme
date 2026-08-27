@@ -21,6 +21,7 @@ type StoredRow = {
 function createClient(initial: Record<string, unknown> = {}) {
   const rows = new Map<string, StoredRow>()
   const versions: Array<{ id: number, entryName: string, data: unknown, action: string, status: string, createdAt: Date, userId?: string | null }> = []
+  const auditEvents: Array<Record<string, unknown>> = []
   // Stand-in for the EponymeUser table, so history can resolve version authors.
   const users = new Map<string, { id: string, username: string }>([
     ['user-1', { id: 'user-1', username: 'Alice' }],
@@ -206,9 +207,11 @@ function createClient(initial: Record<string, unknown> = {}) {
         return { count: data.length }
       },
       async findMany({ where }) {
+        // `entryName` and `version` are absent when the question spans every collection,
+        // which is what the referrer lookup asks.
         return [...indexRows.values()]
-          .filter(row => row.entryName.startsWith(where.entryName.startsWith)
-            && row.version === where.version
+          .filter(row => (!where.entryName || row.entryName.startsWith(where.entryName.startsWith))
+            && (!where.version || row.version === where.version)
             && row.key === where.key
             && matchesValue(row.value, where.value))
           .map(row => ({ entryName: row.entryName }))
@@ -246,6 +249,12 @@ function createClient(initial: Record<string, unknown> = {}) {
         return versions.find(version => version.id === where.id) ?? null
       },
     },
+    eponymeAuditEvent: {
+      async create({ data }) {
+        auditEvents.push(data)
+        return data
+      },
+    },
   }
   // Counts the queries a call actually sends, so a regression back to N+1 or to
   // writing during a read fails the suite instead of only being slower.
@@ -264,7 +273,7 @@ function createClient(initial: Record<string, unknown> = {}) {
   ])) as unknown as PrismaEponymeClient
 
   // Stand-in for an interactive transaction. It hands back the same delegates and, on a
-  // rejected callback, restores every table to the state it found — so the suite can
+  // rejected callback, restores every table to the state it found – so the suite can
   // assert the rollback rather than assume Postgres provides it.
   const restoreMap = <K, V>(target: Map<K, V>, source: Map<K, V>) => {
     target.clear()
@@ -277,7 +286,16 @@ function createClient(initial: Record<string, unknown> = {}) {
   countingClient.$transaction = (fn) => {
     transactions++
     const run = queue.then(async () => {
-      const snapshot = { rows: new Map(rows), stamps: new Map(stamps), deletions: new Map(deletions), index: new Map(indexRows), state: new Map(indexState), versions: [...versions], clock }
+      const snapshot = {
+        rows: new Map(rows),
+        stamps: new Map(stamps),
+        deletions: new Map(deletions),
+        index: new Map(indexRows),
+        state: new Map(indexState),
+        versions: [...versions],
+        auditEvents: [...auditEvents],
+        clock,
+      }
       try {
         return await fn(countingClient)
       }
@@ -288,6 +306,7 @@ function createClient(initial: Record<string, unknown> = {}) {
         restoreMap(indexRows, snapshot.index)
         restoreMap(indexState, snapshot.state)
         versions.splice(0, versions.length, ...snapshot.versions)
+        auditEvents.splice(0, auditEvents.length, ...snapshot.auditEvents)
         clock = snapshot.clock
         throw error
       }
@@ -301,6 +320,7 @@ function createClient(initial: Record<string, unknown> = {}) {
     transactionCount: () => transactions,
     rows,
     versions,
+    auditEvents,
     deletions,
     indexRows,
     indexState,
@@ -480,7 +500,7 @@ describe('EponymeService', () => {
     const outcomes = [first, second]
     expect(outcomes.filter(result => result && 'conflict' in result && result.conflict)).toHaveLength(1)
     expect(outcomes.filter(result => result && 'data' in result)).toHaveLength(1)
-    // The winner's content is what remains stored — never a silent mix of both.
+    // The winner's content is what remains stored – never a silent mix of both.
     const stored = await service.get('homepage', 'draft')
     expect(['From tab A', 'From tab B']).toContain(stored!.title)
   })
@@ -645,7 +665,6 @@ describe('EponymeService', () => {
 
     await expect(service.getResult('homepage', 1)).resolves.toMatchObject({ data: { title: 'From __keditor' } })
     await expect(service.getResult('homepage', 2)).resolves.toMatchObject({ data: { title: 'From __eponyme' } })
-    // Restoring one writes it back into the columns.
     await expect(service.restore('homepage', 1)).resolves.toMatchObject({ data: { title: 'From __keditor' } })
     await expect(service.get('homepage', 'draft')).resolves.toMatchObject({ title: 'From __keditor' })
   })
@@ -702,7 +721,6 @@ describe('EponymeService', () => {
     const descending = await service.listCollection('articles', 'published', { orderBy: 'title', order: 'desc' })
     expect(descending?.entries.map(entry => entry.title)).toEqual(['Delta', 'Charlie', 'Bravo', 'alpha'])
 
-    // Sorting on a schema field, not just on the entry metadata.
     const bySummary = await service.listCollection('articles', 'published', { orderBy: 'summary', order: 'asc' })
     expect(bySummary?.entries.map(entry => entry.data.summary)).toEqual(['a', 'b', 'c', 'd'])
 
@@ -776,8 +794,8 @@ describe('EponymeService', () => {
       total: 1,
     })
     // Read on a cold service, so this still asserts one query per collection rather than one
-    // per entry. The sitemap has its own cache key — it selects only the name and the date,
-    // which no listing shares — so calling it twice still costs a single query.
+    // per entry. The sitemap has its own cache key – it selects only the name and the date,
+    // which no listing shares – so calling it twice still costs a single query.
     const findMany = vi.spyOn(client.eponyme, 'findMany')
     const cold = new EponymeService(config, client)
     const sitemap = await cold.getSitemapEntries({
@@ -793,8 +811,7 @@ describe('EponymeService', () => {
     ])
     await expect(service.get('articles/does-not-exist', 'draft')).resolves.toBeUndefined()
     expect(rows.has('articles/does-not-exist')).toBe(false)
-    await expect(service.deleteCollectionEntry('articles/lete-a-paris')).resolves.toBe(true)
-    // The row survives: deleting only moves the entry to the trash.
+    await expect(service.deleteCollectionEntry('articles/lete-a-paris')).resolves.toEqual({ deleted: true })
     expect(rows.has('articles/lete-a-paris')).toBe(true)
   })
 
@@ -806,7 +823,7 @@ describe('EponymeService', () => {
     await service.patch('articles/lete-a-paris', {}, 'publish')
     expect(versions.filter(version => version.entryName === 'articles/lete-a-paris')).toHaveLength(2)
 
-    await expect(service.deleteCollectionEntry('articles/lete-a-paris')).resolves.toBe(true)
+    await expect(service.deleteCollectionEntry('articles/lete-a-paris')).resolves.toEqual({ deleted: true })
     // A trashed entry reads as missing everywhere a visitor or an editor could see it.
     await expect(service.get('articles/lete-a-paris')).resolves.toBeUndefined()
     await expect(service.get('articles/lete-a-paris', 'draft')).resolves.toBeUndefined()
@@ -818,7 +835,7 @@ describe('EponymeService', () => {
       total: 1,
     })
     // Deleting twice is a no-op rather than a second, later deletion date.
-    await expect(service.deleteCollectionEntry('articles/lete-a-paris')).resolves.toBe(false)
+    await expect(service.deleteCollectionEntry('articles/lete-a-paris')).resolves.toBeUndefined()
     // The slug stays reserved, with a message that says what to do about it.
     await expect(service.createCollectionEntry('articles', { title: 'Retake', slug: 'lete-a-paris' })).resolves.toEqual({
       errors: { slug: ['An entry with this slug is in the trash. Restore it or delete it permanently first.'] },
@@ -830,7 +847,6 @@ describe('EponymeService', () => {
     await expect(service.restoreCollectionEntry('articles/lete-a-paris')).resolves.toBe(false)
     await expect(service.get('articles/lete-a-paris')).resolves.toMatchObject({ title: 'L’été à Paris' })
     await expect(service.listCollectionTrash('articles')).resolves.toEqual({ entries: [], total: 0 })
-    // History survived the round trip.
     await expect(service.history('articles/lete-a-paris')).resolves.toHaveLength(2)
     await expect(service.purgeCollectionEntry('articles/lete-a-paris')).resolves.toBe(false)
 
@@ -843,13 +859,19 @@ describe('EponymeService', () => {
   })
 
   it('writes an entry and its history version as one transaction', async () => {
-    const { client, rows, versions, transactionCount } = createClient({ title: 'Welcome' })
+    const { client, rows, versions, auditEvents, transactionCount } = createClient({ title: 'Welcome' })
     const service = new EponymeService(config, client)
 
-    // One transaction per write, not one per statement.
-    await service.createCollectionEntry('articles', { title: 'L’été à Paris' })
+    await service.createCollectionEntry('articles', { title: 'L’été à Paris' }, { id: 'user-1', username: 'Alice' })
     expect(transactionCount()).toBe(1)
-    await service.patch('articles/lete-a-paris', { title: 'Renamed' }, 'publish')
+    expect(auditEvents).toMatchObject([{
+      actorUserId: 'user-1',
+      actorUsername: 'Alice',
+      action: 'content.created',
+      resourceType: 'collection',
+      resourceName: 'articles/lete-a-paris',
+    }])
+    await service.patch('articles/lete-a-paris', { title: 'Renamed' }, 'publish', { id: 'user-1', username: 'Alice' })
     expect(transactionCount()).toBe(2)
     const [firstVersion] = versions.filter(version => version.entryName === 'articles/lete-a-paris')
     await service.restore('articles/lete-a-paris', firstVersion!.id)
@@ -863,10 +885,20 @@ describe('EponymeService', () => {
     await expect(service.patch('articles/lete-a-paris', { title: 'Lost' }, 'publish')).rejects.toThrow('history is down')
     expect(rows.get('articles/lete-a-paris')).toEqual(stored)
     expect(versions).toHaveLength(3)
+    expect(auditEvents).toHaveLength(3)
     // The cached row was dropped even though the write rolled back, so the next read
     // goes back to the database rather than trusting a key it may have re-cached.
     // The restore above put the first version back, and the failed patch changed nothing.
     await expect(service.get('articles/lete-a-paris', 'draft')).resolves.toMatchObject({ title: 'L’été à Paris' })
+
+    // The audit row belongs to the same transaction too. If it cannot be persisted,
+    // neither the content nor its history may claim the operation succeeded.
+    vi.spyOn(client.eponymeAuditEvent, 'create').mockRejectedValueOnce(new Error('audit is down'))
+    await expect(service.patch('articles/lete-a-paris', { title: 'Still lost' }, 'publish', { id: 'user-1', username: 'Alice' }))
+      .rejects.toThrow('audit is down')
+    expect(rows.get('articles/lete-a-paris')).toEqual(stored)
+    expect(versions).toHaveLength(3)
+    expect(auditEvents).toHaveLength(3)
   })
 
   it('rolls an import back as a whole', async () => {
@@ -875,7 +907,6 @@ describe('EponymeService', () => {
     await service.createCollectionEntry('articles', { title: 'L’été à Paris' })
     const file = await service.exportContent()
 
-    // A dry run reads only, so it never opens one.
     const opened = transactionCount()
     await expect(service.importContent(file, { dryRun: true })).resolves.toMatchObject({ dryRun: true })
     expect(transactionCount()).toBe(opened)
@@ -894,7 +925,7 @@ describe('EponymeService', () => {
     const { client } = createClient({ title: 'Welcome' })
     const service = new EponymeService(config, client)
 
-    await expect(service.deleteCollectionEntry('homepage')).resolves.toBe(false)
+    await expect(service.deleteCollectionEntry('homepage')).resolves.toBeUndefined()
     await expect(service.restoreCollectionEntry('homepage')).resolves.toBe(false)
     await expect(service.purgeCollectionEntry('homepage')).resolves.toBe(false)
     await expect(service.listCollectionTrash('nope')).resolves.toBeUndefined()
@@ -1284,7 +1315,6 @@ describe('EponymeService query count', () => {
     expect(writeCount()).toBe(0)
     expect(counts.total).toBe(1)
 
-    // A second read is served from the cache rather than from the database.
     resetCounts()
     await service.getResult('homepage', 'published')
     expect(counts.total ?? 0).toBe(0)
@@ -1296,7 +1326,7 @@ describe('EponymeService query count', () => {
     const page = await service.listCollection('articles', 'published')
 
     expect(page!.entries).toHaveLength(5)
-    // One query for the page and one for the total, whatever the size of the collection —
+    // One query for the page and one for the total, whatever the size of the collection –
     // never one per entry. The count is what lets `take` be applied in SQL while `total`
     // still describes everything that matched.
     expect(counts['eponyme.findMany']).toBe(1)
@@ -1319,7 +1349,7 @@ describe('EponymeService query count', () => {
     expect(counts['eponyme.count']).toBe(1)
 
     // A public listing selects the published column and never the draft one, so draft
-    // content is not filtered out of the response — it is never read.
+    // content is not filtered out of the response – it is never read.
     const [row] = await rowsRead() as Array<Record<string, unknown>>
     expect(Object.keys(row!).sort()).toEqual([
       'name',

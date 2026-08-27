@@ -76,8 +76,16 @@ describe('normalizeHexColor', () => {
     expect(normalizeHexColor('#AABBCCDD')).toBe('#aabbccdd')
   })
 
+  it('reads back the rgb() notation a browser writes into the DOM', () => {
+    expect(normalizeHexColor('rgb(180, 101, 74)')).toBe('#b4654a')
+    expect(normalizeHexColor('RGB(0,0,0)')).toBe('#000000')
+    expect(sameHexColor('rgb(255, 255, 255)', '#FFF')).toBe(true)
+  })
+
   it('rejects anything that is not a hex colour', () => {
     expect(normalizeHexColor('red')).toBeUndefined()
+    expect(normalizeHexColor('rgb(300, 0, 0)')).toBeUndefined()
+    expect(normalizeHexColor('rgba(0, 0, 0, 0.5)')).toBeUndefined()
     expect(normalizeHexColor('#12345')).toBeUndefined()
     expect(normalizeHexColor('171714')).toBeUndefined()
     expect(normalizeHexColor(undefined)).toBeUndefined()
@@ -217,7 +225,7 @@ describe('form()', () => {
     })).not.toThrow()
   })
 
-  // TypeScript already rejects these at the call site — the @ts-expect-error
+  // TypeScript already rejects these at the call site – the @ts-expect-error
   // directives are part of the assertion. The runtime guard is the second line of
   // defence, for JavaScript consumers and for values built dynamically.
   it('rejects authoring-only field types', () => {
