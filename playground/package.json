@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@eponyme/locale": "^0.4.0",
-    "@eponyme/storage": "workspace:*",
+    "@eponyme/storage": "^0.1.0",
     "@karibsen/eponyme": "link:..",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
