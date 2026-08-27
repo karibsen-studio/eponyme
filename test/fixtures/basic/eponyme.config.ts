@@ -4,6 +4,7 @@ export default defineEponymeConfig({
   pages: {
     homepage: {
       title: field.string({ required: true, defaultValue: 'Welcome' }),
+      rating: field.custom('rating', { label: 'Custom rating', min: 1, max: 5 }),
       maxGuests: field.number({ min: 1, max: 20, defaultValue: 10 }),
       enabled: field.boolean({ defaultValue: true }),
       tags: field.array({ of: field.string({ required: true }), defaultValue: ['nuxt'] }),
@@ -71,8 +72,10 @@ export default defineEponymeConfig({
       excerpt: field.textarea(),
       // Present so the dashboard's server render exercises the lazily loaded rich text field.
       body: field.richText(),
+      brochure: field.file(),
       phone: field.phone({ defaultCountry: 'FR', countries: ['FR', 'BE'] }),
       tags: field.tags({ suggestions: ['Nuxt', 'Vue'], allowCustom: true, maxItems: 3 }),
+      related: field.relation({ to: 'articles', multiple: true }),
     },
   }),
 })

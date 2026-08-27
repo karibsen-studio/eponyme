@@ -148,6 +148,9 @@ const matchesSubmission = (row: FormSubmissionRow, where: SubmissionWhere) => {
 const formSubmissions = new Map<string, FormSubmissionRow>()
 type RateLimitRow = { key: string, count: number, expiresAt: Date }
 const rateLimits = new Map<string, RateLimitRow>()
+type AuditRow = Record<string, unknown> & { id: string, occurredAt: Date }
+const auditEvents = new Map<string, AuditRow>()
+const maintenanceState = new Map<string, Date>()
 
 type PrismaDouble = typeof delegates
 
@@ -233,10 +236,12 @@ const delegates = {
       for (const row of data) indexRows.set(indexKey(row), row)
       return { count: data.length }
     },
-    async findMany({ where }: { where: { entryName: { startsWith: string }, version: 'draft' | 'published', key: string, value: string | StringRange } }) {
+    async findMany({ where }: { where: { entryName?: { startsWith: string }, version?: 'draft' | 'published', key: string, value: string | StringRange } }) {
+      // Both are absent when the question is "who points at this entry", which spans
+      // every collection and both versions.
       return [...indexRows.values()]
-        .filter(row => row.entryName.startsWith(where.entryName.startsWith)
-          && row.version === where.version
+        .filter(row => (!where.entryName || row.entryName.startsWith(where.entryName.startsWith))
+          && (!where.version || row.version === where.version)
           && row.key === where.key
           && matchesValue(row.value, where.value))
         .map(row => ({ entryName: row.entryName }))
@@ -327,7 +332,7 @@ const delegates = {
   // therefore fails these tests until this number follows, which is the reminder wanted.
   eponymeSchema: {
     async findUnique({ where }: { where: { key: string } }) {
-      return where.key === 'eponyme' ? { key: 'eponyme', version: 2, updatedAt: new Date() } : null
+      return where.key === 'eponyme' ? { key: 'eponyme', version: 3, updatedAt: new Date() } : null
     },
   },
   eponymeRateLimit: {
@@ -351,6 +356,65 @@ const delegates = {
         count++
       }
       return { count }
+    },
+  },
+  eponymeAuditEvent: {
+    async create({ data }: { data: Record<string, unknown> & { id: string } }) {
+      const row = { ...data, occurredAt: new Date() } as AuditRow
+      auditEvents.set(row.id, row)
+      return row
+    },
+    async findMany({ where, take, cursor, skip = 0, select }: {
+      where?: {
+        action?: string
+        actorUserId?: string
+        resourceType?: string
+        resourceName?: { contains: string, mode?: 'insensitive' }
+        occurredAt?: { lt?: Date, gte?: Date, lte?: Date }
+      }
+      take: number
+      cursor?: { id: string }
+      skip?: number
+      select?: { id: true }
+    }) {
+      let found = [...auditEvents.values()]
+        .filter(row => (!where?.action || row.action === where.action)
+          && (!where?.actorUserId || row.actorUserId === where.actorUserId)
+          && (!where?.resourceType || row.resourceType === where.resourceType)
+          && (!where?.resourceName || String(row.resourceName ?? '').toLocaleLowerCase('en-US')
+            .includes(where.resourceName.contains.toLocaleLowerCase('en-US')))
+          && (!where?.occurredAt?.lt || row.occurredAt < where.occurredAt.lt)
+          && (!where?.occurredAt?.gte || row.occurredAt >= where.occurredAt.gte)
+          && (!where?.occurredAt?.lte || row.occurredAt <= where.occurredAt.lte))
+        .sort((left, right) => right.occurredAt.getTime() - left.occurredAt.getTime())
+      if (cursor) found = found.slice(Math.max(0, found.findIndex(row => row.id === cursor.id) + skip))
+      found = found.slice(0, take)
+      return select ? found.map(row => ({ id: row.id })) : found
+    },
+    async deleteMany({ where }: { where: { id: { in: string[] } } }) {
+      let count = 0
+      for (const id of where.id.in) if (auditEvents.delete(id)) count++
+      return { count }
+    },
+  },
+  eponymeMaintenanceState: {
+    async findUnique({ where }: { where: { key: string } }) {
+      const lastRunAt = maintenanceState.get(where.key)
+      return lastRunAt ? { key: where.key, lastRunAt } : null
+    },
+    async create({ data }: { data: { key: string, lastRunAt: Date } }) {
+      if (maintenanceState.has(data.key)) throw Object.assign(new Error('Unique constraint'), { code: 'P2002' })
+      maintenanceState.set(data.key, data.lastRunAt)
+      return data
+    },
+    async updateMany({ where, data }: {
+      where: { key: string, lastRunAt: Date }
+      data: { lastRunAt: Date }
+    }) {
+      const current = maintenanceState.get(where.key)
+      if (!current || current.getTime() !== where.lastRunAt.getTime()) return { count: 0 }
+      maintenanceState.set(where.key, data.lastRunAt)
+      return { count: 1 }
     },
   },
   eponymeUser: {
@@ -418,7 +482,16 @@ const delegates = {
 let queue: Promise<unknown> = Promise.resolve()
 function $transaction<T>(fn: (tx: PrismaDouble) => Promise<T>): Promise<T> {
   const run = queue.then(async () => {
-    const snapshot = { rows: new Map(rows), versions: [...versions], index: new Map(indexRows), state: new Map(indexState), clock }
+    const snapshot = {
+      rows: new Map(rows),
+      versions: [...versions],
+      index: new Map(indexRows),
+      state: new Map(indexState),
+      audit: new Map(auditEvents),
+      users: new Map(users),
+      sessions: new Map(sessions),
+      clock,
+    }
     try {
       return await fn(delegates)
     }
@@ -430,6 +503,12 @@ function $transaction<T>(fn: (tx: PrismaDouble) => Promise<T>): Promise<T> {
       indexState.clear()
       for (const [name, fingerprint] of snapshot.state) indexState.set(name, fingerprint)
       versions.splice(0, versions.length, ...snapshot.versions)
+      auditEvents.clear()
+      for (const [id, event] of snapshot.audit) auditEvents.set(id, event)
+      users.clear()
+      for (const [id, user] of snapshot.users) users.set(id, user)
+      sessions.clear()
+      for (const [id, session] of snapshot.sessions) sessions.set(id, session)
       clock = snapshot.clock
       throw error
     }

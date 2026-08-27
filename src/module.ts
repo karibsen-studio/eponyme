@@ -16,6 +16,7 @@ import {
   getNuxtModuleVersion,
   hasNuxtModule,
   hasNuxtModuleCompatibility,
+  updateTemplates,
   useLogger,
 } from '@nuxt/kit'
 import type { Nuxt } from '@nuxt/schema'
@@ -25,8 +26,14 @@ import { renderEponymeLocaleModule, resolveEponymeLocale } from './locale-build'
 import type { EponymeLocaleDefinition } from './runtime/locales'
 import { resolve } from 'pathe'
 import { tagPreviewPathRoutes } from './runtime/utils/cache-tags'
-import { EPONYME_THEME_BOOTSTRAP } from './runtime/utils/eponyme-theme'
+import { createEponymeThemeBootstrap } from './runtime/utils/eponyme-theme'
 import type { EponymePublicationOption } from './runtime/utils/eponyme-publication'
+import {
+  renderEponymeCustomFieldComponents,
+  renderEponymeCustomFields,
+  renderEponymeCustomFieldTypes,
+  scanEponymeCustomFields,
+} from './custom-fields-build'
 
 export type { EponymeLocaleDefinition, EponymeMessageKey } from './runtime/locales'
 
@@ -140,6 +147,77 @@ export interface ModuleOptions {
     sessionDurationDays?: number
   }
 
+  audit?: {
+    /** Number of days audit events are retained. @default 365 */
+    retentionDays?: number
+    /** How often one application instance may claim the cleanup job. @default 24 */
+    pruneIntervalHours?: number
+  }
+
+  /**
+   * File storage: the media library, uploads, and what `field.file()` writes into.
+   *
+   * @remarks
+   * Storage is off until a `eponyme.storage.ts` exists at the project root, exporting a factory
+   * as its default export. Nothing about it is registered while it is off – no upload routes, no
+   * media library page, no sidebar entry – so a project that stores nothing carries none of it.
+   *
+   * ```ts
+   * // eponyme.storage.ts – a bucket
+   * import { s3 } from '@eponyme/storage/s3'
+   *
+   * export default s3({ bucket: 'media', region: 'eu-west-3' })
+   * ```
+   *
+   * ```ts
+   * // eponyme.storage.ts – the filesystem, to develop without one
+   * import { local } from '@karibsen/eponyme/storage'
+   *
+   * export default local()
+   * ```
+   *
+   * Credentials never live in this file: they are read from `EPONYME_STORAGE_ACCESS_KEY_ID`,
+   * `EPONYME_STORAGE_SECRET_ACCESS_KEY` and the optional `EPONYME_STORAGE_SESSION_TOKEN`, and
+   * handed to the factory. A driver that needs none – `local()` – is given none.
+   */
+  storage?: {
+    /**
+     * Path to the factory file, relative to the project root.
+     *
+     * @default "eponyme.storage.ts"
+     */
+    driver?: string
+
+    /**
+     * Key prefix every upload is written under, and the only part of the bucket the media
+     * routes can reach.
+     *
+     * @default "uploads"
+     */
+    prefix?: string
+
+    /**
+     * Largest accepted upload, in bytes.
+     *
+     * @remarks
+     * Enforced when the key is reserved, and again on the bytes for a driver that cannot
+     * presign. A presigned upload is bound to the declared size by its own signature, so a
+     * browser that lies about it is refused by the provider rather than by Eponyme.
+     *
+     * @default 26214400 – 25 MiB
+     */
+    maxSize?: number
+
+    /**
+     * Media types uploads are restricted to; `image/*` style wildcards are understood. Empty
+     * accepts anything.
+     *
+     * @default []
+     * @example ['image/*', 'application/pdf']
+     */
+    accept?: string[]
+  }
+
   rateLimits?: {
     /** Login attempts per client address and minute. @default 10 */
     loginPerIp?: number
@@ -158,7 +236,7 @@ export interface ModuleOptions {
    *
    * @remarks
    * Without `cacheStorage`, the cache is per instance and a save only clears the instance that
-   * served it — so this also bounds how long another instance can still answer with the previous
+   * served it – so this also bounds how long another instance can still answer with the previous
    * content. With `cacheStorage`, an invalidation reaches every instance and this is simply how
    * long a cached read lives.
    *
@@ -174,8 +252,8 @@ export interface ModuleOptions {
    * This is what makes a publication visible everywhere at once: a shared mount is a cache a
    * write can actually invalidate across instances, which an in-process map cannot be.
    *
-   * A small in-process tier is kept in front of it either way — it coalesces the concurrent
-   * reads of one render and answers repeats without a network hop — so an instance can still
+   * A small in-process tier is kept in front of it either way – it coalesces the concurrent
+   * reads of one render and answers repeats without a network hop – so an instance can still
    * miss an invalidation for up to a second.
    *
    * The mount is declared by the application, and the driver's `base` is what the keys are
@@ -207,7 +285,7 @@ export interface ModuleOptions {
    * @remarks
    * Leave it on. Ordinary writes keep the index current, but a field that becomes filterable
    * leaves the entries already stored without a row for it, and a filter on them then answers
-   * "none" instead of failing — a wrong listing rather than an error.
+   * "none" instead of failing – a wrong listing rather than an error.
    *
    * Turning it off is an escape hatch: if a rebuild ever fails on every boot, this gets the
    * application up again so `reindexEponymeEntries()` can be run by hand.
@@ -252,7 +330,7 @@ export interface ModuleOptions {
    * function so it can take overrides. Passing the function itself instead of calling it is
    * refused at setup with a message saying so.
    *
-   * @default undefined — English
+   * @default undefined – English
    * @example
    * ```ts
    * import { fr } from '@eponyme/locale/fr'
@@ -290,14 +368,14 @@ const CLIENT_DEPENDENCIES = [
 ]
 
 /**
- * `@nuxt/ui` is not a dependency — the dashboard brings its own components. But both ship
+ * `@nuxt/ui` is not a dependency – the dashboard brings its own components. But both ship
  * Tailwind, and an older `@nuxt/ui` resolves a version this module was not built against.
  * Said out loud at build time because the consequences are diffuse: broken dashboard styles
  * are only the visible case, and nothing else would point back here.
  *
  * Deliberately not a `peerDependencies` entry. Declaring it makes pnpm install `@nuxt/ui`
  * into this repository and rewrite around 1150 lines of the lockfile, changing resolutions
- * for unrelated packages — a large risk of breaking something unforeseen, in exchange for an
+ * for unrelated packages – a large risk of breaking something unforeseen, in exchange for an
  * install-time warning this message already covers.
  *
  * A warning, not a refusal: an application that pinned its own Tailwind may well work, and
@@ -340,12 +418,22 @@ export default defineNuxtModule<ModuleOptions>({
     auth: {
       sessionDurationDays: 7,
     },
+    audit: {
+      retentionDays: 365,
+      pruneIntervalHours: 24,
+    },
     rateLimits: {
       loginPerIp: 10,
       loginGlobal: 300,
       loginAccountFailures: 5,
       formPerIp: 5,
       formGlobal: 100,
+    },
+    storage: {
+      driver: 'eponyme.storage.ts',
+      prefix: 'uploads',
+      maxSize: 25 * 1024 * 1024,
+      accept: [],
     },
     cacheSeconds: 5,
     autoReindex: true,
@@ -389,6 +477,8 @@ export default defineNuxtModule<ModuleOptions>({
             'mingcute:forward-2-line',
             'mingcute:download-2-line',
             'mingcute:upload-2-line',
+            'mingcute:delete-2-line',
+            'mingcute:file-line',
             'mingcute:youtube-line',
             'mingcute:movie-line',
             'mingcute:film-line',
@@ -404,15 +494,97 @@ export default defineNuxtModule<ModuleOptions>({
     const resolver = createResolver(import.meta.url)
     await warnOnIncompatibleNuxtUi(nuxt, logger)
     const dashboardPath = `/${(options.dashboardPath || '__eponyme').replace(/^\/+|\/+$/g, '')}`
+
+    const customFieldsDirectory = resolve(nuxt.options.rootDir, 'eponyme/fields')
+    const readCustomFields = () => scanEponymeCustomFields(nuxt.options.rootDir)
+    const initialCustomFields = await readCustomFields()
+    const customFieldsTemplate = addTemplate({
+      filename: 'eponyme-custom-fields.mjs',
+      write: true,
+      getContents: async () => renderEponymeCustomFields(await readCustomFields()),
+    })
+    const customFieldComponentsTemplate = addTemplate({
+      filename: 'eponyme-custom-field-components.mjs',
+      write: true,
+      getContents: async () => renderEponymeCustomFieldComponents(await readCustomFields()),
+    })
+    const customFieldTypesTemplate = addTypeTemplate({
+      filename: 'types/eponyme-custom-fields.d.ts',
+      getContents: async () => renderEponymeCustomFieldTypes(await readCustomFields()),
+    }, { nuxt: true, nitro: true })
+    nuxt.options.alias['#eponyme/custom-fields'] = customFieldsTemplate.dst
+    nuxt.options.alias['#eponyme/custom-field-components'] = customFieldComponentsTemplate.dst
+    nuxt.options.watch.push(customFieldsDirectory)
+    nuxt.hook('builder:watch', async (_event, path) => {
+      if (!path.replaceAll('\\', '/').includes('eponyme/fields/')) return
+      await updateTemplates({
+        filter: template => [customFieldsTemplate.dst, customFieldComponentsTemplate.dst, customFieldTypesTemplate.dst].includes(template.dst),
+      })
+    })
+    if (initialCustomFields.length)
+      logger.info(`Custom fields: ${initialCustomFields.map(field => field.name).join(', ')}`)
+
+    const rolesPath = await findPath(resolve(nuxt.options.rootDir, 'eponyme/roles.ts'))
+    nuxt.options.alias['#eponyme/roles'] = rolesPath ?? resolver.resolve('./runtime/utils/empty-roles')
+    if (rolesPath) logger.info(`Custom roles loaded from ${rolesPath}.`)
+    // The registry is read once per process and the alias is resolved here, so a role edited in
+    // development only takes effect after a restart. Ask for one rather than serve stale rules.
+    nuxt.options.watch.push(resolve(nuxt.options.rootDir, 'eponyme/roles.ts'))
+    nuxt.hook('builder:watch', async (_event, path) => {
+      if (!path.replaceAll('\\', '/').endsWith('eponyme/roles.ts')) return
+      await nuxt.callHook('restart')
+    })
+
+    // Storage is on only if the factory file is actually there. Everything it brings – routes,
+    // the media library, the upload half of `field.file()` – is registered from this one
+    // boolean, so a project that stores nothing ships none of it.
+    // Nitro decides what gets stored, so it keeps the parser loaded up front. The browser only
+    // needs it to draw a field, and fetches the metadata the first time a phone value appears.
+    nuxt.options.alias['#eponyme/phone'] = resolver.resolve('./runtime/utils/normalize-phone')
+    extendViteConfig((config) => {
+      config.resolve ??= {}
+      config.resolve.alias = {
+        ...config.resolve.alias,
+        '#eponyme/phone': resolver.resolve('./runtime/utils/lazy-phone'),
+      }
+    })
+
+    const storagePath = await findPath(resolve(nuxt.options.rootDir, options.storage?.driver || 'eponyme.storage.ts'))
+    const storageEnabled = Boolean(storagePath)
+    const storagePrefix = (options.storage?.prefix ?? 'uploads').replace(/^\/+|\/+$/g, '')
+    nuxt.options.alias['#eponyme/storage'] = storagePath ?? resolver.resolve('./runtime/utils/empty-storage')
+
+    const storageMaxSize = positiveInteger(options.storage?.maxSize, 25 * 1024 * 1024, 'eponyme.storage.maxSize')
+    const storageAccept = options.storage?.accept ?? []
+
     const publicRuntimeConfig = nuxt.options.runtimeConfig.public as Record<string, unknown>
     publicRuntimeConfig.eponyme = {
       previewPaths: options.previewPaths ?? {},
       dashboardPath,
+      // Where the dashboard teleports itself, out of the host application's `app.vue`.
+      teleportTarget: `#${nuxt.options.app.teleportAttrs?.id ?? 'teleports'}`,
       colorPresets: options.colorPresets ?? [],
       publication: options.publication ?? true,
+      storage: storageEnabled,
+      storageAccept,
+      storageMaxSize,
+    }
+    nuxt.options.runtimeConfig.eponymeStorage = {
+      prefix: storagePrefix,
+      maxSize: storageMaxSize,
+      accept: storageAccept,
+      // Read from the environment rather than from `nuxt.config`, so a secret never reaches a
+      // file that is committed. `NUXT_EPONYME_STORAGE_*` overrides them at runtime as usual.
+      accessKeyId: process.env.EPONYME_STORAGE_ACCESS_KEY_ID ?? '',
+      secretAccessKey: process.env.EPONYME_STORAGE_SECRET_ACCESS_KEY ?? '',
+      sessionToken: process.env.EPONYME_STORAGE_SESSION_TOKEN ?? '',
     }
     nuxt.options.runtimeConfig.eponymeAuth = {
       sessionDurationDays: options.auth?.sessionDurationDays ?? 7,
+    }
+    nuxt.options.runtimeConfig.eponymeAudit = {
+      retentionDays: positiveInteger(options.audit?.retentionDays, 365, 'eponyme.audit.retentionDays'),
+      pruneIntervalHours: positiveInteger(options.audit?.pruneIntervalHours, 24, 'eponyme.audit.pruneIntervalHours'),
     }
     nuxt.options.runtimeConfig.eponymeRateLimits = {
       loginPerIp: positiveInteger(options.rateLimits?.loginPerIp, 10, 'eponyme.rateLimits.loginPerIp'),
@@ -446,6 +618,20 @@ export default defineNuxtModule<ModuleOptions>({
     })
 
     nuxt.options.alias['#eponyme/locale'] = localeTemplate.dst
+
+    // Shipped augmentations sit in `node_modules`, which an application's tsconfig excludes.
+    // Referencing them from the generated types is what puts them in its program.
+    const shippedAugmentations = [
+      './runtime/types/nitro.d.ts',
+      './runtime/types/eponyme-custom-fields.d.ts',
+    ]
+    addTypeTemplate({
+      filename: 'types/eponyme-augmentations.d.ts',
+      getContents: () => shippedAugmentations
+        .map(file => `/// <reference path=${JSON.stringify(resolver.resolve(file))} />\n`)
+        .join(''),
+    }, { nuxt: true, nitro: true })
+
     addTypeTemplate({
       filename: 'types/eponyme-locale.d.ts',
       getContents: () => `declare module '#eponyme/locale' {\n`
@@ -454,12 +640,12 @@ export default defineNuxtModule<ModuleOptions>({
         + `  export const locale: EponymeLocaleDefinition\n`
         + `  export function t(key: EponymeMessageKey, params?: EponymeTranslateParams): string\n`
         + `}\n`,
-    })
+    }, { nuxt: true, nitro: true })
 
     nuxt.options.app.head.script ??= []
     nuxt.options.app.head.script.unshift({
       key: 'eponyme-theme',
-      innerHTML: EPONYME_THEME_BOOTSTRAP,
+      innerHTML: createEponymeThemeBootstrap(dashboardPath),
     })
     addPlugin(resolver.resolve('./runtime/plugins/eponyme-theme'))
 
@@ -473,7 +659,7 @@ export default defineNuxtModule<ModuleOptions>({
     }
 
     // `nuxt prepare` also runs on the module's own repository, where there is no host app
-    // to configure — the requirements below only make sense when actually serving.
+    // to configure – the requirements below only make sense when actually serving.
     const preparing = Boolean(nuxt.options._prepare)
 
     if (!options.prismaClient) {
@@ -498,9 +684,13 @@ export default defineNuxtModule<ModuleOptions>({
 
     addImports([
       { name: 'defineEponymeConfig', from: resolver.resolve('./eponyme') },
+      { name: 'defineEponymeField', from: resolver.resolve('./eponyme') },
+      { name: 'defineBlock', from: resolver.resolve('./eponyme') },
       { name: 'collection', from: resolver.resolve('./eponyme') },
       { name: 'form', from: resolver.resolve('./eponyme') },
       { name: 'defineEponymeVariables', from: resolver.resolve('./eponyme') },
+      { name: 'defineEponymeRoles', from: resolver.resolve('./eponyme') },
+      { name: 'permission', from: resolver.resolve('./eponyme') },
       { name: 'field', from: resolver.resolve('./runtime/fields') },
       { name: 'today', from: resolver.resolve('./runtime/fields') },
       { name: 'eponymeMediaEmbedUrl', from: resolver.resolve('./runtime/utils/media-player') },
@@ -513,7 +703,6 @@ export default defineNuxtModule<ModuleOptions>({
       { name: 'reindexEponymeEntries', from: resolver.resolve('./runtime/server/utils/eponyme-reindex') },
       { name: 'runEponymeSchedule', from: resolver.resolve('./runtime/server/utils/eponyme-schedule') },
       { name: 'validateEponymeForm', from: resolver.resolve('./runtime/server/utils/eponyme-form') },
-      // Lets a route Eponyme does not own feed the dashboard's submission list.
       { name: 'storeEponymeFormSubmission', from: resolver.resolve('./runtime/server/utils/eponyme-form') },
       { name: 'assertEponymeFormRateLimit', from: resolver.resolve('./runtime/server/utils/eponyme-form') },
       { name: 'getEponymeCacheTags', from: resolver.resolve('./runtime/server/utils/eponyme-cache') },
@@ -523,8 +712,8 @@ export default defineNuxtModule<ModuleOptions>({
       path: resolver.resolve('./runtime/middleware/eponyme-auth'),
     })
     addRouteMiddleware({
-      name: 'eponyme-owner',
-      path: resolver.resolve('./runtime/middleware/eponyme-owner'),
+      name: 'eponyme-permission',
+      path: resolver.resolve('./runtime/middleware/eponyme-permission'),
     })
     nuxt.options.build.transpile.push('reka-ui')
 
@@ -538,7 +727,6 @@ export default defineNuxtModule<ModuleOptions>({
         }
       }
     })
-    nuxt.options.css.push(resolver.resolve('./runtime/assets/dashboard.css'))
     extendViteConfig((config) => {
       config.plugins ??= []
       config.plugins.push(tailwindcss())
@@ -562,8 +750,10 @@ export default defineNuxtModule<ModuleOptions>({
     addTypeTemplate({
       filename: 'types/eponyme-config.d.ts',
       getContents: () => `declare module '#eponyme/config' {\n  const config: typeof import(${JSON.stringify(configPath)})['default']\n  export default config\n}\n`
-        + `declare module '#eponyme/variables' {\n  const variables: typeof import(${JSON.stringify(nuxt.options.alias['#eponyme/variables'])})['default']\n  export default variables\n}\n`,
-    })
+        + `declare module '#eponyme/roles' {\n  const roles: typeof import(${JSON.stringify(nuxt.options.alias['#eponyme/roles'])})['default']\n  export default roles\n}\n`
+        + `declare module '#eponyme/variables' {\n  const variables: typeof import(${JSON.stringify(nuxt.options.alias['#eponyme/variables'])})['default']\n  export default variables\n}\n`
+        + `declare module '#eponyme/storage' {\n  const factory: typeof import(${JSON.stringify(nuxt.options.alias['#eponyme/storage'])})['default']\n  export default factory\n}\n`,
+    }, { nuxt: true, nitro: true })
 
     addServerHandler({ middleware: true, handler: resolver.resolve('./runtime/server/middleware/eponyme-no-store') })
     addServerHandler({ route: '/api/eponyme/**', handler: resolver.resolve('./runtime/server/api/eponyme/[name].get') })
@@ -591,7 +781,20 @@ export default defineNuxtModule<ModuleOptions>({
     addServerHandler({ route: '/api/eponyme-users', method: 'post', handler: resolver.resolve('./runtime/server/api/eponyme-users/index.post') })
     addServerHandler({ route: '/api/eponyme-users/:id', method: 'patch', handler: resolver.resolve('./runtime/server/api/eponyme-users/[id].patch') })
     addServerHandler({ route: '/api/eponyme-users/:id/reset-password', method: 'post', handler: resolver.resolve('./runtime/server/api/eponyme-users/[id]/reset-password.post') })
+    addServerHandler({ route: '/api/eponyme-roles', handler: resolver.resolve('./runtime/server/api/eponyme-roles.get') })
+    addServerHandler({ route: '/api/eponyme-audit', handler: resolver.resolve('./runtime/server/api/eponyme-audit.get') })
+    if (storageEnabled) {
+      addServerHandler({ route: '/api/eponyme-media', handler: resolver.resolve('./runtime/server/api/eponyme-media/index.get') })
+      addServerHandler({ route: '/api/eponyme-media/upload', method: 'post', handler: resolver.resolve('./runtime/server/api/eponyme-media/upload.post') })
+      addServerHandler({ route: '/api/eponyme-media/object', method: 'put', handler: resolver.resolve('./runtime/server/api/eponyme-media/object.put') })
+      addServerHandler({ route: '/api/eponyme-media/object', method: 'delete', handler: resolver.resolve('./runtime/server/api/eponyme-media/object.delete') })
+      addServerHandler({ route: '/api/eponyme-media/raw/**', handler: resolver.resolve('./runtime/server/api/eponyme-media/raw/[path].get') })
+      logger.info(`Storage enabled from ${storagePath}, media library at ${dashboardPath}/media.`)
+    }
+
     addServerPlugin(resolver.resolve('./runtime/server/plugins/eponyme-sync'))
+    addServerPlugin(resolver.resolve('./runtime/server/plugins/eponyme-role-registry'))
+    addServerPlugin(resolver.resolve('./runtime/server/plugins/eponyme-audit-retention'))
 
     nuxt.hook('pages:extend', (pages) => {
       pages.push(
@@ -606,7 +809,11 @@ export default defineNuxtModule<ModuleOptions>({
           file: resolver.resolve('./runtime/pages/EponymeDashboardShell.vue'),
           meta: { layout: false },
           children: [
-            { name: 'eponyme-users', path: 'users', file: resolver.resolve('./runtime/pages/EponymeUsersPage.vue'), meta: { middleware: ['eponyme-auth', 'eponyme-owner'] } },
+            { name: 'eponyme-users', path: 'users', file: resolver.resolve('./runtime/pages/EponymeUsersPage.vue'), meta: { middleware: ['eponyme-auth', 'eponyme-permission'], eponymePermission: { action: 'users.manage', resource: { kind: 'system', name: 'users' } } } },
+            { name: 'eponyme-audit', path: 'audit', file: resolver.resolve('./runtime/pages/EponymeAuditPage.vue'), meta: { middleware: ['eponyme-auth', 'eponyme-permission'], eponymePermission: { action: 'audit.read', resource: { kind: 'system', name: 'audit' } } } },
+            ...(storageEnabled
+              ? [{ name: 'eponyme-media', path: 'media', file: resolver.resolve('./runtime/pages/EponymeMediaPage.vue'), meta: { middleware: ['eponyme-auth'] } }]
+              : []),
             { name: 'eponyme-index', path: '', file: resolver.resolve('./runtime/pages/EponymeIndexPage.vue'), meta: { middleware: ['eponyme-auth'] } },
             { name: 'eponyme-detail', path: ':eponyme(.*)*', file: resolver.resolve('./runtime/pages/EponymeDetailPage.vue'), meta: { middleware: ['eponyme-auth'] } },
           ],

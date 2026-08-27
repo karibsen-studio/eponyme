@@ -1,11 +1,15 @@
+export { defineBlock } from './config/block'
+export type { EponymeBlock, EponymeBlockDefinition, EponymeBlockOptions, EponymeBlockOverrides } from './config/block'
 export { defineEponymeConfig } from './config/config'
+export { defineEponymeField } from './config/field'
 export { collection } from './config/collection'
 export { form } from './config/form'
 export { defineEponymeVariables } from './config/variables'
 export { field, today, toMs } from './runtime/fields'
 export { resolveEponymeSeo } from './runtime/fields/seo'
 export type { EponymeSeoDefinition, EponymeSeoValue, SeoFieldOptions } from './runtime/fields/seo'
-export { EPONYME_ROLES, canEditEponyme, isEponymeRole } from './runtime/types/auth'
+export { EPONYME_DEFAULT_ROLES, EPONYME_PERMISSION_ACTIONS, EPONYME_SYSTEM_RESOURCES } from './runtime/types/permissions'
+export { defineEponymeRoles, permission } from './config/role'
 export { eponymeMediaEmbedUrl, eponymeMediaThumbnailUrl, parseEponymeMediaUrl } from './runtime/utils/media-player'
 
 export type {
@@ -13,6 +17,13 @@ export type {
   FieldVisibilityCondition,
   FieldValidationResult,
   FieldValidator,
+  EponymeCustomFieldValues,
+  EponymeCustomFieldOptions,
+  EponymeCustomFieldTypeDefinition,
+  EponymeCustomFieldDefinition,
+  EponymeCustomFieldComponentProps,
+  InferEponymeCustomFieldValue,
+  InferEponymeCustomFieldOptions,
   StringFieldDefinition,
   StringFieldOptions,
   SlugFieldDefinition,
@@ -37,6 +48,7 @@ export type {
   RichTextFieldOptions,
   ImageFieldDefinition,
   ImageFieldOptions,
+  ImageSource,
   SelectFieldDefinition,
   SelectFieldOptions,
   SelectOption,
@@ -99,4 +111,18 @@ export type {
   EponymeAuthUser,
   EponymeAuthSession,
   EponymeManagedUserResult,
+  EponymePermissionAction,
+  EponymePermissionRule,
+  EponymePermissionTarget,
+  EponymeResource,
+  EponymeResourceKind,
+  EponymeSystemResource,
+  EponymeRoleDefinition,
+  EponymeRoleDefinitions,
+  EponymeRoleOption,
+  EponymeHooks,
+  EponymeEntryContext,
+  EponymeEntryBeforeSaveContext,
+  EponymeEntryTrashContext,
+  EponymeFormSubmissionContext,
 } from './runtime/types'

@@ -23,7 +23,7 @@ ALTER TABLE "eponyme_entries"
 --
 -- `publishedAt` is cast behind a shape test: the application only ever checked that it was a
 -- string, so one malformed value would otherwise abort the whole migration. A published entry
--- whose date is unusable falls back to `updatedAt` rather than to NULL — losing the date is a
+-- whose date is unusable falls back to `updatedAt` rather than to NULL – losing the date is a
 -- detail, silently unpublishing the entry is not.
 UPDATE "eponyme_entries" AS e
 SET "draft"     = COALESCE(v.env->'draft', e."data"),
