@@ -55,7 +55,7 @@ export const EPONYME_PREVIEW_QUERY = '__eponyme_preview'
 export const EPONYME_PREVIEW_VERSION_QUERY = '__eponyme_preview_version'
 export const EPONYME_PREVIEW_TOKEN_QUERY = '__eponyme_preview_token'
 
-/** Reads `?__eponyme_preview_version=` — `draft` by default, or a numeric history id. */
+/** Reads `?__eponyme_preview_version=` – `draft` by default, or a numeric history id. */
 export function readPreviewVersion(raw: unknown): PreviewVersion {
   if (raw === 'published') return 'published'
   const id = Number(raw)

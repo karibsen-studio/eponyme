@@ -10,6 +10,21 @@ declare module '#eponyme/prisma' {
   export default prisma
 }
 
+declare module '#eponyme/roles' {
+  import type { EponymeRoleDefinitions } from './permissions'
+
+  const roles: EponymeRoleDefinitions
+  export default roles
+}
+
+declare module '#eponyme/storage' {
+  import type { EponymeStorageFactory } from './storage'
+
+  /** `null` when the host declares no `eponyme.storage.ts`, which is what turns storage off. */
+  const factory: EponymeStorageFactory | null
+  export default factory
+}
+
 declare module '#eponyme/variables' {
   import type { EponymeVariables } from './variables'
 

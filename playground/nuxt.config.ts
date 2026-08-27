@@ -1,5 +1,4 @@
 import { fileURLToPath } from 'node:url'
-// import { fr } from '@eponyme/locale/fr'
 
 export default defineNuxtConfig({
   modules: ['../src/module'],
@@ -13,8 +12,11 @@ export default defineNuxtConfig({
   rootDir: fileURLToPath(new URL('.', import.meta.url)),
   compatibilityDate: 'latest',
   eponyme: {
-    // locale: fr(),
     prismaClient: './server/utils/prisma',
+    storage: {
+      prefix: 'uploads',
+      accept: ['image/*', 'application/pdf'],
+    },
     previewPaths: {
       'pages/test/Homepage': '/',
       'articles': '/articles/:slug',

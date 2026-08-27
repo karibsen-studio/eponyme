@@ -4,11 +4,7 @@
     "dist",
     "node_modules",
     "playground",
-    // A standalone Nuxt app: its auto-imports live in its own .nuxt, which this
-    // project's tsconfig cannot see.
     "test/fixtures",
-    // Same reason: each adapter package is built on its own, against the auto-imports
-    // of the modules it installs. `pnpm prepack` type-checks them.
     "packages",
   ]
 }

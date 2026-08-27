@@ -3,7 +3,7 @@ import type { ArrayItemDefinition, FieldDefinition } from '../types/field'
 import { isArrayItemFieldDefinition } from './get-field-default-value'
 
 /**
- * Applies `map` to every `field.richText()` value of an entry, wherever the schema puts it —
+ * Applies `map` to every `field.richText()` value of an entry, wherever the schema puts it –
  * inside a section, a tab, an array of items or an array of rich text.
  *
  * Rich text is the one field type whose value is markup rather than data, so both the policy

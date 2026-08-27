@@ -1,7 +1,18 @@
 // Compile-only guards on the value a field infers. A tag list must never mix types: with a
 // closed list it is the union of the suggestions, and only `allowCustom` widens it to `string`.
 import { defineEponymeConfig, field } from '../../src/eponyme'
-import type { EponymeDataByName, MediaPlayerValue } from '../../src/runtime/types'
+import type { EponymeCustomFieldTypeDefinition, EponymeDataByName, MediaPlayerValue } from '../../src/runtime/types'
+
+interface RatingOptions {
+  min?: number
+  max?: number
+}
+
+declare module '#eponyme/custom-fields' {
+  interface EponymeCustomFieldRegistry {
+    rating: EponymeCustomFieldTypeDefinition<number, RatingOptions>
+  }
+}
 
 export const config = defineEponymeConfig({
   post: {
@@ -15,6 +26,9 @@ export const config = defineEponymeConfig({
     startsAt: field.datetime(),
     runtime: field.duration({ defaultValue: '1h 10min' }),
     chapters: field.array({ of: { runtime: field.duration() } }),
+    rating: field.custom('rating', { min: 1, max: 5 }),
+    review: field.section({ fields: { rating: field.custom('rating') } }),
+    ratings: field.array({ of: { rating: field.custom('rating') } }),
   },
 })
 
@@ -32,3 +46,6 @@ export type MoneyIsStillANumber = Expect<Equals<Data['amount'], number>>
 export type DateTimeIsAString = Expect<Equals<Data['startsAt'], string>>
 export type DurationIsANumber = Expect<Equals<Data['runtime'], number>>
 export type DurationSurvivesAnArray = Expect<Equals<Data['chapters'], Array<{ readonly runtime: number }>>>
+export type CustomFieldKeepsItsValue = Expect<Equals<Data['rating'], number>>
+export type CustomFieldSurvivesASection = Expect<Equals<Data['review'], { readonly rating: number }>>
+export type CustomFieldSurvivesAnArray = Expect<Equals<Data['ratings'], Array<{ readonly rating: number }>>>

@@ -1,4 +1,4 @@
-/** `true` everywhere, `false` nowhere, or per name — keyed like `previewPaths`. */
+/** `true` everywhere, `false` nowhere, or per name – keyed like `previewPaths`. */
 export type EponymePublicationOption = boolean | Record<string, boolean>
 
 /**

@@ -16,7 +16,7 @@ export interface UseEponymeValidationOptions {
 /**
  * Validates the edited document while the user types, using the same schema the server
  * enforces on write. Only the fields the user actually changed are flagged, so opening an
- * entry with incomplete content does not paint it red — until a publish attempt fails, at
+ * entry with incomplete content does not paint it red – until a publish attempt fails, at
  * which point everything is revealed.
  */
 export function useEponymeValidation(

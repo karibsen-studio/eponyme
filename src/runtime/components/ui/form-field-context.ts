@@ -1,7 +1,7 @@
 import type { InjectionKey } from 'vue'
 
 /**
- * Lets a renderer tell the `EPFormField` instances below it how to present themselves —
+ * Lets a renderer tell the `EPFormField` instances below it how to present themselves –
  * without every field component having to declare and forward the same two props.
  */
 export interface FormFieldContext {

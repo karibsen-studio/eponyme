@@ -1,4 +1,5 @@
 import { collection, defineEponymeConfig, field, form, today, toMs } from '../src/eponyme'
+import { callToActionBlock } from './eponyme/blocks/call-to-action'
 
 export default defineEponymeConfig({
   pages: {
@@ -94,7 +95,7 @@ export default defineEponymeConfig({
                   minItems: 1,
                   maxItems: 5,
                   addLabel: 'Add project',
-                  itemLabel: 'Project $i',
+                  itemLabel: '$title - $category',
                 }),
                 highlights: field.array({
                   label: 'Highlights',
@@ -106,6 +107,7 @@ export default defineEponymeConfig({
                   addLabel: 'Add highlight',
                   showCounter: false,
                 }),
+                callToAction: callToActionBlock({ label: 'Projects call to action' }),
               },
             },
             seo: {
@@ -222,7 +224,8 @@ export default defineEponymeConfig({
       },
       contact: {
         title: field.string({ defaultValue: 'Contact' }),
-        // The trimmed form: no sharing image, no Open Graph overrides.
+        featuredArticle: field.relation({ label: 'Featured article', to: 'articles' }),
+        callToAction: callToActionBlock(),
         seo: field.seo({ label: 'SEO (title and description only)', image: false, social: false }),
       },
     },
@@ -269,6 +272,14 @@ export default defineEponymeConfig({
       title: field.string({ label: 'Title', required: true, maxLength: 100 }),
       slug: field.slug({ label: 'Slug', required: true, maxLength: 120 }),
       excerpt: field.textarea({ label: 'Excerpt', required: true, maxLength: 220 }),
+      callToAction: callToActionBlock({ label: 'Article call to action' }),
+      related: field.relation({
+        label: 'Related articles',
+        description: 'Up to three other articles, picked from this collection.',
+        to: 'articles',
+        multiple: true,
+        maxItems: 3,
+      }),
       category: field.select({
         label: 'Category',
         placeholder: 'Select a category',
@@ -282,6 +293,11 @@ export default defineEponymeConfig({
         ],
       }),
       cover: field.image({ label: 'Cover image' }),
+      brochure: field.file({
+        label: 'Brochure',
+        description: 'Uploaded to the configured storage, or an address when there is none.',
+        accept: ['application/pdf'],
+      }),
       video: field.mediaPlayer({
         label: 'Video',
         description: 'Vimeo ou un fichier vidéo. YouTube n’est pas accepté ici.',
@@ -308,6 +324,27 @@ export default defineEponymeConfig({
         maxItems: 4,
         defaultValue: ['Nuxt'],
         placeholder: 'Ajouter un tag…',
+      }),
+    },
+  }),
+  movies: collection({
+    label: 'Movies',
+    description: 'Movies reviewed in the playground with a custom rating field.',
+    addLabel: 'Add a movie',
+    titleField: 'title',
+    slugField: 'slug',
+    fields: {
+      title: field.string({ label: 'Title', required: true, maxLength: 120 }),
+      slug: field.slug({ label: 'Slug', required: true, maxLength: 140 }),
+      description: field.textarea({ label: 'Description', required: true, maxLength: 500 }),
+      image: field.image({ label: 'Poster', required: true, sources: ['relative', 'absolute'] }),
+      rating: field.custom('rating', {
+        label: 'Rating',
+        description: 'Score from one to five stars.',
+        required: true,
+        min: 1,
+        max: 5,
+        defaultValue: 3,
       }),
     },
   }),

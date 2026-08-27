@@ -6,7 +6,7 @@ import { number } from './number'
  *
  * `position` follows the convention of the places that use the currency, not one rule applied
  * everywhere: `$12.00` and `12,00 €` are both correct, and swapping either reads as a mistake.
- * `decimals` is the currency's minor unit — yen and won have none, so a step of `0.01` would
+ * `decimals` is the currency's minor unit – yen and won have none, so a step of `0.01` would
  * offer an amount that cannot exist.
  */
 const CURRENCIES = {
@@ -53,8 +53,8 @@ export interface MoneyFieldOptions extends Omit<NumberFieldOptions, 'prefix' | '
  * unit as its step.
  *
  * It builds a number rather than declaring a type of its own, so the value stays a plain
- * `number` and every path a number already travels — validation, storage, the schema
- * fingerprint an import is checked against, public forms — is unchanged. Changing a field
+ * `number` and every path a number already travels – validation, storage, the schema
+ * fingerprint an import is checked against, public forms – is unchanged. Changing a field
  * from `number` to `money` therefore never invalidates an export.
  *
  * `min` is deliberately left alone: an amount can be a discount or a balance, and forcing

@@ -17,12 +17,10 @@ export default defineEventHandler(async (event) => {
   const definition = route && !route.submissions ? service.getForm(route.name) : undefined
   // A `custom` form stores nothing, so it has no submission endpoint at all.
   if (!route || !definition || definition.submission.mode !== 'managed')
-    throw createError({ statusCode: 404, statusMessage: t('server.formNotFound') })
+    throw createError({ status: 404, message: t('server.formNotFound') })
 
   setResponseHeader(event, 'Cache-Control', 'no-store')
 
-  // The same helper a `custom` route calls, so the two paths cannot drift into applying
-  // different limits under the same configuration.
   await assertEponymeFormRateLimit(event, route.name)
 
   const raw = await readEponymeRawBody(event, definition.maxBodyBytes, t('server.submissionTooLarge'))
@@ -41,7 +39,6 @@ export default defineEventHandler(async (event) => {
     return { submitted: true }
   }
 
-  // Validated next, so a listener never sees a payload the schema would reject.
   const validated = service.validate(route.name, payload)
   if (validated && 'errors' in validated) {
     setResponseStatus(event, 422)
@@ -52,7 +49,7 @@ export default defineEventHandler(async (event) => {
   await callEponymeBlockingHook('eponyme:form:beforeSubmit', beforeSubmit)
 
   const result = await service.submit(route.name, beforeSubmit.data)
-  if (!result) throw createError({ statusCode: 404, statusMessage: t('server.formNotFound') })
+  if (!result) throw createError({ status: 404, message: t('server.formNotFound') })
   if ('errors' in result) {
     setResponseStatus(event, 422)
     return { errors: result.errors }

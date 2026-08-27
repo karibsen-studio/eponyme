@@ -23,7 +23,7 @@ describe('bounded Eponyme request bodies', () => {
 
     await expect(readEponymeRawBody(event, 64, 'Too large.')).rejects.toMatchObject({
       statusCode: 413,
-      statusMessage: 'Too large.',
+      message: 'Too large.',
     })
   })
 })

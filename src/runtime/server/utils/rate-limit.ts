@@ -28,7 +28,7 @@ export async function assertEponymeRateLimit(
   setResponseHeader(event, 'X-RateLimit-Limit', String(result.limit))
   setResponseHeader(event, 'X-RateLimit-Remaining', '0')
   setResponseHeader(event, 'X-RateLimit-Reset', String(Math.ceil(result.resetAt.getTime() / 1000)))
-  throw createError({ statusCode: 429, statusMessage: t('server.rateLimited') })
+  throw createError({ status: 429, message: t('server.rateLimited') })
 }
 
 /** Prefer the socket address; use the first proxy address only when the runtime has no peer. */

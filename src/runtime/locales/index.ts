@@ -1,5 +1,3 @@
-// The attribute is not optional: without it Node refuses a JSON import from an ESM module,
-// which only shows up once the package is built and loaded — never in development.
 import en from './en.json' with { type: 'json' }
 
 /**
@@ -10,7 +8,7 @@ import en from './en.json' with { type: 'json' }
  * import is inlined into `dist/module.mjs` by the module build.
  *
  * Importing it also gives the keys as literal types, which is what makes `MessageKey`
- * derivable instead of generated — a derived type cannot drift from the file it derives from.
+ * derivable instead of generated – a derived type cannot drift from the file it derives from.
  */
 export const eponymeEnglishMessages = en
 
@@ -35,7 +33,7 @@ export interface EponymeLocaleDefinition {
 
 /**
  * `en-GB` rather than `en`: day-first, 24-hour, and a list read as "a, b or c" without the
- * serial comma — which is what the dashboard already shows.
+ * serial comma – which is what the dashboard already shows.
  */
 export const EPONYME_DEFAULT_LOCALE: EponymeLocaleDefinition = {
   code: 'en-GB',

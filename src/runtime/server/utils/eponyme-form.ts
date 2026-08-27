@@ -23,8 +23,8 @@ export function validateEponymeForm(name: string, body: unknown): EponymeFormVal
  * Applies the same two limits a managed form gets, to a route Eponyme does not own.
  *
  * Auto-imported because a `custom` form bypasses the module's endpoint entirely, and with it
- * every limit that endpoint applies. Nothing can add them on the host's behalf — the route is
- * theirs — so the least Eponyme can do is make them one line rather than a reimplementation.
+ * every limit that endpoint applies. Nothing can add them on the host's behalf – the route is
+ * theirs – so the least Eponyme can do is make them one line rather than a reimplementation.
  *
  * Call it before reading the body: a limit that runs after parsing has already paid for the
  * request it was meant to refuse. Throws a `429` carrying `Retry-After`, so an unguarded

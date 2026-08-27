@@ -8,6 +8,7 @@ import EponymeFolderNav from '../components/editor/EponymeFolderNav.vue'
 import EponymePageNavigation from '../components/editor/EponymePageNavigation.vue'
 import { useEponymeConfig } from '../composables/useEponymeConfig'
 import { useEponymeFavicon } from '../composables/useEponymeFavicon'
+import { useEponymeAuth } from '../composables/useEponymeAuth'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas } from '../utils/get-eponyme-schemas'
 import { humanizeLabel as label } from '../utils/humanize-label'
 import '../assets/dashboard.css'
@@ -21,6 +22,7 @@ const EponymeFormPage = defineAsyncComponent(() => import('../components/editor/
 const EponymeFolderPage = defineAsyncComponent(() => import('../components/editor/EponymeFolderPage.vue'))
 
 const route = useRoute()
+const auth = useEponymeAuth()
 const config = useEponymeConfig()
 const eponymeName = computed(() => Array.isArray(route.params.eponyme) ? route.params.eponyme.join('/') : String(route.params.eponyme))
 const schemas = getEponymeSchemas(config)
@@ -33,8 +35,10 @@ const collectionEntry = computed(() => Object.entries(collections).find(([name])
   return eponymeName.value.startsWith(prefix) && !eponymeName.value.slice(prefix.length).includes('/')
 }))
 const schema = computed(() => schemas[eponymeName.value] ?? collectionEntry.value?.[1].fields ?? {})
-const entries = Object.keys(schemas)
+const entries = Object.keys(schemas).filter(name => auth.can('content.read', { kind: 'singleton', name }))
 const indexPath = computed(() => route.path.slice(0, -(eponymeName.value.length + 1)) || '/')
+/** What `EponymeFolderNav` renders for, and what a sticky rich text toolbar has to clear. */
+const breadcrumbsVisible = computed(() => eponymeName.value.includes('/'))
 const isFolder = computed(() => !schemas[eponymeName.value] && !collection.value && !form.value && !collectionEntry.value && [...Object.keys(schemas), ...Object.keys(collections), ...Object.keys(forms)].some(name => name.startsWith(`${eponymeName.value}/`)))
 
 useEponymeFavicon()
@@ -42,7 +46,21 @@ useSeoMeta({
   title: () => t('entry.title', { entry: label(eponymeName.value.split('/').at(-1) ?? eponymeName.value) }),
 })
 
-if (!schemas[eponymeName.value] && !collection.value && !form.value && !collectionEntry.value && !isFolder.value) throw createError({ statusCode: 404, statusMessage: t('server.entryNotFound') })
+if (!schemas[eponymeName.value] && !collection.value && !form.value && !collectionEntry.value && !isFolder.value) throw createError({ status: 404, message: t('server.entryNotFound') })
+
+const readable = computed(() => {
+  if (collection.value) return auth.can('content.read', { kind: 'collection', name: eponymeName.value })
+  if (form.value) return auth.can('submissions.read', { kind: 'form', name: eponymeName.value })
+  if (collectionEntry.value) return auth.can('content.read', { kind: 'collection', name: collectionEntry.value[0] })
+  if (schemas[eponymeName.value]) return auth.can('content.read', { kind: 'singleton', name: eponymeName.value })
+  if (!isFolder.value) return false
+  const prefix = `${eponymeName.value}/`
+  return Object.keys(schemas).some(name => name.startsWith(prefix) && auth.can('content.read', { kind: 'singleton', name }))
+    || Object.keys(collections).some(name => name.startsWith(prefix) && auth.can('content.read', { kind: 'collection', name }))
+    || Object.keys(forms).some(name => name.startsWith(prefix) && auth.can('submissions.read', { kind: 'form', name }))
+})
+
+if (!readable.value) throw createError({ status: 403, message: t('server.forbidden') })
 </script>
 
 <template>
@@ -74,6 +92,7 @@ if (!schemas[eponymeName.value] && !collection.value && !form.value && !collecti
         :name="eponymeName"
         :schema="schema"
         :readonly-fields="collectionEntry ? [collectionEntry[1].slugField] : []"
+        :style="breadcrumbsVisible ? { '--ep-rich-text-sticky-top': '3.5rem' } : undefined"
       />
       <EponymePageNavigation
         v-if="!collectionEntry"

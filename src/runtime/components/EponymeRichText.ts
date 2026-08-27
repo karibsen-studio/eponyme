@@ -6,7 +6,7 @@ import { defineComponent, h } from 'vue'
  * The HTML is safe by construction rather than by inspection here: every write path runs it
  * through Eponyme's sanitisation policy before it is stored, and a payload carrying anything
  * the editor cannot produce is refused with a `422`. Re-sanitising in the browser would ship
- * a parser to every visitor to re-check a decision the server already made — and a client
+ * a parser to every visitor to re-check a decision the server already made – and a client
  * that can be skipped is not a security boundary anyway.
  *
  * It exists so a host application never writes `v-html` itself, which is the line between

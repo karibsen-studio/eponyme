@@ -21,7 +21,6 @@ const swatchClasses = 'ep:h-8 ep:w-8 ep:shrink-0 ep:cursor-pointer ep:rounded-lg
 const pickerValue = computed(() => normalizeHexColor(props.modelValue)?.slice(0, 7) ?? '#000000')
 
 const isPreset = computed(() => props.presets.some(preset => sameHexColor(preset.value, props.modelValue)))
-// The custom swatch takes over as soon as the value leaves the palette.
 const customActive = computed(() => Boolean(props.modelValue) && !isPreset.value)
 
 function select(value: string) {

@@ -16,7 +16,7 @@ export function useEponymeService(): EponymeService {
     const contentConfig = useRuntimeConfig().eponymeContent as ReturnType<typeof useRuntimeConfig>['eponymeContent'] & {
       cacheStorage?: string
     }
-    eponymeService = new EponymeService(eponymeConfig, prisma as PrismaEponymeClient, {
+    eponymeService = new EponymeService(eponymeConfig, prisma as unknown as PrismaEponymeClient, {
       cacheSeconds: contentConfig.cacheSeconds,
       cacheStorage: contentConfig.cacheStorage,
       resolveCacheStorage: mount => useStorage(mount) as EponymeSharedCacheStorage,

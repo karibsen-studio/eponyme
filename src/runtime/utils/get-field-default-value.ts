@@ -1,4 +1,5 @@
 import type { ArrayItemDefinition, ArrayItemFieldDefinition, FieldDefinition } from '../types/field'
+import { getEponymeCustomFieldType } from './eponyme-custom-field'
 
 export function isArrayItemFieldDefinition(definition: ArrayItemDefinition): definition is ArrayItemFieldDefinition {
   return 'type' in definition
@@ -23,6 +24,8 @@ export function getFieldDefaultValue(definition: FieldDefinition): unknown {
     case 'array': return []
     case 'checkboxGroup': return []
     case 'tags': return []
+    // A relation holds slugs, so an empty one is an empty list or an empty string.
+    case 'relation': return definition.options.multiple ? [] : ''
     case 'section': return Object.fromEntries(
       Object.entries(definition.options.fields).map(([name, field]) => [name, getFieldDefaultValue(field)]),
     )
@@ -37,6 +40,7 @@ export function getFieldDefaultValue(definition: FieldDefinition): unknown {
     case 'url': return { href: '', type: 'external', openInNewTab: false, download: false }
     case 'mediaPlayer': return { provider: '', url: '', id: '' }
     case 'boolean': return false
+    case 'custom': return cloneDefaultValue(getEponymeCustomFieldType(definition.name).defaultValue)
     default: return ''
   }
 }

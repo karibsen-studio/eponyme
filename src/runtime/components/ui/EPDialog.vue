@@ -1,15 +1,27 @@
 <script setup lang="ts">
 import { t } from '#eponyme/locale'
 import { createReusableTemplate, useMediaQuery } from '@vueuse/core'
+import { computed } from 'vue'
 import { DialogClose, DialogContent, DialogDescription, DialogOverlay, DialogPortal, DialogRoot, DialogTitle, DialogTrigger } from 'reka-ui'
 import EPButton from './EPButton.vue'
 import EPSheet from './EPSheet.vue'
 
-defineProps<{ open?: boolean, title: string, description?: string, role?: 'dialog' | 'alertdialog' }>()
+const props = withDefaults(defineProps<{
+  open?: boolean
+  title: string
+  description?: string
+  role?: 'dialog' | 'alertdialog'
+  size?: 'md' | 'lg'
+}>(), { size: 'md' })
+
 const emit = defineEmits<{ 'update:open': [value: boolean] }>()
 
 const [DefineContentTemplate, ReuseContentTemplate] = createReusableTemplate()
 const isMobile = useMediaQuery('(max-width: 767px)')
+
+const width = computed(() => props.size === 'lg'
+  ? 'ep:w-[min(60rem,calc(100vw-2rem))]'
+  : 'ep:w-[min(32rem,calc(100vw-2rem))]')
 </script>
 
 <template>
@@ -47,10 +59,11 @@ const isMobile = useMediaQuery('(max-width: 767px)')
       <ReuseContentTemplate />
     </EPSheet>
     <DialogPortal v-else>
-      <DialogOverlay class="eponyme-dialog-overlay ep:fixed ep:inset-0 ep:z-50 ep:bg-black/65 ep:backdrop-blur-sm" />
+      <DialogOverlay class="eponyme-dialog-overlay eponyme-portal ep:fixed ep:inset-0 ep:z-50 ep:bg-black/65 ep:backdrop-blur-sm" />
       <DialogContent
         :role="role"
-        class="eponyme-dialog-content eponyme-portal ep:fixed ep:top-1/2 ep:left-1/2 ep:z-50 ep:w-[min(32rem,calc(100vw-2rem))] ep:rounded-2xl ep:border-0 ep:bg-surface-raised ep:p-6 ep:font-sans ep:text-text-default ep:outline-none"
+        class="eponyme-dialog-content eponyme-portal ep:fixed ep:top-1/2 ep:left-1/2 ep:z-50 ep:rounded-2xl ep:border-0 ep:bg-surface-raised ep:p-6 ep:font-sans ep:text-text-default ep:outline-none"
+        :class="width"
       >
         <ReuseContentTemplate />
         <DialogClose as-child>

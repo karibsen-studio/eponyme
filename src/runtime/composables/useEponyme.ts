@@ -30,7 +30,7 @@ export interface UseEponymeOptions {
  * An inferred return type has to be expanded when the declaration files are generated, and
  * the expansion loses `typeof eponymeConfig`: it came out as `EponymeDataByName<any, Name>`,
  * which collapses every field to the union of all possible field values. Source and
- * playground were unaffected — they read `src` — so only installed versions of the package
+ * playground were unaffected – they read `src` – so only installed versions of the package
  * lost their types, on the one composable everything else goes through.
  */
 export interface UseEponymeResult<Data extends Record<string, unknown>> {
@@ -104,9 +104,11 @@ export function useEponyme<const Name extends ConfigEponymeName>(
       const next = await requestFetch<EponymeResponse<Name>>(`/api/eponyme/${name}`, {
         method: 'PATCH',
         query: { action },
-        body: action === 'schedule'
-          ? { data: patch ?? data.value, ...schedule }
-          : patch ?? data.value,
+        body: action === 'draft'
+          ? patch ?? data.value
+          : action === 'schedule'
+            ? schedule
+            : {},
       })
       response.value = next as typeof response.value
       if (action !== 'draft') {
@@ -124,7 +126,7 @@ export function useEponyme<const Name extends ConfigEponymeName>(
     }
     catch (error) {
       const fetchError = error as FetchError<{ errors?: ValidationErrors }>
-      if (fetchError.statusCode === 422)
+      if (fetchError.status === 422)
         errors.value = fetchError.data?.errors ?? {}
       throw error
     }

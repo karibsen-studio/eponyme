@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { t } from '#eponyme/locale'
 import { useRequestFetch, useSeoMeta } from '#app'
-import type { FetchError } from 'ofetch'
-import { ref } from 'vue'
-import type { EponymeAuthUser, EponymeManagedUserResult, EponymeRole } from '../types'
+import { nextTick, ref } from 'vue'
+import type { EponymeAuthUser, EponymeManagedUserResult, EponymeRole, EponymeRoleOption } from '../types'
 import EponymeCopy from '../components/editor/EponymeCopy.vue'
 import { useEponymeAuth } from '../composables/useEponymeAuth'
 import { useEponymeFavicon } from '../composables/useEponymeFavicon'
@@ -16,6 +15,7 @@ import EPSelect from '../components/ui/EPSelect.vue'
 import EPSwitch from '../components/ui/EPSwitch.vue'
 import EPTooltip from '../components/ui/EPTooltip.vue'
 import EPAvatar from '../components/ui/EPAvatar.vue'
+import { getEponymeErrorMessage } from '../utils/eponyme-error'
 import '../assets/dashboard.css'
 
 useEponymeFavicon()
@@ -29,19 +29,23 @@ const users = ref<EponymeAuthUser[]>([])
 const pending = ref(true)
 const error = ref('')
 const createOpen = ref(false)
+const createError = ref('')
+const createErrorElement = ref<HTMLElement>()
 const username = ref('')
 const role = ref<EponymeRole>('editor')
 const temporaryCredentials = ref<EponymeManagedUserResult>()
 const resetTarget = ref<EponymeAuthUser>()
 const resetPending = ref(false)
 const resetError = ref('')
-const roleOptions = [
-  { label: t('role.viewer'), value: 'viewer' },
-  { label: t('role.editor'), value: 'editor' },
-  { label: t('role.owner'), value: 'owner' },
-]
+const roleOptions = ref<Array<{ label: string, value: string }>>([])
 
-await loadUsers()
+await Promise.all([loadUsers(), loadRoles()])
+
+async function loadRoles() {
+  // The registry already names a built-in role from the catalogue, so nothing is renamed here.
+  const response = await requestFetch<{ roles: EponymeRoleOption[] }>('/api/eponyme-roles', { cache: 'no-store' })
+  roleOptions.value = response.roles.map(item => ({ label: item.label, value: item.value }))
+}
 
 async function loadUsers() {
   pending.value = true
@@ -55,7 +59,7 @@ async function loadUsers() {
 }
 
 async function createUser() {
-  error.value = ''
+  createError.value = ''
   try {
     const result = await requestFetch<EponymeManagedUserResult>('/api/eponyme-users', {
       method: 'POST',
@@ -68,8 +72,15 @@ async function createUser() {
     role.value = 'editor'
   }
   catch (caught) {
-    error.value = (caught as FetchError).statusMessage ?? t('server.userCreateFailed')
+    createError.value = getEponymeErrorMessage(caught, t('server.userCreateFailed'))
+    await nextTick()
+    createErrorElement.value?.focus()
   }
+}
+
+function setCreateOpen(open: boolean) {
+  createOpen.value = open
+  createError.value = ''
 }
 
 async function updateUser(user: EponymeAuthUser, changes: { role?: EponymeRole, active?: boolean }) {
@@ -82,7 +93,7 @@ async function updateUser(user: EponymeAuthUser, changes: { role?: EponymeRole, 
     replaceUser(response.user)
   }
   catch (caught) {
-    error.value = (caught as FetchError).statusMessage ?? t('users.updateFailed')
+    error.value = getEponymeErrorMessage(caught, t('users.updateFailed'))
     await loadUsers()
   }
 }
@@ -112,7 +123,7 @@ async function resetPassword() {
     temporaryCredentials.value = result
   }
   catch (caught) {
-    resetError.value = (caught as FetchError).statusMessage ?? t('users.resetFailed')
+    resetError.value = getEponymeErrorMessage(caught, t('users.resetFailed'))
   }
   finally {
     resetPending.value = false
@@ -139,14 +150,14 @@ function replaceUser(user: EponymeAuthUser) {
         <EPButton
           size="sm"
           variant="primary"
-          @click="createOpen = true"
+          @click="setCreateOpen(true)"
         >
           {{ t('users.add') }}
         </EPButton>
       </header>
 
       <p
-        v-if="error"
+        v-show="error"
         class="ep:mt-6 ep:rounded-xl ep:bg-danger/10 ep:p-4 ep:text-sm ep:text-danger"
         role="alert"
       >
@@ -211,12 +222,20 @@ function replaceUser(user: EponymeAuthUser) {
       :open="createOpen"
       :title="t('users.add')"
       :description="t('users.addDescription')"
-      @update:open="createOpen = $event"
+      @update:open="setCreateOpen"
     >
       <form
         class="ep:grid ep:gap-4"
         @submit.prevent="createUser"
       >
+        <p
+          v-if="createError"
+          ref="createErrorElement"
+          tabindex="-1"
+          class="ep:m-0 ep:rounded-lg ep:bg-danger/10 ep:p-3 ep:text-sm ep:text-danger ep:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-danger/30"
+        >
+          {{ createError }}
+        </p>
         <EPFormField
           id="eponyme-user-username"
           :label="t('users.username')"
@@ -242,13 +261,12 @@ function replaceUser(user: EponymeAuthUser) {
           />
         </EPFormField>
         <div class="ep:flex ep:justify-end ep:gap-2">
-          <EPButton @click="createOpen = false">
+          <EPButton @click="setCreateOpen(false)">
             {{ t('action.cancel') }}
           </EPButton>
           <EPButton
             type="submit"
             variant="primary"
-            :disabled="!username"
           >
             {{ t('users.create') }}
           </EPButton>

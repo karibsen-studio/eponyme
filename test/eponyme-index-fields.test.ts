@@ -22,6 +22,7 @@ describe('datetime and duration indexes', () => {
   })
 
   it('uses the widened index algorithm version', () => {
-    expect(describeEponymeIndexSchema(schema)).toMatch(/^v2\|/)
+    // Bumped whenever the rows change for the same configuration – relations are indexed now.
+    expect(describeEponymeIndexSchema(schema)).toMatch(/^v3\|/)
   })
 })

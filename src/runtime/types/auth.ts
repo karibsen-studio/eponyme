@@ -1,6 +1,6 @@
-export const EPONYME_ROLES = ['viewer', 'editor', 'owner'] as const
+import type { EponymeDefaultRole, EponymeRole } from './permissions'
 
-export type EponymeRole = typeof EPONYME_ROLES[number]
+export type { EponymeDefaultRole, EponymeRole }
 
 export interface EponymeAuthUser {
   id: string
@@ -19,12 +19,4 @@ export interface EponymeAuthSession {
 export interface EponymeManagedUserResult {
   user: EponymeAuthUser
   temporaryPassword: string
-}
-
-export function isEponymeRole(value: unknown): value is EponymeRole {
-  return typeof value === 'string' && EPONYME_ROLES.includes(value as EponymeRole)
-}
-
-export function canEditEponyme(role: EponymeRole | undefined): boolean {
-  return role === 'editor' || role === 'owner'
 }

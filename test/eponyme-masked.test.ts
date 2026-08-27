@@ -35,7 +35,7 @@ describe('field.masked', () => {
   })
 })
 
-describe('field.masked — validation', () => {
+describe('field.masked: validation', () => {
   const schema = { siret: field.masked({ mask: '### ### ### #####' }) } satisfies EponymeSchema
 
   it('accepts a value in the masked format', () => {

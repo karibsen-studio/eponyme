@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { t } from '#eponyme/locale'
 import { navigateTo, useRuntimeConfig, useSeoMeta } from '#app'
-import type { FetchError } from 'ofetch'
 import { computed, ref } from 'vue'
 import { useEponymeAuth } from '../composables/useEponymeAuth'
 import { useEponymeFavicon } from '../composables/useEponymeFavicon'
+import EponymeScreen from '../components/editor/EponymeScreen.vue'
 import EPButton from '../components/ui/EPButton.vue'
 import EPFormField from '../components/ui/EPFormField.vue'
 import EPInputPassword from '../components/ui/EPInputPassword.vue'
-import '../assets/dashboard.css'
+import { getEponymeErrorMessage } from '../utils/eponyme-error'
 
 useEponymeFavicon()
 useSeoMeta({ title: t('password.title') })
@@ -31,8 +31,7 @@ async function submit() {
     await navigateTo(dashboardPath.value)
   }
   catch (caught) {
-    const fetchError = caught as FetchError
-    error.value = fetchError.statusMessage ?? t('server.passwordChangeFailed')
+    error.value = getEponymeErrorMessage(caught, t('server.passwordChangeFailed'))
   }
 }
 
@@ -43,11 +42,8 @@ async function logout() {
 </script>
 
 <template>
-  <main class="eponyme-root ep:flex ep:min-h-screen ep:items-center ep:justify-center ep:bg-surface-page ep:px-6 ep:py-12 ep:font-sans ep:text-text-default">
+  <EponymeScreen class="ep:flex ep:items-center ep:justify-center ep:px-6 ep:py-12">
     <section class="ep:w-full ep:max-w-md">
-      <p class="ep:m-0 ep:text-[11px] ep:font-semibold ep:tracking-widest ep:text-text-muted ep:uppercase">
-        {{ t('sidebar.logo') }}
-      </p>
       <h1 class="ep:mt-2 ep:mb-2 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-text-strong">
         {{ t('password.heading') }}
       </h1>
@@ -96,7 +92,7 @@ async function logout() {
           />
         </EPFormField>
         <p
-          v-if="error"
+          v-show="error"
           class="ep:m-0 ep:text-sm ep:text-danger"
           role="alert"
         >
@@ -117,11 +113,5 @@ async function logout() {
         </div>
       </form>
     </section>
-  </main>
+  </EponymeScreen>
 </template>
-
-<style scoped>
-:global(body) {
-  margin: 0;
-}
-</style>

@@ -5,6 +5,7 @@ import type { FetchError } from 'ofetch'
 import { computed, ref, watch } from 'vue'
 import type { EponymeCollectionDefinitionBase } from '../../types'
 import type { EponymeCollectionEntry } from '../../server/services/eponyme-store'
+import { getEponymeErrorMessage } from '../../utils/eponyme-error'
 import { normalizeSlug } from '../../utils/normalize-slug'
 import { useEponymeAuth } from '../../composables/useEponymeAuth'
 import EPAlertDialog from '../ui/EPAlertDialog.vue'
@@ -29,7 +30,13 @@ const collectionEntries = useState<Record<string, EponymeCollectionEntry[]>>('ep
 const endpoint = computed(() => `/api/eponyme-collections/${props.name}`)
 const trashEndpoint = computed(() => `/api/eponyme-trash/${props.name}`)
 const auth = useEponymeAuth()
+const resource = computed(() => ({ kind: 'collection' as const, name: props.name }))
+const canCreate = computed(() => auth.can('content.create', resource.value))
+const canTrash = computed(() => auth.can('content.trash', resource.value))
+const canRestore = computed(() => auth.can('content.restore', resource.value))
+const canPurge = computed(() => auth.can('content.purge', resource.value))
 const view = ref<'entries' | 'trash'>('entries')
+const duplicateOf = ref<EponymeCollectionEntry>()
 const entryAction = ref<{ type: 'trash' | 'purge', entry: EponymeCollectionEntry }>()
 const entryActionPending = ref(false)
 const entryActionError = ref('')
@@ -41,7 +48,7 @@ const { data: response, pending, refresh } = useAsyncData(
 
 const { data: trashResponse, refresh: refreshTrash } = useAsyncData(
   `eponyme:collection-trash:${props.name}`,
-  () => auth.canEdit.value
+  () => canRestore.value
     ? requestFetch<{ entries: EponymeCollectionEntry[] }>(trashEndpoint.value)
     : Promise.resolve({ entries: [] }),
 )
@@ -75,7 +82,21 @@ function resetCreateForm() {
   title.value = ''
   slug.value = ''
   slugTouched.value = false
+  duplicateOf.value = undefined
   errors.value = {}
+}
+
+/**
+ * Reuses the create dialog: a copy is a new entry that happens to start from another one's
+ * draft, so it goes through the same endpoint, the same validation and the same slug rules.
+ */
+function duplicateEntry(entry: EponymeCollectionEntry) {
+  duplicateOf.value = entry
+  slugTouched.value = false
+  title.value = t('collection.copyOf', { title: entry.title })
+  slug.value = normalizeSlug(title.value)
+  errors.value = {}
+  createOpen.value = true
 }
 
 async function setCreateOpen(open: boolean) {
@@ -94,9 +115,17 @@ async function createEntry() {
   creating.value = true
   errors.value = {}
   try {
+    // Read at submit rather than when the dialog opened, so a copy carries what the entry
+    // holds now – and only the draft, since that is what a new entry starts as.
+    const source = duplicateOf.value
+      ? (await requestFetch<{ data: Record<string, unknown> }>(`/api/eponyme/${props.name}/${encodeURIComponent(duplicateOf.value.slug)}`, {
+          query: { version: 'draft', raw: 1 },
+        })).data
+      : {}
     const result = await requestFetch<{ slug: string }>(endpoint.value, {
       method: 'POST',
       body: {
+        ...source,
         [props.definition.titleField]: title.value,
         [props.definition.slugField]: slug.value,
       },
@@ -149,8 +178,10 @@ async function confirmEntryAction() {
     entryAction.value = undefined
   }
   catch (caught) {
-    entryActionError.value = (caught as FetchError).statusMessage
-      ?? t(action.type === 'trash' ? 'collection.trashFailed' : 'collection.purgeFailed')
+    entryActionError.value = getEponymeErrorMessage(
+      caught,
+      t(action.type === 'trash' ? 'collection.trashFailed' : 'collection.purgeFailed'),
+    )
   }
   finally {
     entryActionPending.value = false
@@ -178,7 +209,7 @@ function formatDate(value: string | null) {
       </div>
       <div class="ep:flex ep:flex-wrap ep:items-center ep:gap-2">
         <EPButton
-          v-if="auth.canEdit.value && trashEntries.length"
+          v-if="canRestore && trashEntries.length"
           size="md"
           :variant="view === 'trash' ? 'primary' : 'secondary'"
           @click="view = view === 'trash' ? 'entries' : 'trash'"
@@ -186,7 +217,7 @@ function formatDate(value: string | null) {
           {{ t('collection.trash', { count: trashEntries.length }) }}
         </EPButton>
         <EPButton
-          v-if="auth.canEdit.value"
+          v-if="canCreate"
           variant="primary"
           @click="createOpen = true"
         >
@@ -205,7 +236,7 @@ function formatDate(value: string | null) {
       <article
         v-for="entry in trashEntries"
         :key="entry.slug"
-        class="ep:flex ep:flex-wrap ep:items-center ep:justify-between ep:gap-3 ep:rounded-xl ep:bg-surface-active/50 ep:p-4"
+        class="ep:flex ep:min-w-0 ep:flex-col ep:items-stretch ep:justify-between ep:gap-3 ep:rounded-xl ep:bg-surface-active/50 ep:p-4 ep:md:flex-row ep:md:items-center"
       >
         <div
           class="ep:min-w-0 ep:flex-1"
@@ -216,15 +247,18 @@ function formatDate(value: string | null) {
         </div>
         <div class="ep:flex ep:shrink-0 ep:gap-2">
           <EPButton
+            v-if="canRestore"
             size="sm"
+            class="ep:flex-1 ep:md:flex-none"
             @click="restoreEntry(entry)"
           >
             {{ t('action.restore') }}
           </EPButton>
           <EPButton
-            v-if="auth.isOwner.value"
+            v-if="canPurge"
             size="sm"
             variant="danger"
+            class="ep:flex-1 ep:md:flex-none"
             @click="requestEntryAction('purge', entry)"
           >
             {{ t('collection.purge') }}
@@ -246,7 +280,7 @@ function formatDate(value: string | null) {
       <article
         v-for="entry in entries"
         :key="entry.slug"
-        class="ep:group ep:flex ep:items-center ep:justify-between ep:gap-4 ep:rounded-xl ep:bg-surface-active/50 ep:p-4"
+        class="ep:group ep:flex ep:min-w-0 ep:flex-col ep:items-stretch ep:justify-between ep:gap-3 ep:rounded-xl ep:bg-surface-active/50 ep:p-4 ep:md:flex-row ep:md:items-center ep:md:gap-4"
       >
         <NuxtLink
           :to="`${basePath}/${name}/${entry.slug}`"
@@ -262,15 +296,29 @@ function formatDate(value: string | null) {
             <template v-if="entry.scheduledUnpublishAt"><br>{{ t('collection.scheduledUnpublish', { date: formatDate(entry.scheduledUnpublishAt) }) }}</template>
           </span>
         </NuxtLink>
-        <EPButton
-          v-if="auth.canEdit.value"
-          size="sm"
-          variant="danger"
-          class="ep:shrink-0 ep:md:opacity-0 ep:md:group-hover:opacity-100 ep:md:focus-visible:opacity-100"
-          @click="requestEntryAction('trash', entry)"
+        <div
+          v-if="canCreate || canTrash"
+          class="ep:flex ep:shrink-0 ep:gap-2 ep:md:opacity-0 ep:md:group-hover:opacity-100 ep:md:focus-within:opacity-100"
         >
-          {{ t('action.delete') }}
-        </EPButton>
+          <EPButton
+            v-if="canCreate"
+            size="sm"
+            class="ep:flex-1 ep:md:flex-none"
+            :title="t('collection.duplicateTitle')"
+            @click="duplicateEntry(entry)"
+          >
+            {{ t('action.duplicate') }}
+          </EPButton>
+          <EPButton
+            v-if="canTrash"
+            size="sm"
+            variant="danger"
+            class="ep:flex-1 ep:md:flex-none"
+            @click="requestEntryAction('trash', entry)"
+          >
+            {{ t('action.delete') }}
+          </EPButton>
+        </div>
       </article>
     </div>
     <div
@@ -281,7 +329,7 @@ function formatDate(value: string | null) {
         {{ t('collection.empty') }}
       </p>
       <EPButton
-        v-if="auth.canEdit.value"
+        v-if="canCreate"
         class="ep:mt-4"
         @click="createOpen = true"
       >
@@ -290,9 +338,9 @@ function formatDate(value: string | null) {
     </div>
 
     <EPDialog
-      :open="createOpen && auth.canEdit.value"
-      :title="definition.addLabel || t('collection.createTitle')"
-      :description="t('collection.createDescription')"
+      :open="createOpen && canCreate"
+      :title="duplicateOf ? t('collection.duplicateTitle') : definition.addLabel || t('collection.createTitle')"
+      :description="duplicateOf ? t('collection.duplicateDescription', { title: duplicateOf.title }) : t('collection.createDescription')"
       @update:open="setCreateOpen"
     >
       <form
@@ -340,7 +388,7 @@ function formatDate(value: string | null) {
             variant="primary"
             :loading="creating"
           >
-            {{ t('action.create') }}
+            {{ duplicateOf ? t('action.duplicate') : t('action.create') }}
           </EPButton>
         </div>
       </form>

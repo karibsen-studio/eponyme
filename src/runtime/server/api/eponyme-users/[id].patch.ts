@@ -1,17 +1,18 @@
 import { t } from '#eponyme/locale'
 import { createError, defineEventHandler, getRouterParam } from 'h3'
 import { useEponymeAuthService } from '../../services/eponyme-auth-service'
-import { assertEponymeMutationOrigin, requireEponymeUser } from '../../utils/auth'
+import { assertEponymeMutationOrigin } from '../../utils/auth'
+import { requireEponymePermission } from '../../utils/eponyme-permissions'
 import { readEponymeBody } from '../../utils/body'
 
 export default defineEventHandler(async (event) => {
   assertEponymeMutationOrigin(event)
-  const actor = await requireEponymeUser(event, { roles: ['owner'] })
+  const actor = await requireEponymePermission(event, 'users.manage', { kind: 'system', name: 'users' })
   const id = getRouterParam(event, 'id', { decode: true })
-  if (!id) throw createError({ statusCode: 404, statusMessage: t('server.userNotFound') })
+  if (!id) throw createError({ status: 404, message: t('server.userNotFound') })
   const body = await readEponymeBody<{ role?: unknown, active?: unknown }>(event)
-  const result = await useEponymeAuthService().updateUser(id, body ?? {}, actor.id)
+  const result = await useEponymeAuthService().updateUser(id, body ?? {}, actor)
   if (!result.user)
-    throw createError({ statusCode: result.notFound ? 404 : 422, statusMessage: result.error })
+    throw createError({ status: result.notFound ? 404 : 422, message: result.error })
   return { user: result.user }
 })

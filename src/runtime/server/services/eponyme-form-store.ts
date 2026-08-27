@@ -216,6 +216,18 @@ export class EponymeFormService {
     return true
   }
 
+  /**
+   * Scoped by form name as well as by id: the ids come from the client, and an opaque id
+   * alone would let one form's page delete another form's rows.
+   */
+  async deleteSubmissions(name: string, ids: string[]): Promise<number | undefined> {
+    const definition = this.forms[name]
+    if (!definition || !definition.submission.store) return undefined
+    if (!ids.length) return 0
+    const { count } = await this.submissions().deleteMany({ where: { formName: name, id: { in: ids } } })
+    return count
+  }
+
   async deleteAllSubmissions(name: string): Promise<number | undefined> {
     const definition = this.forms[name]
     if (!definition || !definition.submission.store) return undefined

@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import EPFormField from '../ui/EPFormField.vue'
 import EPInputText from '../ui/EPInputText.vue'
 import type { PhoneFieldOptions } from '../../types/field'
-import { normalizeEponymePhone } from '../../utils/normalize-phone'
+import { ensureEponymePhoneParser, normalizeEponymePhone } from '#eponyme/phone'
 
 const props = withDefaults(defineProps<{
   id: string
@@ -28,7 +28,14 @@ const options = computed<PhoneFieldOptions>(() => ({
   defaultCountry: props.defaultCountry,
   detectCountry: props.detectCountry,
 }))
-const parsed = computed(() => normalizeEponymePhone(value.value, options.value))
+// Rendering this field is the signal that the metadata is worth fetching. `ready` is what makes
+// the first answer, given before it arrived, get recomputed once it has.
+const ready = ref(false)
+void ensureEponymePhoneParser().then(() => (ready.value = true))
+const parsed = computed(() => {
+  void ready.value
+  return normalizeEponymePhone(value.value, options.value)
+})
 
 /**
  * Stored in E.164, so what leaves this field is canonical. Done on blur rather than on every

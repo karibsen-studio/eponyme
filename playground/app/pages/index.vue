@@ -126,8 +126,6 @@ useSeoMeta({
         </div>
       </section>
 
-      <!-- `eponymeMediaEmbedUrl` is auto-imported: the embed address is derived from the
-           stored URL, so the page never has to know each provider's format. -->
       <section
         v-if="data.content.hero.showreel.provider"
         class="showreel"

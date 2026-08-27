@@ -1,4 +1,9 @@
-import type { ArrayFieldDefinition, ArrayItemValue, BooleanFieldDefinition, CheckboxGroupFieldDefinition, EmailFieldDefinition, FieldDefinition, MediaPlayerFieldDefinition, MediaPlayerValue, NumberFieldDefinition, PhoneFieldDefinition, RadioFieldDefinition, SectionFieldDefinition, SectionValue, SelectFieldDefinition, SlugFieldDefinition, StringFieldDefinition, TabFieldDefinition, TagsFieldDefinition, TagsValueOf, TabsValue, TextareaFieldDefinition, UrlFieldDefinition, UrlValue } from './field'
+import type { ArrayFieldDefinition, ArrayItemValue, BooleanFieldDefinition, CheckboxGroupFieldDefinition, EmailFieldDefinition, EponymeCustomFieldDefinition, FieldDefinition, MediaPlayerFieldDefinition, MediaPlayerValue, NumberFieldDefinition, PhoneFieldDefinition, RadioFieldDefinition, RelationFieldDefinition, SectionFieldDefinition, SectionValue, SelectFieldDefinition, SlugFieldDefinition, StringFieldDefinition, TabFieldDefinition, TagsFieldDefinition, TagsValueOf, TabsValue, TextareaFieldDefinition, UrlFieldDefinition, UrlValue } from './field'
+
+// Kept here rather than beside the store: the hook contract needs them, and an application
+// typing a Nitro plugin should not have to pull the whole store into its program.
+export type EponymeAction = 'draft' | 'publish' | 'unpublish' | 'revertToDraft' | 'schedule' | 'unschedule'
+export type EponymeStatus = 'draft' | 'published' | 'unpublished'
 
 export type EponymeSchema = Record<string, FieldDefinition>
 export interface EponymeCollectionDefinitionBase {
@@ -109,10 +114,12 @@ export type FieldValue<T extends FieldDefinition>
         : T extends MediaPlayerFieldDefinition ? MediaPlayerValue
           : T extends ArrayFieldDefinition<infer Item> ? Array<ArrayItemValue<Item>>
             : T extends CheckboxGroupFieldDefinition<infer Value> ? Value[]
-              : T extends TagsFieldDefinition<infer Options> ? Array<TagsValueOf<Options>>
-                : T extends SectionFieldDefinition<infer Section> ? SectionValue<Section>
-                  : T extends TabFieldDefinition<infer Tabs> ? TabsValue<Tabs>
-                    : string
+              : T extends RelationFieldDefinition<infer Multiple> ? (Multiple extends true ? string[] : string)
+                : T extends TagsFieldDefinition<infer Options> ? Array<TagsValueOf<Options>>
+                  : T extends EponymeCustomFieldDefinition<string, infer Value, object> ? Value
+                    : T extends SectionFieldDefinition<infer Section> ? SectionValue<Section>
+                      : T extends TabFieldDefinition<infer Tabs> ? TabsValue<Tabs>
+                        : string
 
 export type EponymeData<T extends EponymeSchema> = {
   [K in keyof T]: T[K] extends FieldDefinition ? FieldValue<T[K]> : never
@@ -154,7 +161,7 @@ type FilterableFieldType = 'tags' | 'checkboxGroup' | 'select' | 'radio' | 'bool
 type FilterOperand<T extends FieldDefinition> = FieldValue<T> extends readonly (infer Item)[] ? Item : FieldValue<T>
 
 /**
- * Bounds, offered only where alphabetical order is the value's natural order — which is
+ * Bounds, offered only where alphabetical order is the value's natural order – which is
  * `field.date()` and `field.datetime()`, both pinned to chronological strings. On a tag or a select, comparing
  * with `gte` would sort labels, which answers no question anyone asks.
  */
@@ -173,7 +180,7 @@ type FilterOperators<T extends FieldDefinition> = {
   /**
    * Substring of the stored value, case-insensitive.
    *
-   * The only operator that cannot use the index's ordering — a leading wildcard scans it.
+   * The only operator that cannot use the index's ordering – a leading wildcard scans it.
    * That still reads a narrow table instead of every entry's content, but it does not
    * scale the way the others do.
    */

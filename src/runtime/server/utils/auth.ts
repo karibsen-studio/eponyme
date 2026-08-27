@@ -22,11 +22,11 @@ export async function requireEponymeUser(
   options: { roles?: EponymeRole[], allowPasswordChangeRequired?: boolean } = {},
 ): Promise<EponymeAuthUser> {
   const user = await getEponymeEventUser(event)
-  if (!user) throw createError({ statusCode: 401, statusMessage: t('server.authRequired') })
+  if (!user) throw createError({ status: 401, message: t('server.authRequired') })
   if (user.mustChangePassword && !options.allowPasswordChangeRequired)
-    throw createError({ statusCode: 403, statusMessage: t('server.passwordChangeRequired'), data: { code: 'PASSWORD_CHANGE_REQUIRED' } })
+    throw createError({ status: 403, message: t('server.passwordChangeRequired'), data: { code: 'PASSWORD_CHANGE_REQUIRED' } })
   if (options.roles && !options.roles.includes(user.role))
-    throw createError({ statusCode: 403, statusMessage: t('server.forbidden') })
+    throw createError({ status: 403, message: t('server.forbidden') })
   return user
 }
 
@@ -49,5 +49,5 @@ export function assertEponymeMutationOrigin(event: H3Event): void {
   if (!origin) return
   const requestUrl = getRequestURL(event)
   if (origin !== requestUrl.origin)
-    throw createError({ statusCode: 403, statusMessage: t('server.badOrigin') })
+    throw createError({ status: 403, message: t('server.badOrigin') })
 }

@@ -15,9 +15,9 @@ const props = withDefaults(defineProps<{
   openFolders: string[]
   /** Reveals every folder while a search is active, without touching `openFolders`. */
   forceOpen?: boolean
-  canEdit?: boolean
+  canCreate?: (collection: string) => boolean
   depth?: number
-}>(), { forceOpen: false, canEdit: false, depth: 0 })
+}>(), { forceOpen: false, canCreate: () => false, depth: 0 })
 
 const emit = defineEmits<{ 'update:openFolders': [value: string[]] }>()
 
@@ -62,7 +62,7 @@ function setOpen(path: string, open: boolean) {
           />
         </template>
         <template
-          v-if="node.kind === 'collection' && canEdit"
+          v-if="node.kind === 'collection' && canCreate(node.path)"
           #action
         >
           <NuxtLink
@@ -80,7 +80,7 @@ function setOpen(path: string, open: boolean) {
           :statuses="statuses"
           :open-folders="openFolders"
           :force-open="forceOpen"
-          :can-edit="canEdit"
+          :can-create="canCreate"
           :depth="depth + 1"
           @update:open-folders="emit('update:openFolders', $event)"
         />

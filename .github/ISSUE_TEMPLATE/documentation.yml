@@ -1,0 +1,37 @@
+name: "📚 Documentation"
+description: Report something wrong, missing or confusing in the documentation
+labels: ["documentation"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a typo or a one-line fix, a pull request against `docs/` is usually faster than an issue.
+
+  - type: input
+    id: page
+    attributes:
+      label: Page
+      description: The URL of the page, or the path of the file under `docs/`.
+      placeholder: https://eponyme-docs.vercel.app/advanced/editorial-lifecycle
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What is wrong with it?
+      options:
+        - It is inaccurate – the code does something else
+        - It is out of date – it describes an older version
+        - It is missing – the behaviour is not documented anywhere
+        - It is confusing – accurate, but hard to follow
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: What does it say, what should it say, and how did you find out?
+    validations:
+      required: true

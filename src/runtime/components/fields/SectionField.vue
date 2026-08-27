@@ -19,6 +19,8 @@ const props = defineProps<{
   errors?: ValidationErrors
   hideHeader?: boolean
   hideTopBorder?: boolean
+  /** Drawn as a card rather than as a page section: a section inside a section or a tab. */
+  nested?: boolean
   disabled?: boolean
 }>()
 
@@ -40,6 +42,16 @@ function updateField(name: string, value: unknown) {
   emit('update:modelValue', { ...sectionData.value, [name]: value })
 }
 
+/**
+ * A nested section is a block rather than a chapter of the page, so it carries its own frame
+ * instead of the rule and the large heading that separate the top-level sections.
+ */
+const rootClass = computed(() => {
+  if (props.nested) return 'ep:rounded-xl ep:bg-surface-active/30 ep:p-4'
+  if (props.hideHeader) return ''
+  return ['ep:border-border-default ep:pt-5', { 'ep:border-t': !props.hideTopBorder }]
+})
+
 function focusNextField(name: string) {
   const index = fields.value.findIndex(([fieldName]) => fieldName === name)
   const next = fields.value.slice(index + 1).find(([, definition]) => isFieldVisible(definition.options, sectionData.value))
@@ -48,7 +60,7 @@ function focusNextField(name: string) {
 </script>
 
 <template>
-  <section :class="hideHeader ? '' : ['ep:border-border-default ep:pt-5', { 'ep:border-t': !hideTopBorder }]">
+  <section :class="rootClass">
     <button
       v-if="!hideHeader"
       type="button"
@@ -58,7 +70,10 @@ function focusNextField(name: string) {
       @click="open = !open"
     >
       <span class="ep:min-w-0 ep:flex-1">
-        <span class="ep:block ep:min-w-0 ep:max-w-full ep:text-xl ep:font-semibold ep:tracking-tight ep:text-text-strong ep:[overflow-wrap:anywhere]">
+        <span
+          class="ep:block ep:min-w-0 ep:max-w-full ep:font-semibold ep:tracking-tight ep:text-text-strong ep:[overflow-wrap:anywhere]"
+          :class="nested ? 'ep:text-base' : 'ep:text-xl'"
+        >
           {{ humanizeLabel(fieldName, definition.options.label) }}
         </span>
         <span
@@ -81,7 +96,7 @@ function focusNextField(name: string) {
       v-if="hideHeader || open"
       :id="`${fieldPathId(basePath)}-panel`"
       class="ep:grid ep:gap-5"
-      :class="{ 'ep:mt-6': !hideHeader }"
+      :class="{ 'ep:mt-6': !hideHeader && !nested, 'ep:mt-4': !hideHeader && nested }"
     >
       <template
         v-for="([sectionFieldName, sectionField]) in fields"
@@ -120,6 +135,17 @@ function focusNextField(name: string) {
               {{ error }}
             </p>
           </template>
+          <SectionField
+            v-else-if="sectionField.type === 'section'"
+            nested
+            :field-name="sectionFieldName"
+            :path="fieldPath(sectionFieldName)"
+            :definition="sectionField"
+            :model-value="sectionData[sectionFieldName]"
+            :errors="childErrors(errors, relativePath(sectionFieldName))"
+            :disabled="disabled"
+            @update:model-value="updateField(sectionFieldName, $event)"
+          />
           <FieldRenderer
             v-else
             :field-name="sectionFieldName"

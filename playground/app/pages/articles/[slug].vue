@@ -50,8 +50,6 @@ useSeoMeta({
         :alt="article.title"
         class="cover"
       >
-      <!-- `eponymeMediaEmbedUrl` is auto-imported: the embed address is derived from the
-           stored URL, so the page never has to know each provider's format. -->
       <div
         v-if="article.video.provider"
         class="video"

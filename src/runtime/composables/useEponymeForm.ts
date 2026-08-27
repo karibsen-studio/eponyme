@@ -112,7 +112,7 @@ export function useEponymeForm<const Name extends ConfigFormName>(
     }
     catch (error) {
       const fetchError = error as FetchError<{ errors?: ValidationErrors }>
-      if (fetchError.statusCode === 422) {
+      if (fetchError.status === 422) {
         serverErrors.value = fetchError.data?.errors ?? {}
         return false
       }
