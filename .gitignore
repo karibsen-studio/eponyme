@@ -16,6 +16,9 @@ node_modules
 # Generated dirs
 dist
 
+# Local storage driver
+.eponyme
+
 # Nuxt
 .nuxt
 .output
@@ -62,3 +65,4 @@ COMMIT-TEMPLATE.md
 JSDOC_GUIDELINES.md
 explain.md
 /playground/generated
+/playground/.vercel
