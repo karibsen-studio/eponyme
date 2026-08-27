@@ -22,8 +22,8 @@ export function mediaPlayerProviders(options: Pick<MediaPlayerFieldOptions, 'pro
  *
  * The provider is detected rather than picked in the interface: an editor pastes the address
  * they have, and a provider chosen by hand is one more thing that can contradict the URL.
- * `url` is the fallback for a file served directly — anything the browser can play in a
- * `<video>` — so it only answers once the hosted providers have declined.
+ * `url` is the fallback for a file served directly – anything the browser can play in a
+ * `<video>` – so it only answers once the hosted providers have declined.
  *
  * `provider` is empty when nothing recognised it, which is what validation reports. The parse
  * never throws, so an address still being typed simply reads as unrecognised.
@@ -71,7 +71,7 @@ export function normalizeEponymeMediaPlayer(value: unknown, options: Pick<MediaP
 }
 
 /**
- * Address to put in an `iframe` for a hosted provider, or the file itself for `url` — which
+ * Address to put in an `iframe` for a hosted provider, or the file itself for `url` – which
  * belongs in a `<video>` instead. Empty when the value carries nothing playable.
  *
  * Derived on read rather than stored: an embed address is the provider's contract, not the
