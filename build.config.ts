@@ -1,5 +1,5 @@
 import { defineBuildConfig } from 'unbuild'
 
 export default defineBuildConfig({
-  entries: ['src/eponyme'],
+  entries: ['src/eponyme', 'src/storage'],
 })

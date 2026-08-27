@@ -13,6 +13,10 @@ declare module '@nuxt/schema' {
     eponymeAuth: {
       sessionDurationDays: number
     }
+    eponymeAudit: {
+      retentionDays: number
+      pruneIntervalHours: number
+    }
     eponymeRateLimits: {
       loginPerIp: number
       loginGlobal: number
@@ -27,15 +31,15 @@ declare module '@nuxt/schema' {
       browserCacheSeconds: number
       cdnCacheSeconds: number
     }
+    eponymeStorage: {
+      prefix: string
+      maxSize: number
+      accept: string[]
+      accessKeyId: string
+      secretAccessKey: string
+      sessionToken: string
+    }
   }
-}
-
-declare module 'nitropack/types' {
-  import type { EponymeHooks } from './hooks'
-
-  // Interface augmentation: the body is empty by design, the point is the supertype.
-  // eslint-disable-next-line @typescript-eslint/no-empty-object-type
-  interface NitroRuntimeHooks extends EponymeHooks {}
 }
 
 export {}

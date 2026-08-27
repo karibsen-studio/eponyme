@@ -12,7 +12,7 @@ model Eponyme {
   /// Editable content. Read by the dashboard and by a preview, never by a public page.
   draft       Json      @db.JsonB
   /// Public content. A listing selects this column alone, so a draft is not merely filtered
-  /// out of a public response — it is never read.
+  /// out of a public response – it is never read.
   published   Json      @db.JsonB
   status      String
   /// A real column rather than a key inside the payload, which is what lets a listing
@@ -91,9 +91,39 @@ model EponymeUser {
   updatedAt            DateTime             @updatedAt
   sessions             EponymeUserSession[]
   versions             EponymeVersion[]
+  auditEvents          EponymeAuditEvent[] @relation("EponymeAuditActor")
 
   @@index([role, active])
   @@map("eponyme_users")
+}
+
+model EponymeAuditEvent {
+  id             String   @id
+  occurredAt     DateTime @default(now())
+  actorUserId    String?
+  actorUsername  String?
+  action         String
+  outcome        String
+  resourceType   String?
+  resourceName   String?
+  targetUserId   String?
+  ipAddress      String?
+  userAgent      String?
+  metadata       Json?    @db.JsonB
+  actor          EponymeUser? @relation("EponymeAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([occurredAt])
+  @@index([actorUserId, occurredAt])
+  @@index([action, occurredAt])
+  @@index([resourceType, resourceName, occurredAt])
+  @@map("eponyme_audit_events")
+}
+
+model EponymeMaintenanceState {
+  key       String   @id
+  lastRunAt DateTime
+
+  @@map("eponyme_maintenance_state")
 }
 
 model EponymeUserSession {

@@ -1,6 +1,6 @@
 import type { CountryCode } from 'libphonenumber-js/min'
 
-export type EponymeFieldType = 'string' | 'slug' | 'email' | 'phone' | 'url' | 'mediaPlayer' | 'textarea' | 'richText' | 'number' | 'boolean' | 'image' | 'select' | 'radio' | 'checkboxGroup' | 'tags' | 'date' | 'datetime' | 'duration' | 'color' | 'array' | 'section' | 'tabs'
+export type EponymeFieldType = 'string' | 'slug' | 'email' | 'phone' | 'url' | 'mediaPlayer' | 'textarea' | 'richText' | 'number' | 'boolean' | 'file' | 'image' | 'select' | 'radio' | 'checkboxGroup' | 'tags' | 'date' | 'datetime' | 'duration' | 'color' | 'custom' | 'array' | 'section' | 'tabs'
 
 export type FieldVisibilityCondition
   = | { field: string, equals: unknown, notEquals?: never }
@@ -18,6 +18,50 @@ export interface DefaultFieldOptions<T> {
   defaultValue?: T
   visibleWhen?: FieldVisibilityCondition | FieldVisibilityCondition[]
   validate?: FieldValidator<T>
+}
+
+// Filled by the type template generated from eponyme/fields.
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface EponymeCustomFieldValues {}
+
+export type EponymeCustomFieldOptions<Value, Options extends object>
+  = DefaultFieldOptions<Value> & Options
+
+export interface EponymeCustomFieldTypeDefinition<Value, Options extends object = Record<string, never>> {
+  defaultValue: Value
+  normalize?: (value: unknown, options: Readonly<EponymeCustomFieldOptions<Value, Options>>) => unknown
+  validate: (
+    value: unknown,
+    options: Readonly<EponymeCustomFieldOptions<Value, Options>>,
+    data: Readonly<Record<string, unknown>>,
+  ) => FieldValidationResult
+}
+
+export type InferEponymeCustomFieldValue<Definition>
+  = Definition extends EponymeCustomFieldTypeDefinition<infer Value, object> ? Value : unknown
+
+export type InferEponymeCustomFieldOptions<Definition>
+  = Definition extends EponymeCustomFieldTypeDefinition<unknown, infer Options> ? Options : Record<string, unknown>
+
+export interface EponymeCustomFieldDefinition<
+  Name extends string = string,
+  Value = Name extends keyof EponymeCustomFieldValues ? EponymeCustomFieldValues[Name] : unknown,
+  Options extends object = Record<string, unknown>,
+> {
+  type: 'custom'
+  name: Name
+  options: EponymeCustomFieldOptions<Value, Options>
+}
+
+export interface EponymeCustomFieldComponentProps<Value = unknown, Options extends object = Record<string, unknown>> {
+  id: string
+  modelValue?: Value
+  label: string
+  description?: string
+  required?: boolean
+  errors?: string[]
+  disabled?: boolean
+  options: Readonly<EponymeCustomFieldOptions<Value, Options>>
 }
 
 export interface TextFieldOptions extends DefaultFieldOptions<string> {
@@ -119,7 +163,7 @@ export interface UrlValue {
 
 /**
  * Scheme of an external link, without the trailing colon. The common ones are suggested, and
- * any other scheme is still accepted — `bitcoin`, `matrix` or an application scheme are valid
+ * any other scheme is still accepted – `bitcoin`, `matrix` or an application scheme are valid
  * choices this list has no business refusing.
  */
 export type UrlProtocol = 'http' | 'https' | 'mailto' | 'tel' | 'sms' | 'ftp' | (string & {})
@@ -143,7 +187,7 @@ export interface UrlFieldDefinition {
 }
 
 /**
- * Where a video comes from. `youtube` and `vimeo` are embedded in an iframe; `url` is a file
+ * Where a video comes from. `YouTube` and `vimeo` are embedded in an iframe; `url` is a file
  * the browser plays directly in a `<video>` element.
  */
 export type MediaPlayerProvider = 'youtube' | 'vimeo' | 'url'
@@ -195,10 +239,45 @@ export interface BooleanFieldDefinition {
   options: BooleanFieldOptions
 }
 
-export interface ImageFieldOptions extends DefaultFieldOptions<string> {
+export interface FileFieldOptions extends DefaultFieldOptions<string> {
   label?: string
   description?: string
   placeholder?: string
+  /**
+   * Media types this field accepts, narrowing the module-wide `storage.accept`. `image/*` style
+   * wildcards are understood.
+   *
+   * @example ['application/pdf']
+   */
+  accept?: string[]
+  /**
+   * Largest accepted upload for this field, in bytes. Cannot raise the module-wide
+   * `storage.maxSize`, only lower it.
+   */
+  maxSize?: number
+}
+
+export interface FileFieldDefinition {
+  type: 'file'
+  options: FileFieldOptions
+}
+
+/**
+ * `image` is `file` with `accept` preset and a picture preview. It keeps its own `type` rather
+ * than becoming `field.file({ accept: ['image/*'] })` outright: the type is part of what an
+ * entry's schema fingerprint is built from, so collapsing the two would mark every stored entry
+ * as changed.
+ */
+export type ImageSource = 'absolute' | 'relative' | 'upload'
+
+export interface ImageFieldOptions extends FileFieldOptions {
+  /**
+   * Origins this image may use. An uploaded image is stored under Eponyme's media route, so it
+   * stays distinguishable from an address entered by hand.
+   *
+   * @default ['absolute', 'relative', 'upload']
+   */
+  sources?: readonly ImageSource[]
 }
 
 export interface ImageFieldDefinition {
@@ -263,7 +342,7 @@ export interface TagsFieldOptions<T extends string = string> extends DefaultFiel
  * Read from the object rather than from a type parameter on purpose. A parameter carrying
  * `allowCustom` is re-inferred as `boolean` when the config is checked against `EponymeConfig`,
  * and a conditional on `boolean` distributes over `true | false`, collapsing the union of
- * suggestions to plain `string`. The shape of the object survives that check — which is also
+ * suggestions to plain `string`. The shape of the object survives that check – which is also
  * how `field.select()` and `field.checkboxGroup()` keep their literals.
  */
 export type TagsValueOf<O> = O extends { allowCustom: true }
@@ -339,6 +418,28 @@ export interface ColorFieldDefinition {
   options: ColorFieldOptions
 }
 
+export interface RelationFieldOptions<Multiple extends boolean = boolean>
+  extends DefaultFieldOptions<Multiple extends true ? string[] : string> {
+  /** Name of the collection pointed at, as it is declared in the config. */
+  to: string
+  /** Holds a list of slugs rather than one. */
+  multiple?: Multiple
+  /** Upper bound on a `multiple` relation. */
+  maxItems?: number
+  placeholder?: string
+}
+
+/**
+ * Points at an entry of a collection, by slug.
+ *
+ * A slug is fixed at creation – Eponyme refuses to change one afterward – so it identifies
+ * an entry as stably as an opaque id would, while staying readable in an export.
+ */
+export interface RelationFieldDefinition<Multiple extends boolean = boolean> {
+  type: 'relation'
+  options: RelationFieldOptions<Multiple>
+}
+
 export type ArrayItemFieldDefinition
   = | StringFieldDefinition
     | SlugFieldDefinition
@@ -350,6 +451,7 @@ export type ArrayItemFieldDefinition
     | RichTextFieldDefinition
     | NumberFieldDefinition
     | BooleanFieldDefinition
+    | FileFieldDefinition
     | ImageFieldDefinition
     | SelectFieldDefinition
     | RadioFieldDefinition
@@ -359,6 +461,8 @@ export type ArrayItemFieldDefinition
     | DateTimeFieldDefinition
     | DurationFieldDefinition
     | ColorFieldDefinition
+    | RelationFieldDefinition
+    | EponymeCustomFieldDefinition
 
 export type ArrayItemSchema = Record<string, ArrayItemFieldDefinition>
 export type ArrayItemDefinition = ArrayItemFieldDefinition | ArrayItemSchema
@@ -369,16 +473,38 @@ export type ArrayItemValue<T extends ArrayItemDefinition>
       : T extends UrlFieldDefinition ? UrlValue
         : T extends MediaPlayerFieldDefinition ? MediaPlayerValue
           : T extends CheckboxGroupFieldDefinition<infer Value> ? Value[]
-            : T extends ArrayItemFieldDefinition ? string
-              : T extends ArrayItemSchema ? { [K in keyof T]: ArrayItemValue<T[K]> }
-                : never
+            : T extends RelationFieldDefinition<infer Multiple> ? (Multiple extends true ? string[] : string)
+              : T extends EponymeCustomFieldDefinition<string, infer Value, object> ? Value
+                : T extends ArrayItemFieldDefinition ? string
+                  : T extends ArrayItemSchema ? { [K in keyof T]: ArrayItemValue<T[K]> }
+                    : never
 
 export interface ArrayFieldOptions<T extends ArrayItemDefinition> extends DefaultFieldOptions<Array<ArrayItemValue<T>>> {
   of: T
   minItems?: number
   maxItems?: number
   addLabel?: string
+
+  /**
+   * Heading of each item. `$i` is its position, and `$<field>` the value that field holds in
+   * that item – so a title follows what is being written rather than repeating the index.
+   * `$value` is the item itself, for an array of plain values.
+   *
+   * An item whose interpolation resolves to nothing falls back to `Item $i`, which is what a
+   * row that has only just been added always does.
+   *
+   * @default 'Item $i'
+   * @example
+   * ```ts
+   * itemLabel: '$question'
+   * itemLabel: 'Step $i – $title'
+   * ```
+   */
   itemLabel?: string
+
+  /** Starts every item folded, for an array whose items are long. */
+  collapsed?: boolean
+
   showCounter?: boolean
 }
 
@@ -387,13 +513,18 @@ export interface ArrayFieldDefinition<T extends ArrayItemDefinition = ArrayItemD
   options: ArrayFieldOptions<T>
 }
 
-export type SectionItemFieldDefinition = ArrayItemFieldDefinition | ArrayFieldDefinition
+/**
+ * A section holds sections, which is what lets a `defineBlock()` sit inside a tab: a tab is a
+ * section under the hood. Arrays stay one level deep – an array item is still a plain field.
+ */
+export type SectionItemFieldDefinition = ArrayItemFieldDefinition | ArrayFieldDefinition | SectionFieldDefinition
 export type SectionSchema = Record<string, SectionItemFieldDefinition>
 
 export type SectionItemValue<T extends SectionItemFieldDefinition>
   = T extends ArrayFieldDefinition<infer Item> ? Array<ArrayItemValue<Item>>
-    : T extends ArrayItemFieldDefinition ? ArrayItemValue<T>
-      : never
+    : T extends SectionFieldDefinition<infer Section> ? SectionValue<Section>
+      : T extends ArrayItemFieldDefinition ? ArrayItemValue<T>
+        : never
 
 export type SectionValue<T extends SectionSchema> = { [K in keyof T]: SectionItemValue<T[K]> }
 

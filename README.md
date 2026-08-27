@@ -14,6 +14,7 @@ Define your content in `eponyme.config.ts`. Eponyme provides defaults, validatio
 ## Features
 
 - Type-safe fields for text, slugs, rich text, numbers, booleans, images, links, phone numbers, tags, dates, colors, sections, tabs, and arrays
+- Project-defined leaf fields discovered from paired TypeScript and Vue files in `eponyme/fields`
 - Declarative defaults and validation
 - Conditional fields, character counters, and sortable arrays
 - Private drafts with explicit publishing
@@ -46,7 +47,7 @@ pnpm add @karibsen/eponyme
 
 Eponyme brings its own components, so `@nuxt/ui` is not required. If your application does use
 it, it has to be `^4.10.0` or newer: both ship Tailwind, and an older `@nuxt/ui` resolves a
-version the dashboard was not built against. What that breaks is not predictable — broken
+version the dashboard was not built against. What that breaks is not predictable – broken
 dashboard styles are the visible case, but it can also fail the build or misbehave elsewhere with
 no obvious link back to the cause. The module checks the installed version and warns at build
 time.
@@ -184,14 +185,14 @@ tags: field.tags({
 The value type follows the options: closed, it is `('Nuxt' | 'Vue' | 'TypeScript')[]`; with
 `allowCustom`, `string[]`. One array never mixes two types.
 
-The list is normalised **on the server** before the write: trimmed, blanks dropped, duplicates
+The list is normalized **on the server** before the write: trimmed, blanks dropped, duplicates
 folded case-insensitively. A suggestion imposes its spelling, so typing `nuxt` beside a declared
 `Nuxt` yields `Nuxt` and a listing never splits in two. `minItems` and `maxItems` count what is
 left after that folding.
 
 ### Phone numbers
 
-`field.phone()` stores its value in **E.164** — `+33611131143` — whatever format it was typed
+`field.phone()` stores its value in **E.164** (for example, `+33611131143`) whatever format it was typed
 in. Normalisation happens on the server before the write, so the stored format is a guarantee
 rather than a convention a client could skip.
 
@@ -451,6 +452,10 @@ Roles are intentionally small:
 - `editor` manages content.
 - `viewer` has read-only dashboard access.
 
+Applications may add source-controlled roles in `eponyme/roles.ts`, with permissions scoped to a
+singleton, collection, form, folder or system feature. Owners assign one role per account in the
+dashboard. See [Roles, permissions and audit](https://eponyme-docs.vercel.app/advanced/permissions-audit).
+
 ## Collections
 
 Use `collection()` for repeatable content:
@@ -546,7 +551,7 @@ and its whole version history are kept, so it can be brought back.
 
 The collection page lists the trash behind a **Trash** button and offers **Restore** and
 **Delete for good**. Restoring is available to editors and owners; deleting for good is
-reserved to owners, since it is the only irreversible content operation — the entry's
+reserved to owners, since it is the only irreversible content operation – the entry's
 history goes with it.
 
 ```http
@@ -598,7 +603,7 @@ The dashboard overview at `/__eponyme` carries **Export** and **Import**, so con
 prepared on one environment can be moved to another instead of being retyped.
 
 Export downloads a JSON file holding every singleton and every live collection entry
-with its complete state — draft, published version, status and publication date — plus a
+with its complete state (draft, published version, status and publication date), plus a
 fingerprint of the schema each entry was written against. The trash, form submissions and
 users are never part of it.
 
@@ -761,9 +766,9 @@ export default defineNuxtConfig({
 
 | Option | Who holds the copy | Purgeable |
 |---|---|---|
-| `cacheSeconds` | The server instance, in memory | Yes — cleared on every write |
+| `cacheSeconds` | The server instance, in memory | Yes, cleared on every write |
 | `browserCacheSeconds` | The visitor's browser | **No** |
-| `cdnCacheSeconds` | The CDN | Yes — see below |
+| `cdnCacheSeconds` | The CDN | Yes, see below |
 
 `browserCacheSeconds` is what makes a client-side navigation instant: the browser answers
 from its own cache instead of crossing the network. It is also the one window nobody can
@@ -774,7 +779,7 @@ immediately to everyone; navigation then costs a round trip again.
 ### Purging the CDN
 
 The CDN window can be long because it can be purged. CDNs purge by **tag** rather than by
-URL — one entry appears in several cached responses, its own and its collection's listing —
+URL – one entry appears in several cached responses, its own and its collection's listing –
 so every cacheable response carries `Vercel-Cache-Tag` and `Cache-Tag`:
 
 | Response | Tags |
@@ -812,7 +817,7 @@ content appearing when `cdnCacheSeconds` expires on its own.
 **Only published content is ever cached.** Drafts, historical versions, `raw=1` reads,
 submissions, the trash, the user list and the session route all answer `no-store`. That is
 enforced by a server middleware that marks every Eponyme route uncacheable, which the few
-public ones override — so a route added later is private until someone decides otherwise,
+public ones override – so a route added later is private until someone decides otherwise,
 rather than public until someone remembers.
 
 ## Forms
@@ -844,11 +849,11 @@ configuration time.
 `custom` is the default, so a form never writes to the database unless you ask for it.
 
 - `custom`: Eponyme provides the schema, the validation and the data; your application
-  owns delivery — an API route, an email service, a webhook, your own table.
+  owns delivery – an API route, an email service, a webhook, your own table.
 - `managed`: Eponyme validates, stores the submission, and lists it in the dashboard.
 
 The configured mode decides what `submit()` does, not the presence of a callback, so the
-behaviour stays readable from `eponyme.config.ts` alone.
+behavior stays readable from `eponyme.config.ts` alone.
 
 ### Rendering a form
 
@@ -975,7 +980,7 @@ throws is logged and swallowed. A failing webhook must not report a successful s
 an error the editor cannot act on.
 
 Entries belonging to a collection carry `collection: { name, slug }`, so a listener can
-branch without re-parsing the entry name. The three trash hooks only ever concern
+branch without reparsing the entry name. The three trash hooks only ever concern
 collection entries, so their `collection` is always present; they carry no content, since
 a trash move leaves the entry itself untouched.
 

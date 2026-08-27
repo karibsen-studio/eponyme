@@ -30,4 +30,4 @@ landing:
       description: "Edit, preview and publish content through a clear editorial workflow."
 
     - title: "Extensible"
-      description: "Create custom fields and connect your own storage, cache and authentication adapters."
+      description: "Create typed leaf fields in eponyme/fields and connect your own storage and cache adapters."
