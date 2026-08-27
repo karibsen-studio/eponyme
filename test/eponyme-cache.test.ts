@@ -3,7 +3,7 @@ import { EponymeCache, type EponymeSharedCacheStorage } from '../src/runtime/ser
 
 /**
  * A shared tier with unstorage's semantics, including the one that matters: keys are listed
- * by prefix and removed one by one. `clear(prefix)` is deliberately absent — on a namespaced
+ * by prefix and removed one by one. `clear(prefix)` is deliberately absent – on a namespaced
  * mount it resolves no mount at all and drops nothing, which is the trap this cache avoids.
  */
 function createSharedStorage() {

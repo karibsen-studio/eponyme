@@ -3,20 +3,22 @@ import type { EponymeSchema, FieldDefinition, FieldValidator, MediaPlayerFieldOp
 import type { EponymeMessageKey } from '../locales'
 import { isArrayItemFieldDefinition } from './get-field-default-value'
 import { isFieldVisible } from './is-field-visible'
+import { eponymeImageSourceError, isEponymeImageSourceAllowed } from './image-source-message'
 import { MEDIA_PLAYER_PROVIDERS, mediaPlayerProviders, parseEponymeMediaUrl } from './media-player'
-import { normalizeEponymePhone } from './normalize-phone'
+import { normalizeEponymePhone } from '#eponyme/phone'
 import { normalizeEponymeTags } from './normalize-tags'
 import { normalizeEponymeDateTime } from './datetime'
+import { getEponymeCustomFieldType } from './eponyme-custom-field'
 
 /**
- * Errors are keyed by the path of the field they belong to — `title`, `hero.title`,
- * `items.0.title` — so the editor can show each message on the field that produced it.
+ * Errors are keyed by the path of the field they belong to – `title`, `hero.title`,
+ * `items.0.title` – so the editor can show each message on the field that produced it.
  * `_form` carries errors about the payload as a whole.
  */
 export type ValidationErrors = Record<string, string[]>
 export type ValidationMode = 'draft' | 'publish'
 
-const urlPattern = /^https?:\/\//i
+const assetPattern = /^(?:https?:\/\/|\/(?!\/))/i
 const datePattern = /^\d{4}-\d{2}-\d{2}$/
 const colorPattern = /^#(?:[\da-f]{3}|[\da-f]{6}|[\da-f]{8})$/i
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
@@ -73,6 +75,18 @@ function validateFieldRules(
 
   if (value === undefined || value === null) {
     if (mode === 'publish' && options.required) addError(errors, name, t('field.required'))
+    return
+  }
+
+  if (definition.type === 'custom') {
+    try {
+      const result = getEponymeCustomFieldType(definition.name).validate(value, definition.options, _context)
+      if (typeof result === 'string') addError(errors, name, result)
+      else if (Array.isArray(result)) result.forEach(message => addError(errors, name, message))
+    }
+    catch {
+      addError(errors, name, t('field.custom'))
+    }
     return
   }
 
@@ -143,6 +157,28 @@ function validateFieldRules(
     if (definition.options.maxItems !== undefined && value.length > definition.options.maxItems) addError(errors, name, t('field.maxItems', { max: definition.options.maxItems }))
     if (value.some(item => typeof item !== 'string' || !definition.options.options.some(option => option.value === item)))
       addError(errors, name, t('field.optionsOnly'))
+    return
+  }
+
+  // Only the shape is checked here: whether the target exists is a question for the database,
+  // answered on write by `eponymeRelationRejections`.
+  if (definition.type === 'relation') {
+    if (definition.options.multiple) {
+      if (!Array.isArray(value)) {
+        addError(errors, name, t('field.array'))
+        return
+      }
+      if (value.some(item => typeof item !== 'string')) addError(errors, name, t('field.string'))
+      if (mode === 'publish' && options.required && value.length === 0) addError(errors, name, t('field.required'))
+      if (definition.options.maxItems !== undefined && value.length > definition.options.maxItems)
+        addError(errors, name, t('field.maxItems', { max: definition.options.maxItems }))
+      return
+    }
+    if (typeof value !== 'string') {
+      addError(errors, name, t('field.string'))
+      return
+    }
+    if (mode === 'publish' && options.required && !value) addError(errors, name, t('field.required'))
     return
   }
 
@@ -259,8 +295,18 @@ function validateFieldRules(
   const normalizedContent = definition.type === 'richText' ? getRichTextContent(normalized) : normalized
   if (mode === 'publish' && options.required && !normalizedContent) addError(errors, name, t('field.required'))
   if (mode === 'draft' && !normalizedContent) return
-  if (definition.type === 'image' && normalized && !urlPattern.test(normalized)) addError(errors, name, t('field.image'))
-  if (definition.type === 'image') return
+  if (definition.type === 'image' || definition.type === 'file') {
+    if (normalized && !assetPattern.test(normalized)) {
+      addError(errors, name, t(definition.type === 'image' ? 'field.image' : 'field.file'))
+      return
+    }
+    // An address that parses can still be one this field does not take: a picture restricted to
+    // the media library must refuse a link to somebody else's server.
+    const sources = definition.type === 'image' ? definition.options.sources : undefined
+    if (normalized && !isEponymeImageSourceAllowed(normalized, sources) && sources)
+      addError(errors, name, eponymeImageSourceError(sources))
+    return
+  }
 
   if (definition.type === 'select' || definition.type === 'radio') {
     if (normalized && !definition.options.options.some(option => option.value === value)) addError(errors, name, t('field.option'))
@@ -350,7 +396,7 @@ const MEDIA_PLAYER_LABELS: Record<MediaPlayerProvider, EponymeMessageKey> = {
 }
 
 /**
- * "a, b or c" — the joining word belongs to the language, not to the message, so it comes
+ * "a, b or c" – the joining word belongs to the language, not to the message, so it comes
  * from `Intl` rather than from a hardcoded ` or `.
  */
 function listDisjunction(items: string[]): string {

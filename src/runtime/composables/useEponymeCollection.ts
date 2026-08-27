@@ -107,8 +107,8 @@ export function useEponymeCollection<const Name extends ConfigCollectionName>(
     ...filter.query,
   }
   const result = useAsyncData(
-    // Every option belongs in the key, otherwise two differently sorted — or differently
-    // filtered — calls to the same collection would share one cache entry and one would
+    // Every option belongs in the key, otherwise two differently sorted – or differently
+    // filtered – calls to the same collection would share one cache entry and one would
     // silently answer with the other's results.
     `eponyme:collection:public:${name}:${options.take ?? ''}:${options.skip ?? ''}:${options.orderBy ?? ''}:${options.order ?? ''}:${filter.key}`,
     // Always the published listing, which is publicly cacheable: the browser cache may answer it.

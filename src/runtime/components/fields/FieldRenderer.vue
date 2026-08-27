@@ -6,10 +6,12 @@ import ColorField from './ColorField.vue'
 import DateField from './DateField.vue'
 import DateTimeField from './DateTimeField.vue'
 import DurationField from './DurationField.vue'
+import FileField from './FileField.vue'
 import MediaPlayerField from './MediaPlayerField.vue'
 import NumberField from './NumberField.vue'
 import PhoneField from './PhoneField.vue'
 import RadioField from './RadioField.vue'
+import RelationField from './RelationField.vue'
 import SelectField from './SelectField.vue'
 import SlugField from './SlugField.vue'
 import TagsField from './TagsField.vue'
@@ -17,6 +19,7 @@ import TextareaField from './TextareaField.vue'
 import TextField from './TextField.vue'
 import UrlField from './UrlField.vue'
 import { LazyRichTextField } from './lazy'
+import { eponymeCustomFieldComponents } from '#eponyme/custom-field-components'
 import { formFieldContextKey } from '../ui/form-field-context'
 import type { FieldDefinition } from '../../types'
 import { humanizeLabel } from '../../utils/humanize-label'
@@ -53,6 +56,12 @@ const multiline = computed(() => props.field.type === 'textarea' || props.field.
 
 const component = computed(() => {
   switch (props.field.type) {
+    case 'custom': {
+      const customComponent = eponymeCustomFieldComponents[props.field.name]
+      if (!customComponent)
+        throw new Error(`[Eponyme] Unknown custom field component "${props.field.name}".`)
+      return customComponent
+    }
     case 'richText': return LazyRichTextField
     case 'textarea': return TextareaField
     case 'slug': return SlugField
@@ -64,7 +73,10 @@ const component = computed(() => {
     case 'date': return DateField
     case 'datetime': return DateTimeField
     case 'duration': return DurationField
+    case 'file':
+    case 'image': return FileField
     case 'color': return ColorField
+    case 'relation': return RelationField
     case 'url': return UrlField
     case 'mediaPlayer': return MediaPlayerField
     case 'phone': return PhoneField
@@ -73,10 +85,10 @@ const component = computed(() => {
   }
 })
 
-/** Options that only some field types carry, forwarded per type. */
 const specificProps = computed<Record<string, unknown>>(() => {
   const field = props.field
   switch (field.type) {
+    case 'custom': return { options: field.options }
     case 'richText':
     case 'textarea':
     case 'slug':
@@ -115,8 +127,21 @@ const specificProps = computed<Record<string, unknown>>(() => {
       return { min: field.options.min, max: field.options.max }
     case 'boolean':
       return {}
+    case 'file':
+    case 'image':
+      return {
+        placeholder: field.options.placeholder,
+        accept: field.options.accept,
+        maxSize: field.options.maxSize,
+        preview: field.type === 'image',
+        sources: field.type === 'image' ? field.options.sources : undefined,
+      }
     case 'color':
       return { presets: field.options.presets }
+    // The picker reads `to` and `multiple` off the definition itself, which is also what
+    // tells it whether the value is a slug or a list of them.
+    case 'relation':
+      return { definition: field }
     case 'url':
       return { placeholder: field.options.placeholder }
     case 'mediaPlayer':
@@ -130,17 +155,14 @@ const specificProps = computed<Record<string, unknown>>(() => {
         autocomplete: field.options.autocomplete,
       }
     default: {
-      // string, email and image all render as a text input, with their own input type.
-      // `image` has no length options, hence the presence checks.
       const options = field.options as Record<string, unknown>
       return {
-        inputType: field.type === 'image' ? 'url' : field.type === 'email' ? 'email' : 'text',
+        inputType: field.type === 'email' ? 'email' : 'text',
         mask: options.mask,
         placeholder: options.placeholder,
         minLength: options.minLength,
         maxLength: options.maxLength,
         showCounter: options.showCounter,
-        preview: field.type === 'image',
       }
     }
   }

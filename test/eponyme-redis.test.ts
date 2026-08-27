@@ -16,7 +16,7 @@ import {
  * and that the driver hands back a client able to increment atomically. The unit suite mocks
  * both, and a mock written from the intended behaviour is exactly what hid the `clear()` bug.
  *
- * Skipped when no server is configured — `pnpm test` must stay runnable without one, since
+ * Skipped when no server is configured – `pnpm test` must stay runnable without one, since
  * the module does not require Redis. Configured but unreachable fails instead, and loudly:
  * setting the variable states an intent to cover this path, and silently skipping it would
  * turn a broken CI service into a green run. To run it:
@@ -62,7 +62,7 @@ const describeRedis = describe.skipIf(!probe)
 describeRedis('Redis-backed cache and rate limiting', () => {
   /**
    * Rebuilt per test, and shaped exactly like `useStorage('eponyme')` in Nitro: a mount at
-   * `eponyme:` wrapped in `prefixStorage`. The nesting is the point — it is what makes the
+   * `eponyme:` wrapped in `prefixStorage`. The nesting is the point – it is what makes the
    * cache prefix deeper than the mount point, which is the case `clear()` silently misses.
    */
   function createMountedStorage() {

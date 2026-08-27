@@ -4,7 +4,7 @@ import { EPONYME_DATE_LOCALE } from './date-locale'
 import { mapEponymeRichText } from './rich-text-fields'
 
 /**
- * `{{ name }}` — the name is a plain identifier, never an expression. Content is
+ * `{{ name }}` – the name is a plain identifier, never an expression. Content is
  * editable from the dashboard, so evaluating code from it would hand an editor
  * arbitrary execution on the server.
  */
@@ -80,7 +80,7 @@ export function interpolateEponymeText(text: string, variables: Record<string, s
 /**
  * Same substitution, but a variable landing inside rich text is HTML-escaped first.
  *
- * A variable's value is a string, not markup — and a host may well compute it from data it
+ * A variable's value is a string, not markup – and a host may well compute it from data it
  * does not control. Substituted raw into stored HTML it would be parsed as markup, which is
  * exactly the hole the write-time sanitisation closes everywhere else.
  *
@@ -107,7 +107,7 @@ function escapeHtml(value: string): string {
  * Walks strings nested in objects and arrays, leaving every other value alone.
  *
  * A branch containing no `{{ name }}` is returned as-is rather than rebuilt, so content
- * without variables — which is most of it — costs no copy. The result therefore shares
+ * without variables – which is most of it – costs no copy. The result therefore shares
  * structure with its input and must be treated as read-only, which is already true of
  * everything the read routes return.
  */

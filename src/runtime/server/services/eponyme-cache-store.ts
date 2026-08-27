@@ -3,7 +3,7 @@
  *
  * The two tiers answer different problems, which is why neither replaces the other:
  *
- * - The map deduplicates concurrent readers of a cold key — it holds the in-flight promise,
+ * - The map deduplicates concurrent readers of a cold key – it holds the in-flight promise,
  *   so a page reading the same entry from a singleton, a listing and a layout starts one
  *   query rather than three. It also absorbs repeated reads inside a single request without
  *   a network hop.
@@ -23,7 +23,7 @@
 /**
  * How long the in-process tier keeps a value, in milliseconds.
  *
- * Short on purpose — see above. It is not configurable because the useful range is narrow:
+ * Short on purpose – see above. It is not configurable because the useful range is narrow:
  * long enough to coalesce the reads of one render, short enough that a publication is not
  * invisible for any length of time an editor would notice.
  */
@@ -32,7 +32,7 @@ const LOCAL_MS = 1000
 /**
  * Values are wrapped before they are stored.
  *
- * `undefined` is a cachable answer here — a missing or trashed entry reads as one, and it is
+ * `undefined` is a cachable answer here – a missing or trashed entry reads as one, and it is
  * exactly the case worth caching, since nothing in the row protects it from being re-queried.
  * But `setItem(key, undefined)` removes the key instead of storing it, and `getItem` answers
  * `null` for a key that is absent, so an unwrapped `undefined` would be written as a miss and
@@ -110,8 +110,8 @@ export class EponymeCache {
    * of a listing at once.
    *
    * Listed and removed rather than cleared: `clear(prefix)` resolves only the mounts sitting
-   * below the prefix, so on a namespaced mount — the normal case here, since the cache lives
-   * at `eponyme:` and the prefix is deeper — it matches nothing and silently drops nothing.
+   * below the prefix, so on a namespaced mount – the normal case here, since the cache lives
+   * at `eponyme:` and the prefix is deeper – it matches nothing and silently drops nothing.
    * `getKeys()` is the one that walks the parent mount, and it is what makes an invalidation
    * actually happen.
    *

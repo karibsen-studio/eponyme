@@ -20,7 +20,7 @@ const TIPTAP_OUTPUT = [
   '<p><a href="/interne">x</a> <a href="#anchor">y</a> <a href="mailto:a@b.c">z</a> <a href="tel:+33611131143">t</a></p>',
   '<p><a href="https://example.com/f.pdf" download>file</a></p>',
   '<img src="https://example.com/y.png" alt="a" title="t" class="eponyme-rich-text-image" />',
-  '<p>a &amp; b &lt; c — é</p>',
+  '<p>a &amp; b &lt; c – é</p>',
   '<p>{{ currentYear }}</p>',
 ]
 
@@ -34,9 +34,12 @@ describe('rich text sanitisation', () => {
     ['<p style="text-align: center">x</p>', '<p style="text-align:center">x</p>'],
     ['<h2 style="text-align: right">x</h2>', '<h2 style="text-align:right">x</h2>'],
     ['<h3 style="text-align: left">x</h3>', '<h3 style="text-align:left">x</h3>'],
-  ])('keeps the alignment the toolbar writes: %s', (html, stored) => {
+    ['<p><span style="color: #ff41c5">x</span></p>', '<p><span style="color:#ff41c5">x</span></p>'],
+    ['<p><span style="background-color: #e6b85c">x</span></p>', '<p><span style="background-color:#e6b85c">x</span></p>'],
+    ['<p><span style="color: #ffffff; background-color: rgb(0, 0, 0)">x</span></p>', '<p><span style="color:#ffffff;background-color:rgb(0, 0, 0)">x</span></p>'],
+  ])('keeps what the toolbar writes as inline style: %s', (html, stored) => {
     // The declaration is re-serialised without its space, which is a rewrite and not a
-    // removal — so a save is never refused over it.
+    // removal – so a save is never refused over it.
     expect(sanitizeEponymeRichText(html)).toBe(stored)
     expect(eponymeRichTextWasStripped(html)).toBe(false)
   })
@@ -49,6 +52,9 @@ describe('rich text sanitisation', () => {
     ['an alignment the toolbar lacks', '<p style="text-align: justify">x</p>', '<p>x</p>'],
     // Allowing `style` on a paragraph must not open it anywhere else.
     ['a tag outside the list', '<blockquote style="text-align: center">x</blockquote>', '<blockquote>x</blockquote>'],
+    // Allowing `style` on a span must not turn it into a free-form style attribute.
+    ['a declaration the colour menus lack', '<p><span style="color: #fff; font-size: 40px">x</span></p>', '<p><span style="color:#fff">x</span></p>'],
+    ['a colour that is not a colour', '<p><span style="color: url(javascript:alert(1))">x</span></p>', '<p><span>x</span></p>'],
   ])('drops %s', (_, html, expected) => {
     expect(sanitizeEponymeRichText(html)).toBe(expected)
   })

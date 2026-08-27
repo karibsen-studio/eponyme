@@ -1,5 +1,5 @@
 import { t } from '#eponyme/locale'
-import { createError } from 'h3'
+import { createError, isError } from 'h3'
 import { useNitroApp } from 'nitropack/runtime'
 import type { EponymeHooks } from '../../types/hooks'
 
@@ -35,7 +35,7 @@ export async function callEponymeHook<Name extends Exclude<HookName, `${string}b
 
 /**
  * Blocking hooks, run before the write. A listener may mutate `context.data` to amend
- * the payload, or throw to reject the operation — the error surfaces as a 422 so the
+ * the payload, or throw to reject the operation – the error surfaces as a 422 so the
  * message reaches the editor.
  */
 export async function callEponymeBlockingHook<Name extends Extract<HookName, `${string}before${string}`>>(
@@ -46,10 +46,10 @@ export async function callEponymeBlockingHook<Name extends Extract<HookName, `${
     await hooks().callHook(name, context)
   }
   catch (error) {
-    if (error && typeof error === 'object' && 'statusCode' in error) throw error
+    if (isError(error)) throw error
     throw createError({
-      statusCode: 422,
-      statusMessage: error instanceof Error ? error.message : t('server.hookRejected', { hook: name }),
+      status: 422,
+      message: error instanceof Error ? error.message : t('server.hookRejected', { hook: name }),
       data: { errors: { _form: [error instanceof Error ? error.message : 'Rejected by a server hook.'] } },
     })
   }

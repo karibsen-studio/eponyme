@@ -1,13 +1,15 @@
 import { t } from '#eponyme/locale'
 import { createError, defineEventHandler, getQuery, getRequestURL } from 'h3'
 import { useEponymeService } from '../../services/eponyme-service'
-import { requireEponymeUser } from '../../utils/auth'
+import { requireEponymePermission, resolveEponymeContentResource } from '../../utils/eponyme-permissions'
 
 export default defineEventHandler(async (event) => {
-  await requireEponymeUser(event)
   const name = decodeURIComponent(getRequestURL(event).pathname.replace(/^\/api\/eponyme-history\//, ''))
+  const resource = resolveEponymeContentResource(name)
+  if (!resource) throw createError({ status: 404, message: t('server.entryNotFound') })
+  await requireEponymePermission(event, 'content.read', resource)
   const requestedLimit = Number(getQuery(event).limit ?? 50)
   const history = name ? await useEponymeService().history(name, Number.isFinite(requestedLimit) ? requestedLimit : 50) : undefined
-  if (!history) throw createError({ statusCode: 404, statusMessage: t('server.entryNotFound') })
+  if (!history) throw createError({ status: 404, message: t('server.entryNotFound') })
   return { history }
 })

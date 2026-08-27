@@ -1,9 +1,9 @@
 import { defineEventHandler, setResponseHeader } from 'h3'
 import { useEponymeService } from '../services/eponyme-service'
-import { requireEponymeUser } from '../utils/auth'
+import { requireEponymePermission } from '../utils/eponyme-permissions'
 
 export default defineEventHandler(async (event) => {
-  await requireEponymeUser(event, { roles: ['editor', 'owner'] })
+  await requireEponymePermission(event, 'content.export', { kind: 'system', name: 'content' })
   // An export carries drafts, so no cache may ever hold on to it.
   setResponseHeader(event, 'Cache-Control', 'no-store')
   const file = await useEponymeService().exportContent()

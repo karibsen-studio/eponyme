@@ -1,7 +1,8 @@
 import { t } from '#eponyme/locale'
 import { createError, defineEventHandler, getQuery, setResponseHeader } from 'h3'
 import { useEponymeService } from '../services/eponyme-service'
-import { assertEponymeMutationOrigin, requireEponymeUser } from '../utils/auth'
+import { assertEponymeMutationOrigin } from '../utils/auth'
+import { requireEponymePermission } from '../utils/eponyme-permissions'
 import { readEponymeRawBody } from '../utils/body'
 
 /** An export of a large collection is still text, but it must not be unbounded. */
@@ -9,8 +10,7 @@ const MAX_BODY_BYTES = 5 * 1024 * 1024
 
 export default defineEventHandler(async (event) => {
   assertEponymeMutationOrigin(event)
-  // An import overwrites content across the whole site, so it stays with owners.
-  const user = await requireEponymeUser(event, { roles: ['owner'] })
+  const user = await requireEponymePermission(event, 'content.import', { kind: 'system', name: 'content' })
   setResponseHeader(event, 'Cache-Control', 'no-store')
 
   const raw = await readEponymeRawBody(event, MAX_BODY_BYTES, t('server.importTooLarge'))
@@ -20,17 +20,21 @@ export default defineEventHandler(async (event) => {
     payload = raw ? JSON.parse(raw) : undefined
   }
   catch {
-    throw createError({ statusCode: 400, statusMessage: t('server.importInvalidJson') })
+    throw createError({ status: 400, message: t('server.importInvalidJson') })
   }
 
   // `dryRun` reports what the import would do without writing, so the dashboard can
   // show the counts before anything is overwritten.
   const dryRun = Boolean(getQuery(event).dryRun)
-  const result = await useEponymeService().importContent(payload, { dryRun, actorId: user.id })
+  const result = await useEponymeService().importContent(payload, {
+    dryRun,
+    actorId: user.id,
+    actorUsername: user.username,
+  })
   if ('errors' in result) {
     throw createError({
-      statusCode: result.schemaMismatch?.length ? 409 : 400,
-      statusMessage: result.errors[0] ?? t('server.importFailed'),
+      status: result.schemaMismatch?.length ? 409 : 400,
+      message: result.errors[0] ?? t('server.importFailed'),
       data: { errors: result.errors, schemaMismatch: result.schemaMismatch ?? [] },
     })
   }

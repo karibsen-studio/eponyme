@@ -7,7 +7,7 @@ import type { EponymeSchema } from '../src/runtime/types'
 /**
  * Behavioural contract of the validator, pinned before the zod migration.
  * Every case here uses top-level fields, whose error keys are the field name in both the
- * old and the new implementation — so this file must stay green across the migration.
+ * old and the new implementation – so this file must stay green across the migration.
  * Nested error keys (which become paths) are covered separately.
  */
 
@@ -15,7 +15,7 @@ function validate(schema: EponymeSchema, data: Record<string, unknown>, mode: 'd
   return validateEponymeData(schema, data, mode)
 }
 
-describe('validateEponymeData — required and modes', () => {
+describe('validateEponymeData: required and modes', () => {
   const schema = { title: field.string({ required: true, minLength: 3 }) } satisfies EponymeSchema
 
   it('only enforces required and minimum length when publishing', () => {
@@ -41,7 +41,7 @@ describe('validateEponymeData — required and modes', () => {
   })
 })
 
-describe('validateEponymeData — per field type', () => {
+describe('validateEponymeData: per field type', () => {
   it('validates tag fields', () => {
     const closed = { tags: field.tags({ suggestions: ['Nuxt', 'Vue'], required: true, maxItems: 2 }) } satisfies EponymeSchema
     expect(validate(closed, { tags: 'Nuxt' })).toEqual({ tags: ['Must be an array.'] })
@@ -71,6 +71,39 @@ describe('validateEponymeData — per field type', () => {
     expect(validate(schema, { code: 'ABC' })).toEqual({})
   })
 
+  it('refuses an image whose origin the field does not declare', () => {
+    const uploaded = '/api/eponyme-media/raw/uploads/cover.png'
+
+    // Declaring nothing keeps every origin, which is what `field.image()` defaults to.
+    const any = { picture: field.image() }
+    expect(validate(any, { picture: uploaded })).toEqual({})
+    expect(validate(any, { picture: 'https://cdn.test/a.png' })).toEqual({})
+    expect(validate(any, { picture: '/local/a.png' })).toEqual({})
+
+    // The library only: a link to somebody else's server is refused, and so is a bare path,
+    // which would otherwise be a way to point at anything this deployment serves.
+    const stored = { picture: field.image({ sources: ['upload'] }) }
+    expect(validate(stored, { picture: uploaded })).toEqual({})
+    expect(validate(stored, { picture: 'https://cdn.test/a.png' }))
+      .toEqual({ picture: ['This image must be an uploaded image.'] })
+    expect(validate(stored, { picture: '/local/a.png' }))
+      .toEqual({ picture: ['This image must be an uploaded image.'] })
+
+    // Two origins are named the way the language joins them, not with a hardcoded separator.
+    const linked = { picture: field.image({ sources: ['absolute', 'relative'] }) }
+    expect(validate(linked, { picture: 'https://cdn.test/a.png' })).toEqual({})
+    expect(validate(linked, { picture: '/local/a.png' })).toEqual({})
+    expect(validate(linked, { picture: uploaded }))
+      .toEqual({ picture: ['This image must be an address on another site or a path on this site.'] })
+
+    // An address that is not an address at all still fails on shape first, once.
+    expect(validate(stored, { picture: 'not-a-url' }))
+      .toEqual({ picture: ['Must be an HTTP(S) URL or an uploaded image.'] })
+
+    // A file field has no sources, and is left alone by all of this.
+    expect(validate({ doc: field.file() }, { doc: 'https://cdn.test/a.pdf' })).toEqual({})
+  })
+
   it('validates email, image, slug, color and date fields', () => {
     const schema = {
       mail: field.email(),
@@ -81,17 +114,21 @@ describe('validateEponymeData — per field type', () => {
     } satisfies EponymeSchema
     expect(validate(schema, {
       mail: 'a@b',
-      picture: '/local.png',
+      picture: 'not a url',
       handle: 'Not A Slug',
       accent: 'red',
       day: '2025-06-01',
     })).toEqual({
       mail: ['Must be a valid email address.'],
-      picture: ['Must be an HTTP(S) URL.'],
+      picture: ['Must be an HTTP(S) URL or an uploaded image.'],
       handle: ['Must contain only lowercase letters, numbers and single hyphens.'],
       accent: ['Must be a valid hex color.'],
       day: ['Must be on or after 2026-01-01.'],
     })
+    // A root-relative path is what a driver with no public origin returns, so it is a value.
+    expect(validate(schema, { picture: '/api/eponyme-media/raw/uploads/cover.png' })).toEqual({})
+    expect(validate(schema, { picture: '//evil.example.com/cover.png' }))
+      .toEqual({ picture: ['Must be an HTTP(S) URL or an uploaded image.'] })
     expect(validate(schema, { day: '2026-02-30' })).toEqual({ day: ['Must be a valid date.'] })
     expect(validate(schema, {
       mail: 'a@b.co',
@@ -238,7 +275,7 @@ describe('validateEponymeData — per field type', () => {
   })
 })
 
-describe('validateEponymeData — visibility and custom validators', () => {
+describe('validateEponymeData: visibility and custom validators', () => {
   it('skips fields hidden by visibleWhen', () => {
     const schema = {
       showDate: field.boolean(),
@@ -278,7 +315,7 @@ describe('validateEponymeData — visibility and custom validators', () => {
   })
 })
 
-describe('validateEponymeData — nested error paths', () => {
+describe('validateEponymeData: nested error paths', () => {
   const schema = {
     hero: field.section({
       fields: {

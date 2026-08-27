@@ -8,7 +8,7 @@ const props = withDefaults(defineProps<{
   description?: string
   required?: boolean
   errors?: string[]
-  /** The parent already renders the label — only the control and its messages are shown. */
+  /** The parent already renders the label – only the control and its messages are shown. */
   hideLabel?: boolean
   /** Smaller label, for fields nested inside an array item. */
   compact?: boolean

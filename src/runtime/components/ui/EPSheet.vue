@@ -48,7 +48,7 @@ function endDrag(event: PointerEvent) {
 
 <template>
   <DialogPortal>
-    <DialogOverlay class="eponyme-sheet-overlay ep:fixed ep:inset-0 ep:z-50 ep:bg-black/65 ep:backdrop-blur-sm" />
+    <DialogOverlay class="eponyme-sheet-overlay eponyme-portal ep:fixed ep:inset-0 ep:z-50 ep:bg-black/65 ep:backdrop-blur-sm" />
     <DialogContent
       ref="content"
       :role="role"

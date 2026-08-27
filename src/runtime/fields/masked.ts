@@ -21,7 +21,7 @@ const TOKENS: Record<string, string> = {
  * a file taken before the mask was added.
  *
  * The mask produces the regex as well as the formatting, because the server never sees the
- * mask — without it, a direct API call could store what the editor makes impossible to type.
+ * mask – without it, a direct API call could store what the editor makes impossible to type.
  */
 export function masked({ mask, ...rest }: MaskedFieldOptions): StringFieldDefinition {
   return string({ ...rest, mask, regex: maskToRegex(mask) })

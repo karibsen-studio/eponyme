@@ -1,7 +1,7 @@
 import { t } from '#eponyme/locale'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
-import type { EponymeCollectionDefinitionBase, EponymeConfig, EponymeSchema } from '../../types'
+import type { EponymeAction, EponymeCollectionDefinitionBase, EponymeConfig, EponymeSchema, EponymeStatus } from '../../types'
 import type { FieldDefinition } from '../../types/field'
 import { createDefaultEponymeData } from '../../utils/create-default-eponyme-data'
 import { isArrayItemFieldDefinition } from '../../utils/get-field-default-value'
@@ -11,14 +11,14 @@ import { applyPreviewSlug } from '../../utils/preview'
 import { validateEponymeData, validateEponymePatch, type ValidationErrors, type ValidationMode } from '../../utils/validate-eponyme-data'
 import { normalizeEponymeValues } from '../../utils/normalize-eponyme-values'
 import { eponymeRichTextRejections } from '../../utils/sanitize-rich-text'
-import { buildEponymeIndexRows, describeEponymeIndexSchema, eponymeIndexKeys, foldEponymeIndexValue, type EponymeIndexRow } from '../../utils/eponyme-entry-index'
+import { collectEponymeRelations } from '../../utils/eponyme-relations'
+import { EPONYME_RELATION_INDEX_KEY, buildEponymeIndexRows, describeEponymeIndexSchema, eponymeIndexKeys, foldEponymeIndexValue, type EponymeIndexRow } from '../../utils/eponyme-entry-index'
 import { EponymeCache, type EponymeSharedCacheStorage } from './eponyme-cache-store'
 
-export type EponymeAction = 'draft' | 'publish' | 'unpublish' | 'revertToDraft' | 'schedule' | 'unschedule'
+export type { EponymeAction, EponymeStatus } from '../../types'
 export type EponymeVersion = 'draft' | 'published'
 /** Either the live draft/published content, or a numeric id from the version history. */
 export type EponymeVersionSelector = EponymeVersion | number
-export type EponymeStatus = 'draft' | 'published' | 'unpublished'
 export interface EponymeSchedule {
   scheduledPublishAt?: string | null
   scheduledUnpublishAt?: string | null
@@ -34,6 +34,7 @@ export interface EponymeVersionAuthor {
   id: string
   username: string
 }
+export type EponymeActor = EponymeVersionAuthor
 export interface EponymeHistoryEntry {
   id: number
   action: EponymeAction | 'restore' | 'import'
@@ -135,6 +136,11 @@ export interface EponymeCollectionQuery {
   order?: EponymeSortDirection
   /** Keyed by field name. Only the keys `collectionFilterKeys` reports can be used. */
   where?: Record<string, EponymeFilterCondition>
+  /**
+   * Substring of the title or of the slug. Titles live in the JSON payload, so a search
+   * reads the matching set the way sorting by title already does.
+   */
+  search?: string
 }
 
 export interface EponymeCollectionPage<Data extends Record<string, unknown> = Record<string, unknown>> {
@@ -152,8 +158,8 @@ export const COLLECTION_METADATA_KEYS = ['updatedAt', 'publishedAt', 'title', 's
 const IMPORT_TRANSACTION_MS = 120_000
 
 /**
- * A content row. Everything but the name is optional because a query narrows what it reads —
- * a public listing selects `published` and never `draft` — and a narrowed row has to satisfy
+ * A content row. Everything but the name is optional because a query narrows what it reads –
+ * a public listing selects `published` and never `draft` – and a narrowed row has to satisfy
  * this type as it is, without an overload per shape.
  */
 export type PrismaEponymeRow = {
@@ -209,7 +215,7 @@ export type PrismaEponymeQuery = {
 
 /**
  * `nulls` appears on `publishedAt` alone: Prisma refuses it on a column that cannot be null,
- * and `updatedAt` never is. A test double cannot catch that — only the real client does.
+ * and `updatedAt` never is. A test double cannot catch that – only the real client does.
  */
 export type PrismaEponymeOrderBy
   = | { name: 'asc' }
@@ -263,8 +269,9 @@ export type PrismaEponymeDelegates = {
     createMany(args: { data: EponymeIndexRow[] }): Promise<{ count: number }>
     findMany(args: {
       where: {
-        entryName: { startsWith: string }
-        version: 'draft' | 'published'
+        /** Absent when the question is "who points at this", which spans every collection. */
+        entryName?: { startsWith: string }
+        version?: 'draft' | 'published'
         key: string
         value: PrismaStringFilter
       }
@@ -280,12 +287,15 @@ export type PrismaEponymeDelegates = {
     }): Promise<{ name: string, fingerprint: string }>
     deleteMany(args: { where: { name: { in: string[] } } }): Promise<{ count: number }>
   }
+  eponymeAuditEvent: {
+    create(args: { data: Record<string, unknown> }): Promise<unknown>
+  }
 }
 
 /**
  * What one condition asks the index for. Text order is the point: a range only makes sense
  * because every indexed value is stored in a form whose alphabetical order is its natural
- * one — see `buildEponymeIndexRows`.
+ * one – see `buildEponymeIndexRows`.
  */
 export type PrismaStringFilter = string | {
   in?: string[]
@@ -299,8 +309,8 @@ export type PrismaStringFilter = string | {
 
 export type PrismaEponymeClient = PrismaEponymeDelegates & {
   /**
-   * Prisma's interactive transaction. Writes that only make sense together — an entry and
-   * its history version, an import and every version it writes — run inside one, so a
+   * Prisma's interactive transaction. Writes that only make sense together – an entry and
+   * its history version, an import and every version it writes – run inside one, so a
    * failure between the two rolls back instead of leaving the history disagreeing with
    * the content it describes.
    */
@@ -379,7 +389,7 @@ export class EponymeService {
    *
    * Deleting before inserting rather than diffing: an entry carries a handful of rows, the
    * two statements are cheap, and a diff is one more place for the index to drift from the
-   * content it describes — a failure mode that returns wrong listings without erroring.
+   * content it describes – a failure mode that returns wrong listings without erroring.
    */
   private async reindexEntry(db: PrismaEponymeDelegates, name: string, state: StoredEponymeState): Promise<void> {
     const schema = this.getSchema(name)
@@ -387,6 +397,29 @@ export class EponymeService {
     await db.eponymeEntryIndex.deleteMany({ where: { entryName: name } })
     const rows = buildEponymeIndexRows(name, schema, state.__eponyme)
     if (rows.length) await db.eponymeEntryIndex.createMany({ data: rows })
+  }
+
+  private async audit(
+    db: PrismaEponymeDelegates,
+    actor: string | EponymeActor | undefined,
+    action: string,
+    resourceType: 'singleton' | 'collection' | 'system',
+    resourceName: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<void> {
+    const resolvedActor = typeof actor === 'string' ? { id: actor, username: null } : actor
+    await db.eponymeAuditEvent.create({
+      data: {
+        id: randomUUID(),
+        actorUserId: resolvedActor?.id ?? null,
+        actorUsername: resolvedActor?.username ?? null,
+        action,
+        outcome: 'success',
+        resourceType,
+        resourceName,
+        metadata: metadata ?? null,
+      },
+    })
   }
 
   collectionFilterKeys(name: string): string[] | undefined {
@@ -440,7 +473,7 @@ export class EponymeService {
    * Rebuilds only what a configuration change invalidated, and nothing when nothing changed.
    *
    * This is what makes the index self-maintaining. Ordinary writes keep it current, but a
-   * newly filterable field leaves the entries already stored without any row for that key —
+   * newly filterable field leaves the entries already stored without any row for that key –
    * and a filter on them then answers "none" rather than failing, which is the worst way for
    * this to break.
    *
@@ -460,7 +493,7 @@ export class EponymeService {
     }
 
     // A collection removed from the config keeps neither rows nor a fingerprint. Its content
-    // is untouched — only the record of an index that no longer describes anything.
+    // is untouched – only the record of an index that no longer describes anything.
     const stale = [...recorded.keys()].filter(name => !this.schemas[name] && !this.collections[name])
     if (stale.length) await this.client.eponymeIndexState.deleteMany({ where: { name: { in: stale } } })
 
@@ -487,7 +520,7 @@ export class EponymeService {
    * The callback reports the entries it touched rather than invalidating them itself:
    * inside the transaction the write has not landed yet, and a read racing an
    * uncommitted change would re-cache the old row and hold it for the whole TTL. The
-   * drop is deliberate on a rollback too — losing a cache entry costs one query, while
+   * drop is deliberate on a rollback too – losing a cache entry costs one query, while
    * keeping a wrong one costs the TTL.
    */
   private async transaction<T>(
@@ -549,7 +582,7 @@ export class EponymeService {
    * Recursive, because a field added inside a section, a tab or an array item is otherwise
    * never filled in: the container it lives in already exists and is still valid, so a
    * top-level pass keeps it untouched and the new field reads as missing forever. That was
-   * silent — `defaultValue` simply did nothing for anything but a root field.
+   * silent – `defaultValue` simply did nothing for anything but a root field.
    */
   private reconcile(schema: EponymeSchema, value: unknown, mode: ValidationMode): Record<string, unknown> {
     const persisted = isPlainObject(value) ? value : {}
@@ -559,7 +592,7 @@ export class EponymeService {
       const candidate = Object.hasOwn(persisted, key)
         ? this.reconcileField(definition, persisted[key], mode)
         : defaults[key]
-      // Errors are keyed by path, so a nested failure shows up as `key.sub` — any key at all
+      // Errors are keyed by path, so a nested failure shows up as `key.sub` – any key at all
       // means this value is unusable and must fall back to the default.
       const errors = validateEponymeData({ [key]: definition }, { [key]: candidate }, mode)
       return [key, Object.keys(errors).length ? defaults[key] : candidate]
@@ -671,7 +704,7 @@ export class EponymeService {
    * writers, because healing moves `updatedAt` and so decides the lock token they are about to compare.
    *
    * `cache` is only ever set for published content. Draft reads serve the preview panel, which has to
-   * show a save immediately, and they come from the dashboard rather than from a public page — so
+   * show a save immediately, and they come from the dashboard rather than from a public page – so
    * there is nothing to gain by caching them and a stale preview to lose.
    */
   private async loadRow(
@@ -693,7 +726,7 @@ export class EponymeService {
     if (!row || row.deletedAt) return undefined
     const state = this.rowToState(schema, row)
     if (sameRow(state, row)) return { state, updatedAt: row.updatedAt }
-    // The stored shape drifted from the configured one — a storage-envelope migration, or a
+    // The stored shape drifted from the configured one – a storage-envelope migration, or a
     // field that no longer validates. Persisting it converges, so a reader does it once per
     // process: the migration still lands on first read, but a drift that never converges
     // cannot turn every later read of a public page into a write.
@@ -779,7 +812,7 @@ export class EponymeService {
 
     // Only negations: there is nothing to narrow, so the collection itself is the starting
     // set. This is the one query the index cannot save, and it reads names rather than
-    // content — the payload of every entry still stays out of it.
+    // content – the payload of every entry still stays out of it.
     const result = matching ?? await this.collectionEntryNames(name)
     for (const entry of excluded) result.delete(entry)
     return result
@@ -898,13 +931,16 @@ export class EponymeService {
       deletedAt: null,
       ...(version === 'published' ? eponymeLiveWhere(new Date()) : {}),
     }
-    // Draft content is never read for a public listing — not filtered out of the response,
+    // Draft content is never read for a public listing – not filtered out of the response,
     // simply not selected.
     const select: PrismaEponymeSelect = version === 'published'
       ? { name: true, published: true, status: true, publishedAt: true, scheduledPublishAt: true, scheduledUnpublishAt: true, updatedAt: true }
       : { name: true, draft: true, status: true, publishedAt: true, scheduledPublishAt: true, scheduledUnpublishAt: true, updatedAt: true }
 
-    const pushdown = pushdownOrderBy(query.orderBy, query.order ?? 'desc')
+    // A search compares titles, which are not a column – so it takes the same path as sorting
+    // by one rather than paginating in SQL over rows it cannot judge.
+    const search = query.search?.trim().toLocaleLowerCase()
+    const pushdown = search ? undefined : pushdownOrderBy(query.orderBy, query.order ?? 'desc')
     if (pushdown) {
       const [rows, total] = await Promise.all([
         this.client.eponyme.findMany({
@@ -924,7 +960,10 @@ export class EponymeService {
     // Sorting by `title` or by a content field: those live in the JSON payload, so the whole
     // matching set still has to be read and ordered here.
     const rows = await this.collectionRows(name, version, where, select, names === undefined)
-    const entries = this.toCollectionEntries(name, definition, version, rows)
+    const all = this.toCollectionEntries(name, definition, version, rows)
+    const entries = search
+      ? all.filter(entry => `${entry.title} ${entry.slug}`.toLocaleLowerCase().includes(search))
+      : all
     const sorted = query.orderBy ? sortCollectionEntries(entries, query.orderBy, query.order ?? 'desc') : entries
     const skip = Math.max(0, Math.trunc(query.skip ?? 0) || 0)
     const take = query.take === undefined ? undefined : Math.max(0, Math.trunc(query.take) || 0)
@@ -1064,12 +1103,12 @@ export class EponymeService {
    *
    * The schema check runs first and refuses the whole file, so an import can never
    * land half of its entries into a configuration that no longer matches. The writes then
-   * run in one transaction, so a failure partway through leaves nothing behind either —
+   * run in one transaction, so a failure partway through leaves nothing behind either –
    * an interrupted import can simply be replayed.
    */
   async importContent(
     file: unknown,
-    options: { dryRun?: boolean, actorId?: string } = {},
+    options: { dryRun?: boolean, actorId?: string, actorUsername?: string } = {},
   ): Promise<EponymeImportResult | EponymeImportRejection> {
     const parsed = parseExportFile(file)
     if (!parsed) return { errors: ['This file is not an Eponyme export.'] }
@@ -1097,7 +1136,7 @@ export class EponymeService {
     if (options.dryRun) return await this.applyImport(parsed, options, this.client, () => {})
     return await this.transaction(
       (tx, invalidate) => this.applyImport(parsed, options, tx, invalidate),
-      // An import is one unit, so its transaction lasts as long as the file it carries —
+      // An import is one unit, so its transaction lasts as long as the file it carries –
       // well past the five seconds Prisma allows by default.
       { maxWait: IMPORT_TRANSACTION_MS, timeout: IMPORT_TRANSACTION_MS },
     )
@@ -1109,7 +1148,7 @@ export class EponymeService {
    */
   private async applyImport(
     parsed: EponymeExportFile,
-    options: { dryRun?: boolean, actorId?: string },
+    options: { dryRun?: boolean, actorId?: string, actorUsername?: string },
     db: PrismaEponymeDelegates,
     invalidate: (name: string) => void,
   ): Promise<EponymeImportResult> {
@@ -1170,13 +1209,24 @@ export class EponymeService {
       else result.created++
     }
 
+    if (!options.dryRun) {
+      await this.audit(
+        db,
+        options.actorId ? { id: options.actorId, username: options.actorUsername ?? '' } : undefined,
+        'content.imported',
+        'system',
+        'content',
+        { created: result.created, updated: result.updated, skipped: result.skipped.length },
+      )
+    }
+
     return result
   }
 
   async createCollectionEntry(
     name: string,
     payload: unknown,
-    actorId?: string,
+    actor?: string | EponymeActor,
   ): Promise<(EponymeResult & { slug: string, errors?: never }) | { errors: ValidationErrors } | undefined> {
     const definition = this.collections[name]
     if (!definition) return undefined
@@ -1196,6 +1246,7 @@ export class EponymeService {
     const errors = mergeErrors(
       validateEponymePatch(definition.fields, data, data, 'draft'),
       eponymeRichTextRejections(definition.fields, input),
+      await this.relationRejections(definition.fields, data),
     )
     if (Object.keys(errors).length) return { errors }
 
@@ -1219,7 +1270,8 @@ export class EponymeService {
         invalidate(entryName)
         await tx.eponyme.create({ data: { name: entryName, ...columns } })
         await this.reindexEntry(tx, entryName, state)
-        await tx.eponymeVersion.create({ data: { entryName, data: stored, action: 'draft', status: 'draft', userId: actorId ?? null } })
+        await tx.eponymeVersion.create({ data: { entryName, data: stored, action: 'draft', status: 'draft', userId: actorId(actor) } })
+        await this.audit(tx, actor, 'content.created', 'collection', entryName)
       })
     }
     catch (error) {
@@ -1249,37 +1301,113 @@ export class EponymeService {
     }
   }
 
-  /** Moves an entry to the trash. Its history is kept, so it stays restorable. */
-  async deleteCollectionEntry(name: string): Promise<boolean> {
-    if (!this.getCollectionEntry(name)) return false
-    // Guarding on `deletedAt: null` makes a second delete a no-op rather than
-    // moving the deletion date forward.
-    const { count } = await this.client.eponyme.updateMany({
-      where: { name, deletedAt: null },
-      data: { deletedAt: new Date() },
+  /**
+   * Live entries still pointing at this one, draft or published.
+   *
+   * Read from the index rather than from the payloads: a relation is recorded there at every
+   * depth, so a reference buried in an array of items is found by the same lookup as one at
+   * the root. A trashed referrer is left out – it is visible nowhere, so it holds nothing back.
+   */
+  async findEponymeReferrers(entryName: string): Promise<string[]> {
+    const rows = await this.client.eponymeEntryIndex.findMany({
+      where: { key: EPONYME_RELATION_INDEX_KEY, value: foldEponymeIndexValue(entryName) },
+      select: { entryName: true },
     })
-    await this.invalidate(name)
-    return count > 0
+    const names = [...new Set(rows.map(row => row.entryName))].filter(referrer => referrer !== entryName)
+    if (!names.length) return []
+    const live = await this.client.eponyme.findMany({
+      where: { name: { in: names }, deletedAt: null },
+      orderBy: [{ name: 'asc' }],
+      select: { name: true },
+    })
+    return live.map(row => row.name)
   }
 
-  async restoreCollectionEntry(name: string): Promise<boolean> {
-    if (!this.getCollectionEntry(name)) return false
-    const { count } = await this.client.eponyme.updateMany({
-      where: { name, deletedAt: { not: null } },
-      data: { deletedAt: null },
+  /**
+   * Moves an entry to the trash. Its history is kept, so it stays restorable.
+   *
+   * Refused while another entry points at it: a reference is only worth having if it cannot
+   * quietly stop resolving, and the editor is told which entries to detach first.
+   */
+  async deleteCollectionEntry(name: string, actor?: string | EponymeActor): Promise<{ deleted: true } | { referencedBy: string[] } | undefined> {
+    if (!this.getCollectionEntry(name)) return undefined
+    const referencedBy = await this.findEponymeReferrers(name)
+    if (referencedBy.length) return { referencedBy }
+    // Guarding on `deletedAt: null` makes a second delete a no-op rather than
+    // moving the deletion date forward.
+    const count = await this.transaction(async (tx, invalidate) => {
+      invalidate(name)
+      const updated = await tx.eponyme.updateMany({
+        where: { name, deletedAt: null },
+        data: { deletedAt: new Date() },
+      })
+      if (updated.count) await this.audit(tx, actor, 'content.trashed', 'collection', name)
+      return updated.count
     })
-    await this.invalidate(name)
+    return count > 0 ? { deleted: true } : undefined
+  }
+
+  /**
+   * Names every relation of a payload whose target is missing, so a reference can never be
+   * stored pointing at nothing. Asked of the database, which is why it cannot live in
+   * `validateEponymeData` beside the rules that are pure.
+   */
+  private async relationRejections(schema: EponymeSchema, data: Record<string, unknown>): Promise<ValidationErrors> {
+    const references = collectEponymeRelations(schema, data)
+    if (!references.length) return {}
+
+    const errors: ValidationErrors = {}
+    const missing = new Map<string, string[]>()
+    // A relation to a collection that is not declared is a configuration mistake rather than
+    // a content one, and reads as such.
+    for (const reference of references) {
+      if (this.collections[reference.collection]) continue
+      errors[reference.path] = [t('server.relationUnknownCollection', { collection: reference.collection })]
+    }
+
+    const names = [...new Set(references.filter(reference => this.collections[reference.collection]).map(reference => reference.entryName))]
+    if (!names.length) return errors
+    const rows = await this.client.eponyme.findMany({
+      where: { name: { in: names }, deletedAt: null },
+      orderBy: [{ name: 'asc' }],
+      select: { name: true },
+    })
+    const existing = new Set(rows.map(row => row.name))
+
+    for (const reference of references) {
+      if (!this.collections[reference.collection] || existing.has(reference.entryName)) continue
+      missing.set(reference.path, [...(missing.get(reference.path) ?? []), reference.slug])
+    }
+    for (const [path, slugs] of missing)
+      errors[path] = [t('server.relationMissing', { slugs: slugs.join(', ') })]
+    return errors
+  }
+
+  async restoreCollectionEntry(name: string, actor?: string | EponymeActor): Promise<boolean> {
+    if (!this.getCollectionEntry(name)) return false
+    const count = await this.transaction(async (tx, invalidate) => {
+      invalidate(name)
+      const updated = await tx.eponyme.updateMany({
+        where: { name, deletedAt: { not: null } },
+        data: { deletedAt: null },
+      })
+      if (updated.count) await this.audit(tx, actor, 'content.restored_from_trash', 'collection', name)
+      return updated.count
+    })
     return count > 0
   }
 
   /** Definitive: `onDelete: Cascade` takes the entry's whole history with it. */
-  async purgeCollectionEntry(name: string): Promise<boolean> {
+  async purgeCollectionEntry(name: string, actor?: string | EponymeActor): Promise<boolean> {
     if (!this.getCollectionEntry(name)) return false
     const row = await this.client.eponyme.findUnique({ where: { name } })
     if (!row?.deletedAt) return false
     try {
-      await this.client.eponyme.delete({ where: { name } })
-      await this.invalidate(name)
+      await this.transaction(async (tx, invalidate) => {
+        invalidate(name)
+        await tx.eponyme.delete({ where: { name } })
+        await this.audit(tx, actor, 'content.purged', 'collection', name)
+      })
     }
     catch (error) {
       // Already gone, or purged by a concurrent request.
@@ -1324,7 +1452,7 @@ export class EponymeService {
     name: string,
     payload: unknown,
     action: EponymeAction = 'publish',
-    actorId?: string,
+    actor?: string | EponymeActor,
     schedule: EponymeSchedule = {},
   ): Promise<(EponymeResult & { errors?: never, conflict?: never }) | { errors: ValidationErrors, conflict?: never } | EponymeConflict | undefined> {
     const schema = this.getSchema(name)
@@ -1349,9 +1477,12 @@ export class EponymeService {
     // Read from the payload, not from `data`: the normalisation above has already removed
     // whatever there was to complain about.
     const stripped = eponymeRichTextRejections(schema, payload as Record<string, unknown>)
+    // Checked against what is being written rather than against the whole entry: a reference
+    // stored before its target was trashed is not this save's fault to answer for.
+    const danglingRelations = await this.relationRejections(schema, normalizeEponymeValues(schema, payload as Record<string, unknown>))
     const errors = validationMode === 'publish'
-      ? mergeErrors(patchErrors, stripped, validateEponymeData(schema, data, 'publish'))
-      : mergeErrors(patchErrors, stripped)
+      ? mergeErrors(patchErrors, stripped, danglingRelations, validateEponymeData(schema, data, 'publish'))
+      : mergeErrors(patchErrors, stripped, danglingRelations)
     const parsedSchedule = action === 'schedule' ? normalizeSchedule(schedule) : schedule
     if (action === 'schedule' && !parsedSchedule)
       errors._form = [t('server.invalidSchedule')]
@@ -1370,9 +1501,17 @@ export class EponymeService {
           data: next as unknown as Record<string, unknown>,
           action,
           status: next.__eponyme.status,
-          userId: actorId ?? null,
+          userId: actorId(actor),
         },
       })
+      await this.audit(
+        tx,
+        actor,
+        auditAction(action),
+        collectionEntry ? 'collection' : 'singleton',
+        name,
+        { status: next.__eponyme.status },
+      )
       return true
     })
     if (!written) return { conflict: true }
@@ -1438,6 +1577,14 @@ export class EponymeService {
               status: transition.state.__eponyme.status,
             },
           })
+          await this.audit(
+            tx,
+            undefined,
+            transition.action === 'publish' ? 'content.published' : 'content.unpublished',
+            this.getCollectionEntry(dueRow.name) ? 'collection' : 'singleton',
+            dueRow.name,
+            { scheduled: true, status: transition.state.__eponyme.status },
+          )
         }
         return true
       })
@@ -1467,7 +1614,7 @@ export class EponymeService {
     }))
   }
 
-  async restore(name: string, versionId: number, actorId?: string): Promise<EponymeResult | EponymeConflict | undefined> {
+  async restore(name: string, versionId: number, actor?: string | EponymeActor): Promise<EponymeResult | EponymeConflict | undefined> {
     const schema = this.getSchema(name)
     if (!schema) return undefined
     const version = await this.client.eponymeVersion.findUnique({ where: { id: versionId } })
@@ -1485,9 +1632,17 @@ export class EponymeService {
           data: state as unknown as Record<string, unknown>,
           action: 'restore',
           status: state.__eponyme.status,
-          userId: actorId ?? null,
+          userId: actorId(actor),
         },
       })
+      await this.audit(
+        tx,
+        actor,
+        'content.version_restored',
+        this.getCollectionEntry(name) ? 'collection' : 'singleton',
+        name,
+        { versionId },
+      )
       return true
     })
     if (!written) return { conflict: true }
@@ -1558,7 +1713,7 @@ function shouldKeepEmptyPublished(state: StoredEponymeState['__eponyme']): boole
 }
 
 /**
- * Describes the shape of a schema — field names and types, nested containers included —
+ * Describes the shape of a schema – field names and types, nested containers included –
  * while ignoring labels, placeholders and validators. Renaming a label must not block
  * an import; adding or retyping a field must.
  */
@@ -1584,6 +1739,8 @@ function describeField(field: unknown): string {
       return `${key}:${describeSchema(isPlainObject(tab) && isPlainObject(tab.fields) ? tab.fields : {})}`
     }).join(',')})`
   }
+  if (field.type === 'custom')
+    return `custom(${typeof field.name === 'string' ? field.name : 'unknown'})`
   return field.type
 }
 
@@ -1645,6 +1802,19 @@ function mergeErrors(...groups: ValidationErrors[]) {
 
 export function isPrismaError(error: unknown, code: string) {
   return Boolean(error && typeof error === 'object' && (error as { code?: unknown }).code === code)
+}
+
+function actorId(actor: string | EponymeActor | undefined): string | null {
+  return typeof actor === 'string' ? actor : actor?.id ?? null
+}
+
+function auditAction(action: EponymeAction): string {
+  if (action === 'draft') return 'content.draft_saved'
+  if (action === 'publish') return 'content.published'
+  if (action === 'unpublish') return 'content.unpublished'
+  if (action === 'revertToDraft') return 'content.reverted_to_draft'
+  if (action === 'schedule') return 'content.scheduled'
+  return 'content.unscheduled'
 }
 
 function isEponymeStatus(value: unknown): value is EponymeStatus {
@@ -1766,7 +1936,7 @@ function toIsoOrNull(value: Date | string | null | undefined): string | null {
 }
 
 /**
- * Whether a reconciled state already matches what the row holds — the test that decides
+ * Whether a reconciled state already matches what the row holds – the test that decides
  * whether a read has to heal.
  *
  * `publishedAt` is reduced to an ISO string on both sides on purpose. The column comes back
@@ -1830,7 +2000,7 @@ function isEmptyValue(value: unknown): boolean {
  * would quietly change an order that already ships.
  *
  * `nulls: 'last'` is not decoration. Postgres puts NULLs first in `DESC`, while
- * `sortCollectionEntries` sinks empty values to the bottom in both directions — without it,
+ * `sortCollectionEntries` sinks empty values to the bottom in both directions – without it,
  * the two modes would disagree on where an unpublished entry belongs.
  */
 function pushdownOrderBy(orderBy: string | undefined, order: EponymeSortDirection): PrismaEponymeOrderBy[] | undefined {

@@ -1,12 +1,15 @@
 import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
-import { EPONYME_THEME_BOOTSTRAP } from '../src/runtime/utils/eponyme-theme'
+import {
+  createEponymeThemeBootstrap,
+  isEponymeDashboardRoute,
+} from '../src/runtime/utils/eponyme-theme'
 
-function runThemeBootstrap(cookie = '', prefersLight = false) {
-  const classes = new Set(['ep-dark'])
+function runThemeBootstrap(path = '/__eponyme/login', cookie = '', prefersLight = false, dashboardPath = '/__eponyme') {
+  const classes = new Set(['host-class', 'ep-dark'])
   let nextCookie = cookie
 
-  runInNewContext(EPONYME_THEME_BOOTSTRAP, {
+  runInNewContext(createEponymeThemeBootstrap(dashboardPath), {
     document: {
       get cookie() {
         return nextCookie
@@ -21,7 +24,7 @@ function runThemeBootstrap(cookie = '', prefersLight = false) {
         },
       },
     },
-    location: { protocol: 'https:' },
+    location: { pathname: path, protocol: 'https:' },
     window: {
       matchMedia: () => ({ matches: prefersLight }),
     },
@@ -31,10 +34,17 @@ function runThemeBootstrap(cookie = '', prefersLight = false) {
 }
 
 describe('Eponyme theme bootstrap', () => {
-  it('uses the system preference and stores it on the first visit', () => {
-    const result = runThemeBootstrap('', true)
+  it('matches the dashboard route and its children without matching a sibling route', () => {
+    expect(isEponymeDashboardRoute('/admin', '/admin/')).toBe(true)
+    expect(isEponymeDashboardRoute('/admin/login', '/admin/')).toBe(true)
+    expect(isEponymeDashboardRoute('/administrator', '/admin/')).toBe(false)
+    expect(isEponymeDashboardRoute('/', '/admin/')).toBe(false)
+  })
 
-    expect(result.classes).toEqual(new Set(['ep-light']))
+  it('uses the system preference and stores it on the first visit', () => {
+    const result = runThemeBootstrap('/__eponyme/login', '', true)
+
+    expect(result.classes).toEqual(new Set(['host-class', 'ep-light']))
     expect(result.cookie).toContain('eponyme-theme=light')
     expect(result.cookie).toContain('Max-Age=31536000')
     expect(result.cookie).toContain('SameSite=Lax')
@@ -42,9 +52,22 @@ describe('Eponyme theme bootstrap', () => {
   })
 
   it('keeps a valid stored preference instead of reading the system preference again', () => {
-    const result = runThemeBootstrap('eponyme-theme=dark', true)
+    const result = runThemeBootstrap('/__eponyme', 'eponyme-theme=dark', true)
 
-    expect(result.classes).toEqual(new Set(['ep-dark']))
+    expect(result.classes).toEqual(new Set(['host-class', 'ep-dark']))
+    expect(result.cookie).toBe('eponyme-theme=dark')
+  })
+
+  it('uses the configured dashboard path in the bootstrap script', () => {
+    const result = runThemeBootstrap('/admin/login', 'eponyme-theme=light', false, '/admin/')
+
+    expect(result.classes).toEqual(new Set(['host-class', 'ep-light']))
+  })
+
+  it('removes Eponyme theme classes without changing the stored preference outside the dashboard', () => {
+    const result = runThemeBootstrap('/', 'eponyme-theme=dark', true)
+
+    expect(result.classes).toEqual(new Set(['host-class']))
     expect(result.cookie).toBe('eponyme-theme=dark')
   })
 })
