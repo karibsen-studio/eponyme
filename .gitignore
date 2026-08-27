@@ -66,3 +66,7 @@ JSDOC_GUIDELINES.md
 explain.md
 /playground/generated
 /playground/.vercel
+RELEASE-NOTES-*.md
+/scripts
+security.md
+AGENTS.md
