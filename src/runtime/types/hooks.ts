@@ -1,4 +1,4 @@
-import type { EponymeAction, EponymeStatus } from '../server/services/eponyme-store'
+import type { EponymeAction, EponymeStatus } from './eponyme'
 
 export interface EponymeEntryContext {
   /** Full entry name, `homepage` or `articles/my-article`. */

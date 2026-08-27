@@ -1,0 +1,7 @@
+{
+  "extends": "../fixtures/basic/.nuxt/tsconfig.server.json",
+  "include": [],
+  "files": [
+    "./nitro-plugin.type-test.ts"
+  ]
+}
