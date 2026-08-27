@@ -2,14 +2,16 @@ import prisma from '#eponyme/prisma'
 import { useRuntimeConfig } from 'nitropack/runtime'
 import { EponymeAuthService } from './eponyme-auth-store'
 import type { PrismaEponymeAuthClient } from './eponyme-auth-store'
+import { getEponymeRoleRegistry } from '../utils/eponyme-role-registry'
 
 let authService: EponymeAuthService | undefined
 
 export function useEponymeAuthService(): EponymeAuthService {
   if (!authService) {
     authService = new EponymeAuthService(
-      prisma as PrismaEponymeAuthClient,
+      prisma as unknown as PrismaEponymeAuthClient,
       useRuntimeConfig().eponymeAuth.sessionDurationDays,
+      Object.keys(getEponymeRoleRegistry()),
     )
   }
   return authService

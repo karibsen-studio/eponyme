@@ -7,6 +7,8 @@ import {
   setEponymeSessionCookie,
 } from '../../utils/auth'
 import { readEponymeBody } from '../../utils/body'
+import { getEponymePermissions } from '../../utils/eponyme-permissions'
+import { recordEponymeAudit } from '../../utils/eponyme-audit'
 
 export default defineEventHandler(async (event) => {
   assertEponymeMutationOrigin(event)
@@ -18,7 +20,16 @@ export default defineEventHandler(async (event) => {
     body?.newPassword,
   )
   if (!result.session)
-    throw createError({ statusCode: 422, statusMessage: result.error ?? t('server.passwordChangeFailed') })
+    throw createError({ status: 422, message: result.error ?? t('server.passwordChangeFailed') })
   setEponymeSessionCookie(event, result.session.token, result.session.expiresAt)
-  return { user: result.session.user }
+  await recordEponymeAudit(event, {
+    actor: result.session.user,
+    action: 'auth.password_changed',
+    resourceType: 'system',
+    resourceName: 'authentication',
+  })
+  return {
+    user: result.session.user,
+    permissions: getEponymePermissions(result.session.user.role),
+  }
 })

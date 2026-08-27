@@ -1,8 +1,8 @@
 import { defineEventHandler } from 'h3'
 import { useEponymeAuthService } from '../../services/eponyme-auth-service'
-import { requireEponymeUser } from '../../utils/auth'
+import { requireEponymePermission } from '../../utils/eponyme-permissions'
 
 export default defineEventHandler(async (event) => {
-  await requireEponymeUser(event, { roles: ['owner'] })
+  await requireEponymePermission(event, 'users.manage', { kind: 'system', name: 'users' })
   return { users: await useEponymeAuthService().listUsers() }
 })

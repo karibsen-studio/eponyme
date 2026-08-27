@@ -9,6 +9,8 @@ import {
   eponymeRequestClientKey,
   eponymeRateLimitPolicies,
 } from '../../utils/rate-limit'
+import { getEponymePermissions } from '../../utils/eponyme-permissions'
+import { recordEponymeAudit } from '../../utils/eponyme-audit'
 
 export default defineEventHandler(async (event) => {
   assertEponymeMutationOrigin(event)
@@ -20,11 +22,31 @@ export default defineEventHandler(async (event) => {
   const result = await useEponymeAuthService().login(body?.username, body?.password)
   if (!result.ok) {
     const account = typeof body?.username === 'string' ? normalizeUsername(body.username) : 'invalid-account'
-    // Checked after password verification: repeated failures are throttled, while the real
-    // owner can still sign in and cannot be locked out by somebody else.
+    await recordEponymeAudit(event, {
+      actorUsername: account,
+      action: 'auth.login.failed',
+      outcome: 'failure',
+      resourceType: 'system',
+      resourceName: 'authentication',
+      connection: true,
+      metadata: result.reason === 'role' ? { reason: 'role' } : null,
+    })
+
+    if (result.reason === 'role')
+      throw createError({ status: 403, message: t('server.roleUnavailable') })
     await assertEponymeRateLimit(event, `login:account-failure:${account}`, limits.loginAccountFailure)
-    throw createError({ statusCode: 401, statusMessage: t('server.badCredentials') })
+    throw createError({ status: 401, message: t('server.badCredentials') })
   }
   setEponymeSessionCookie(event, result.session.token, result.session.expiresAt)
-  return { user: result.session.user }
+  await recordEponymeAudit(event, {
+    actor: result.session.user,
+    action: 'auth.login.succeeded',
+    resourceType: 'system',
+    resourceName: 'authentication',
+    connection: true,
+  })
+  return {
+    user: result.session.user,
+    permissions: getEponymePermissions(result.session.user.role),
+  }
 })

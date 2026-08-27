@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   EponymeAuthService,
   type PrismaEponymeAuthClient,
+  type PrismaEponymeAuthDelegates,
   type PrismaEponymeSessionRow,
   type PrismaEponymeUserRow,
 } from '../src/runtime/server/services/eponyme-auth-store'
@@ -9,8 +10,9 @@ import {
 function createAuthClient() {
   const users = new Map<string, PrismaEponymeUserRow>()
   const sessions = new Map<string, PrismaEponymeSessionRow>()
+  const auditEvents: Array<Record<string, unknown>> = []
 
-  const client: PrismaEponymeAuthClient = {
+  const delegates: PrismaEponymeAuthDelegates = {
     eponymeUser: {
       async count({ where } = {}) {
         return [...users.values()].filter(user => !where || matches(user, where)).length
@@ -86,9 +88,35 @@ function createAuthClient() {
         return { count }
       },
     },
+    eponymeAuditEvent: {
+      async create({ data }: { data: Record<string, unknown> }) {
+        auditEvents.push(data)
+        return data
+      },
+    },
   }
 
-  return { client, users, sessions }
+  const client: PrismaEponymeAuthClient = {
+    ...delegates,
+    async $transaction(fn) {
+      const usersSnapshot = new Map(users)
+      const sessionsSnapshot = new Map(sessions)
+      const auditSnapshot = [...auditEvents]
+      try {
+        return await fn(delegates)
+      }
+      catch (error) {
+        users.clear()
+        for (const [id, user] of usersSnapshot) users.set(id, user)
+        sessions.clear()
+        for (const [id, session] of sessionsSnapshot) sessions.set(id, session)
+        auditEvents.splice(0, auditEvents.length, ...auditSnapshot)
+        throw error
+      }
+    },
+  }
+
+  return { client, users, sessions, auditEvents }
 }
 
 describe('EponymeAuthService', () => {
@@ -190,6 +218,35 @@ describe('EponymeAuthService', () => {
     await service.bootstrapOwner(message => logs.push(message))
 
     await expect(service.login('EponymeOwner', 'x'.repeat(10_000))).resolves.toEqual({ ok: false, reason: 'invalid' })
+  })
+
+  it('accepts configured custom roles and closes sessions when their role disappears', async () => {
+    const { client, users } = createAuthClient()
+    const roles = ['viewer', 'editor', 'owner', 'contributor']
+    const service = new EponymeAuthService(client, 7, roles)
+    const created = await service.createUser('Contributor', 'contributor')
+    expect(created.result?.user.role).toBe('contributor')
+    await expect(service.createUser('Unknown', 'missing-role')).resolves.toMatchObject({ error: 'A valid role is required.' })
+
+    const login = await service.login('Contributor', created.result!.temporaryPassword)
+    if (!login.ok) throw new Error('Contributor login failed')
+    const stored = users.get(created.result!.user.id)!
+    users.set(stored.id, { ...stored, role: 'removed-role' })
+
+    await expect(service.getSession(login.session.token)).resolves.toBeUndefined()
+  })
+
+  it('refuses the sign-in itself once the role left the file', async () => {
+    const { client, users } = createAuthClient()
+    const service = new EponymeAuthService(client, 7, ['viewer', 'editor', 'owner', 'contributor'])
+    const created = await service.createUser('Contributor', 'contributor')
+    const stored = users.get(created.result!.user.id)!
+    users.set(stored.id, { ...stored, role: 'removed-role' })
+
+    // Correct credentials, so this is not a bad-password answer: the session would be dropped
+    // on the next request and the account would loop on the login page.
+    await expect(service.login('Contributor', created.result!.temporaryPassword))
+      .resolves.toEqual({ ok: false, reason: 'role' })
   })
 })
 
