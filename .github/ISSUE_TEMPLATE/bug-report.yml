@@ -1,0 +1,122 @@
+name: "🐛 Bug report"
+description: Report something that does not work as documented
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this.
+
+        Before you start, please check the [documentation](https://eponyme-docs.vercel.app) and the
+        [existing issues](https://github.com/karibsen-studio/eponyme/issues?q=is%3Aissue+sort%3Aupdated-desc).
+
+        Wrong or missing **translations** belong in the [`@eponyme/locale`](https://github.com/eponymejs/locale/issues)
+        repository, which ships the catalogues on its own schedule.
+
+  - type: input
+    id: version
+    attributes:
+      label: Eponyme version
+      description: The version of `@karibsen/eponyme` you are running, including the nightly date if you are on one.
+      placeholder: 0.8.13 · 0.9.0-nightly.20260813
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Run `npx nuxt info` in your project and paste the output.
+      placeholder: |
+        - Operating System: `Darwin`
+        - Node Version:     `v24.14.0`
+        - Nuxt Version:     `4.5.2`
+        - Nitro Version:    `2.13.4`
+        - Package Manager:  `pnpm@10.33.4`
+        - Runtime Modules:  `@karibsen/eponyme@0.9.0-nightly.20260813`
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: database
+    attributes:
+      label: Database
+      description: Postgres version, and the provider if it is a hosted one.
+      placeholder: Postgres 16 · Neon · Supabase · local Docker
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Where does it go wrong? Pick the closest one.
+      options:
+        - Dashboard interface
+        - Fields, validation or the schema
+        - Content API or composables
+        - Forms and submissions
+        - Authentication, users or permissions
+        - Publication, scheduling or history
+        - Caching, sitemap or preview
+        - Build, packaging or deployment
+        - Something else
+    validations:
+      required: true
+
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where does it happen?
+      description: |
+        Worth checking both before reporting. A surprising number of problems only exist in one of them —
+        a dependency that is bundled in production but externalised in development, or the reverse.
+      options:
+        - In development (`nuxt dev`)
+        - In a production build only
+        - Both
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: |
+        Please link a public repository that reproduces the problem, with the steps to run it.
+
+        Eponyme needs a Postgres database and applied Prisma migrations, so an in-browser playground
+        such as StackBlitz cannot run it — a repository is the only workable form. Include your
+        `eponyme.config.ts`, or the part of it that matters.
+
+        Without a reproduction an issue often cannot be acted on, and may be closed after a while.
+      placeholder: https://github.com/my-account/eponyme-reproduction
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: What did you expect to happen, and what happened instead? If you plan to open a pull request for it, say so here.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Server or browser output, as text rather than a screenshot. Optional when a reproduction is provided.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      description: These two rule out the most common causes, which are not bugs.
+      options:
+        - label: The Prisma migrations Eponyme needs are applied to this database.
+          required: true
+        - label: I have searched the existing issues and discussions.
+          required: true
