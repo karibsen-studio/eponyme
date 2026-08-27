@@ -70,7 +70,7 @@ body:
     attributes:
       label: Where does it happen?
       description: |
-        Worth checking both before reporting. A surprising number of problems only exist in one of them —
+        Worth checking both before reporting. A surprising number of problems only exist in one of them –
         a dependency that is bundled in production but externalised in development, or the reverse.
       options:
         - In development (`nuxt dev`)
@@ -87,7 +87,7 @@ body:
         Please link a public repository that reproduces the problem, with the steps to run it.
 
         Eponyme needs a Postgres database and applied Prisma migrations, so an in-browser playground
-        such as StackBlitz cannot run it — a repository is the only workable form. Include your
+        such as StackBlitz cannot run it – a repository is the only workable form. Include your
         `eponyme.config.ts`, or the part of it that matters.
 
         Without a reproduction an issue often cannot be acted on, and may be closed after a while.

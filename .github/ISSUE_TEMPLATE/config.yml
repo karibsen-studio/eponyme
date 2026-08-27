@@ -5,7 +5,7 @@ contact_links:
     about: Configuration, fields, composables and the editorial lifecycle.
   - name: 💬 Questions and help
     url: https://github.com/karibsen-studio/eponyme/discussions
-    about: Ask before you are sure it is a bug — most questions are answered faster here.
+    about: Ask before you are sure it is a bug – most questions are answered faster here.
   - name: 🗣️ Discord
     url: https://discord.gg/m2tkscPNfn
     about: Talk to the people using Eponyme.

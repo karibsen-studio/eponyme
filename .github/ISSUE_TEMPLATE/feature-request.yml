@@ -25,7 +25,7 @@ body:
     attributes:
       label: Proposed solution
       description: |
-        What would it look like from the outside? A snippet of `eponyme.config.ts`, a field signature, an option —
+        What would it look like from the outside? A snippet of `eponyme.config.ts`, a field signature, an option –
         whatever makes the shape concrete.
       render: ts
     validations:

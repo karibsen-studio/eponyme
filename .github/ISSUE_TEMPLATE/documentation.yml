@@ -21,10 +21,10 @@ body:
     attributes:
       label: What is wrong with it?
       options:
-        - It is inaccurate — the code does something else
-        - It is out of date — it describes an older version
-        - It is missing — the behaviour is not documented anywhere
-        - It is confusing — accurate, but hard to follow
+        - It is inaccurate – the code does something else
+        - It is out of date – it describes an older version
+        - It is missing – the behaviour is not documented anywhere
+        - It is confusing – accurate, but hard to follow
     validations:
       required: true
 
