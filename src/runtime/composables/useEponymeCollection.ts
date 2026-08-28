@@ -36,6 +36,12 @@ export interface UseEponymeCollectionOptions<Name extends ConfigCollectionName> 
   where?: EponymeCollectionFilterInput<Name>
 }
 
+export type UseEponymeCollectionReturn<Data extends Record<string, unknown>>
+  = UseEponymeCollectionResult<Data> & Promise<UseEponymeCollectionResult<Data>>
+
+export type UseEponymeCollectionEntryReturn<Data extends Record<string, unknown>>
+  = UseEponymeCollectionEntryResult<Data> & Promise<UseEponymeCollectionEntryResult<Data>>
+
 export interface UseEponymeCollectionResult<Data extends Record<string, unknown>> {
   entries: ComputedRef<EponymeCollectionEntry<Data>[]>
   /** Matching entries before `take` and `skip`, for building a pager. */
@@ -95,7 +101,7 @@ function serializeFilter(
 export function useEponymeCollection<const Name extends ConfigCollectionName>(
   name: Name,
   options: UseEponymeCollectionOptions<Name> = {},
-): UseEponymeCollectionResult<EponymeCollectionDataByName<typeof eponymeConfig, Name>> {
+): UseEponymeCollectionReturn<EponymeCollectionDataByName<typeof eponymeConfig, Name>> {
   type Data = EponymeCollectionDataByName<typeof eponymeConfig, Name>
   const requestFetch = useRequestFetch()
   const filter = serializeFilter(options.where)
@@ -118,20 +124,21 @@ export function useEponymeCollection<const Name extends ConfigCollectionName>(
   const entries = computed(() => result.data.value?.entries ?? [])
   if (import.meta.client) useEventListener(window, 'focus', () => void result.refresh())
 
-  return {
+  const api: UseEponymeCollectionResult<Data> = {
     entries,
     total: computed(() => result.data.value?.total ?? 0),
     pending: result.pending,
     error: result.error as Ref<Error | null | undefined>,
     refresh: async () => { await result.refresh() },
   }
+  return Object.assign(result.then(() => api), api)
 }
 
 export function useEponymeCollectionEntry<const Name extends ConfigCollectionName>(
   name: Name,
   slug: string,
   options: UseEponymeCollectionEntryOptions = {},
-): UseEponymeCollectionEntryResult<EponymeCollectionDataByName<typeof eponymeConfig, Name>> {
+): UseEponymeCollectionEntryReturn<EponymeCollectionDataByName<typeof eponymeConfig, Name>> {
   type Data = EponymeCollectionDataByName<typeof eponymeConfig, Name>
   type Response = { data: Data, status: EponymeStatus, publishedAt: string | null }
   const route = useRoute()
@@ -154,7 +161,7 @@ export function useEponymeCollectionEntry<const Name extends ConfigCollectionNam
   )
   if (import.meta.client) useEventListener(window, 'focus', () => void result.refresh())
 
-  return {
+  const api: UseEponymeCollectionEntryResult<Data> = {
     data: result.data as Ref<{ data: Data } | undefined>,
     status: computed(() => result.data.value?.status ?? 'published'),
     publishedAt: computed(() => result.data.value?.publishedAt ?? null),
@@ -162,4 +169,5 @@ export function useEponymeCollectionEntry<const Name extends ConfigCollectionNam
     error: result.error as Ref<Error | null | undefined>,
     refresh: async () => { await result.refresh() },
   }
+  return Object.assign(result.then(() => api), api)
 }

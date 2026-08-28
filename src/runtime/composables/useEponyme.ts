@@ -47,11 +47,21 @@ export interface UseEponymeResult<Data extends Record<string, unknown>> {
   save: (patch?: Partial<Data>, action?: EponymeAction, schedule?: EponymeSchedule) => Promise<Data | undefined>
 }
 
+/**
+ * What the composable hands back: the refs, and a promise resolving to them.
+ *
+ * Awaiting it blocks setup until the first read is done, the way `useAsyncData` does.
+ * Without it a caller could only await something else first, which loses the component
+ * instance and with it the server render of the data - hence a hydration mismatch.
+ */
+export type UseEponymeReturn<Data extends Record<string, unknown>>
+  = UseEponymeResult<Data> & Promise<UseEponymeResult<Data>>
+
 /** Read and save a configured eponyme through the public or draft API. */
 export function useEponyme<const Name extends ConfigEponymeName>(
   name: Name,
   options: UseEponymeOptions = {},
-): UseEponymeResult<EponymeDataByName<typeof eponymeConfig, Name>> {
+): UseEponymeReturn<EponymeDataByName<typeof eponymeConfig, Name>> {
   type Data = EponymeDataByName<typeof eponymeConfig, Name>
   const route = useRoute()
   const preview = readPreviewQuery(route.query)
@@ -79,11 +89,12 @@ export function useEponyme<const Name extends ConfigEponymeName>(
   // entry on its own routes, which are authenticated and never cacheable, and it keeps the
   // editor server-rendered.
   const isPreviewRead = options.version === undefined && !isPublicContent
-  const { data: response, pending: loading, error, refresh: load } = useAsyncData(
+  const result = useAsyncData(
     cacheKey,
     () => requestFetch<EponymeResponse<Name>>(`/api/eponyme/${name}`, { query: { version, raw: options.raw ? 1 : undefined }, cache: fetchCache }),
     { server: !isPreviewRead, getCachedData: cacheForPublicRead(isPublicContent) },
   )
+  const { data: response, pending: loading, error, refresh: load } = result
   const data = computed(() => response.value?.data)
   const status = computed(() => response.value?.status ?? 'published')
   const publishedAt = computed(() => response.value?.publishedAt ?? null)
@@ -135,7 +146,7 @@ export function useEponyme<const Name extends ConfigEponymeName>(
     }
   }
 
-  return {
+  const api: UseEponymeResult<Data> = {
     data: data as Ref<Data | undefined>,
     status,
     publishedAt,
@@ -147,4 +158,5 @@ export function useEponyme<const Name extends ConfigEponymeName>(
     refresh,
     save,
   }
+  return Object.assign(result.then(() => api), api)
 }
