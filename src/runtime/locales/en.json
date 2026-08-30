@@ -490,6 +490,7 @@
   "server.passwordChangeFailed": "Unable to change password.",
   "server.userCreateFailed": "Unable to create user.",
   "server.entryConflict": "This entry was changed by someone else. Reload the page to get the latest version.",
+  "server.revisionRequired": "This action needs the version of the entry you are acting on. Reload the page and try again.",
   "server.rateLimited": "Too many requests. Try again later.",
   "server.invalidJson": "Request body must be valid JSON.",
   "server.bodyTooLarge": "Request body is too large.",

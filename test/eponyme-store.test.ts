@@ -505,6 +505,126 @@ describe('EponymeService', () => {
     expect(['From tab A', 'From tab B']).toContain(stored!.title)
   })
 
+  it('does not let the schema reconciliation overwrite a save that lands during it', async () => {
+    // A row whose stored shape has drifted from the schema, so reading it heals it.
+    const { client, rows } = createClient({ title: 'Stored', tags: 'old format', removed: 'discard me' })
+    const service = new EponymeService(config, client)
+    const canonical = { title: 'Saved by someone else', enabled: true, tags: ['nuxt'] }
+
+    // The other editor commits between the read that decided to heal and the heal's write.
+    const updateMany = client.eponyme.updateMany.bind(client.eponyme)
+    vi.spyOn(client.eponyme, 'updateMany').mockImplementationOnce(async (args) => {
+      await client.eponyme.update({
+        where: { name: 'homepage' },
+        data: {
+          draft: canonical,
+          published: canonical,
+          status: 'published',
+          publishedAt: null,
+          scheduledPublishAt: null,
+          scheduledUnpublishAt: null,
+        },
+      })
+      return await updateMany(args)
+    })
+
+    await service.syncAll()
+
+    // The save is what remains stored: the reconciliation saw the row move under it and gave
+    // up rather than writing back the normalisation of the row it had read.
+    expect(rows.get('homepage')).toMatchObject({ draft: canonical, published: canonical })
+    await expect(service.get('homepage', 'draft')).resolves.toEqual(canonical)
+  })
+
+  it('accepts a save whose revision was only superseded by the schema reconciliation', async () => {
+    const drifted = () => {
+      const { client } = createClient({ title: 'Stored', tags: 'old format', removed: 'discard me' })
+      return { client, service: new EponymeService(config, client) }
+    }
+    const revisionOf = async (client: PrismaEponymeDelegates) =>
+      new Date((await client.eponyme.findUnique({ where: { name: 'homepage' } }))!.updatedAt!).toISOString()
+
+    // What an editor holds after reading the entry, before anything reconciled it. A restart
+    // is what puts the two on either side of a heal.
+    const forgiven = drifted()
+    const opened = await revisionOf(forgiven.client)
+    await forgiven.service.syncAll()
+    // The heal moved the row's stamp without changing a thing the editor was shown.
+    expect(await revisionOf(forgiven.client)).not.toEqual(opened)
+
+    await expect(forgiven.service.patch('homepage', { title: 'From the open tab' }, 'draft', undefined, {}, opened))
+      .resolves.toMatchObject({ data: { title: 'From the open tab' } })
+
+    // A real write in the middle of the chain is not forgiven: that content would be lost.
+    const refused = drifted()
+    const openedToo = await revisionOf(refused.client)
+    await refused.service.syncAll()
+    await refused.service.patch('homepage', { title: 'By someone else' }, 'draft')
+
+    await expect(refused.service.patch('homepage', { title: 'From the open tab' }, 'draft', undefined, {}, openedToo))
+      .resolves.toEqual({ conflict: true })
+    await expect(refused.service.get('homepage', 'draft')).resolves.toMatchObject({ title: 'By someone else' })
+  })
+
+  it('refuses a save made against a revision someone else has already replaced', async () => {
+    const { client } = createClient()
+    const service = new EponymeService(config, client)
+    await service.syncAll()
+
+    // What an editor holds after opening the entry.
+    const opened = await service.getResult('homepage', 'draft')
+    expect(opened!.revision).toEqual(expect.any(String))
+    // A published read is served from the row cache, whose stamp can lag: no token to hand out.
+    await expect(service.getResult('homepage', 'published')).resolves.toMatchObject({ revision: null })
+
+    // Someone else saves while the first editor is still typing.
+    const saved = await service.patch('homepage', { title: 'From tab B' }, 'draft')
+    const savedRevision = saved && 'revision' in saved ? saved.revision : null
+    expect(savedRevision).toEqual(expect.any(String))
+    expect(savedRevision).not.toBe(opened!.revision)
+
+    await expect(service.patch('homepage', { title: 'From tab A' }, 'draft', undefined, {}, opened!.revision!))
+      .resolves.toEqual({ conflict: true })
+    await expect(service.get('homepage', 'draft')).resolves.toMatchObject({ title: 'From tab B' })
+
+    // The revision a save hands back is the one its own next save locks on, so an editor who
+    // stays on the page is never in conflict with themselves.
+    await expect(service.patch('homepage', { title: 'From tab B again' }, 'draft', undefined, {}, savedRevision!))
+      .resolves.toMatchObject({ data: { title: 'From tab B again' } })
+
+    // A caller that never read a revision keeps writing without the guard.
+    await expect(service.patch('homepage', { title: 'From a script' }, 'draft'))
+      .resolves.toMatchObject({ data: { title: 'From a script' } })
+  })
+
+  it('refuses a restore, a trashing and an untrashing made against a stale revision', async () => {
+    const { client } = createClient()
+    const service = new EponymeService(config, client)
+    await service.createCollectionEntry('articles', { title: 'Concurrent' })
+
+    const opened = await service.getResult('articles/concurrent', 'draft')
+    const [firstVersion] = (await service.history('articles/concurrent'))!
+    await service.patch('articles/concurrent', { title: 'Renamed by someone else' }, 'draft')
+
+    // Restoring replaces the whole entry, so it is refused against a version that moved on.
+    await expect(service.restore('articles/concurrent', firstVersion!.id, undefined, opened!.revision!))
+      .resolves.toEqual({ conflict: true })
+    await expect(service.deleteCollectionEntry('articles/concurrent', undefined, opened!.revision!))
+      .resolves.toEqual({ conflict: true })
+    await expect(service.get('articles/concurrent', 'draft')).resolves.toMatchObject({ title: 'Renamed by someone else' })
+
+    const fresh = await service.getResult('articles/concurrent', 'draft')
+    await expect(service.deleteCollectionEntry('articles/concurrent', undefined, fresh!.revision!))
+      .resolves.toEqual({ deleted: true })
+
+    // A trashed entry reads as missing, so untrashing locks on what the trash listing showed.
+    const trash = await service.listCollectionTrash('articles')
+    await expect(service.restoreCollectionEntry('articles/concurrent', undefined, opened!.revision!))
+      .resolves.toEqual({ conflict: true })
+    await expect(service.restoreCollectionEntry('articles/concurrent', undefined, trash!.entries[0]!.updatedAt!))
+      .resolves.toBe(true)
+  })
+
   it('does not rewrite equivalent JSONB when object keys are returned in a different order', async () => {
     const { client, rows } = createClient()
     // Postgres does not preserve key order in JSONB, so a read can hand the payload back in

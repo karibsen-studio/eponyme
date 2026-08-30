@@ -5,6 +5,7 @@ import type { ComputedRef, Ref } from 'vue'
 import type eponymeConfig from '#eponyme/config'
 import type { EponymeDataByName, EponymeName } from '../types'
 import type { EponymeAction, EponymeSchedule, EponymeStatus, EponymeVersionSelector } from '../server/services/eponyme-store'
+import { EPONYME_REVISION_HEADER } from '../utils/eponyme-revision'
 import { readPreviewQuery, readPreviewVersion } from '../utils/preview'
 import { cacheForPublicRead } from '../utils/hydration-cache'
 import type { ValidationErrors } from '../utils/validate-eponyme-data'
@@ -16,6 +17,7 @@ type EponymeResponse<Name extends ConfigEponymeName> = {
   publishedAt: string | null
   scheduledPublishAt: string | null
   scheduledUnpublishAt: string | null
+  revision: string | null
 }
 
 export interface UseEponymeOptions {
@@ -39,6 +41,12 @@ export interface UseEponymeResult<Data extends Record<string, unknown>> {
   publishedAt: ComputedRef<string | null>
   scheduledPublishAt: ComputedRef<string | null>
   scheduledUnpublishAt: ComputedRef<string | null>
+  /**
+   * The version this data was read at, sent back with every write so a save made against
+   * content someone else has already replaced is refused rather than silently applied.
+   * Only a private read carries one - published content answers `null`.
+   */
+  revision: ComputedRef<string | null>
   pending: ComputedRef<boolean>
   error: Ref<Error | null | undefined>
   errors: Ref<ValidationErrors>
@@ -100,6 +108,7 @@ export function useEponyme<const Name extends ConfigEponymeName>(
   const publishedAt = computed(() => response.value?.publishedAt ?? null)
   const scheduledPublishAt = computed(() => response.value?.scheduledPublishAt ?? null)
   const scheduledUnpublishAt = computed(() => response.value?.scheduledUnpublishAt ?? null)
+  const revision = computed(() => response.value?.revision ?? null)
 
   async function refresh() {
     errors.value = {}
@@ -115,6 +124,10 @@ export function useEponyme<const Name extends ConfigEponymeName>(
       const next = await requestFetch<EponymeResponse<Name>>(`/api/eponyme/${name}`, {
         method: 'PATCH',
         query: { action },
+        // The response carries the revision the write landed on, and replacing `response`
+        // below adopts it - so a second save locks on the first one rather than on the
+        // version the page was opened at.
+        headers: revision.value ? { [EPONYME_REVISION_HEADER]: revision.value } : undefined,
         body: action === 'draft'
           ? patch ?? data.value
           : action === 'schedule'
@@ -152,6 +165,7 @@ export function useEponyme<const Name extends ConfigEponymeName>(
     publishedAt,
     scheduledPublishAt,
     scheduledUnpublishAt,
+    revision,
     pending: computed(() => loading.value || saving.value),
     error: error as Ref<Error | null | undefined>,
     errors,

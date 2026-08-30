@@ -65,6 +65,7 @@ const {
   publishedAt,
   scheduledPublishAt,
   scheduledUnpublishAt,
+  revision,
   refresh,
   save: persist,
 } = useEponyme(props.name as never, { version: 'draft', raw: true })
@@ -713,6 +714,7 @@ useEventListener('beforeunload', (event) => {
       <EponymeHistoryDialog
         :open="historyOpen"
         :name="name"
+        :revision="revision"
         :can-restore="canRestore"
         @update:open="historyOpen = $event"
         @restored="handleVersionRestored"

@@ -5,6 +5,7 @@ import { assertEponymeMutationOrigin } from '../../utils/auth'
 import { requireEponymePermission } from '../../utils/eponyme-permissions'
 import { callEponymeHook } from '../../utils/eponyme-hooks'
 import { splitEponymeCollectionEntry } from '../../utils/eponyme-entry'
+import { requireEponymeRevision } from '../../utils/eponyme-revision'
 
 export default defineEventHandler(async (event) => {
   assertEponymeMutationOrigin(event)
@@ -14,7 +15,10 @@ export default defineEventHandler(async (event) => {
   if (!collection)
     throw createError({ status: 404, message: t('server.trashedNotFound') })
   const user = await requireEponymePermission(event, 'content.restore', { kind: 'collection', name: collection.name })
-  if (!(await service.restoreCollectionEntry(name, user)))
+  const result = await service.restoreCollectionEntry(name, user, requireEponymeRevision(event))
+  if (typeof result !== 'boolean')
+    throw createError({ status: 409, message: t('server.entryConflict') })
+  if (!result)
     throw createError({ status: 404, message: t('server.trashedNotFound') })
 
   await callEponymeHook('eponyme:entry:untrashed', { name, collection, userId: user.id })

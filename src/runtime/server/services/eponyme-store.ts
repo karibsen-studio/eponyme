@@ -29,6 +29,14 @@ export interface EponymeResult {
   publishedAt: string | null
   scheduledPublishAt: string | null
   scheduledUnpublishAt: string | null
+  /**
+   * The optimistic lock token, sent back with the next write of this entry.
+   *
+   * Only set where it can be trusted: a private read straight from the database. A published
+   * read is served from the row cache, whose `updatedAt` may lag, and a version read describes
+   * a point in history rather than the row a writer would lock on - both answer `null`.
+   */
+  revision: string | null
 }
 export interface EponymeVersionAuthor {
   id: string
@@ -337,6 +345,8 @@ export class EponymeService {
   private readonly collections: Record<string, EponymeCollectionDefinitionBase>
   /** Entries a read has already persisted the normalized shape for, so it only attempts it once. */
   private readonly healedByRead = new Set<string>()
+  /** `<name>\n<revision>` a heal superseded, mapped to the revision it wrote in its place. */
+  private readonly healedRevisions = new Map<string, string>()
   /**
    * Read-path cache of normalized rows, so a page that reads the same entry from a
    * singleton, a listing and a layout pays one round trip instead of one per read.
@@ -569,8 +579,9 @@ export class EponymeService {
         if (!slug || slug.includes('/')) continue
         const state = this.rowToState(definition.fields, row)
         if (sameRow(state, row)) continue
-        await this.client.eponyme.update({ where: { name: row.name }, data: stateToColumns(state) })
-        await this.invalidate(row.name)
+        // The walk is as long as the collection, and the application is already serving
+        // writes while it runs: an entry saved mid-walk keeps its save.
+        await this.healRow(row.name, state, row.updatedAt)
       }
     }
   }
@@ -731,9 +742,13 @@ export class EponymeService {
     // process: the migration still lands on first read, but a drift that never converges
     // cannot turn every later read of a public page into a write.
     if (!heal && this.healedByRead.has(name)) return { state, updatedAt: row.updatedAt }
+    const healed = await this.healRow(name, state, row.updatedAt)
+    // Answering with the token that was read, not a fresh one: a writer that lost this race
+    // has to see the conflict rather than write over the content that won it.
+    if (!healed) return { state, updatedAt: row.updatedAt }
+    // Marked once the write landed, so a heal that lost a race is retried rather than
+    // remembered as done.
     this.healedByRead.add(name)
-    const healed = await this.client.eponyme.update({ where: { name }, data: stateToColumns(state) })
-    await this.invalidate(name)
     return { state, updatedAt: healed.updatedAt ?? row.updatedAt }
   }
 
@@ -742,9 +757,51 @@ export class EponymeService {
   }
 
   /**
+   * Persists the normalized shape of a row, but only if it is still the row that was
+   * normalized.
+   *
+   * Unguarded, this write replaced whatever a concurrent editor had just committed with the
+   * normalization of the row it read a moment earlier: a save lost to a background migration,
+   * silently, with the timeline showing it as saved. Losing the race is not an error - the
+   * row already holds someone's newer content, and the drift is picked up on the next read.
+   */
+  private async healRow(
+    name: string,
+    state: StoredEponymeState,
+    expectedUpdatedAt: Date | string | undefined,
+  ): Promise<{ updatedAt?: Date | string } | undefined> {
+    const written = await this.writeState(name, state, expectedUpdatedAt, this.client)
+    if (!written) return undefined
+    this.rememberHeal(name, expectedUpdatedAt, written.updatedAt)
+    await this.invalidate(name)
+    return written
+  }
+
+  /**
+   * Records that a heal replaced one revision with another.
+   *
+   * A heal rewrites a row with the normalization of what it already held, so it changes
+   * nothing any reader ever saw - but it does move `updatedAt`, and without this every editor
+   * with the entry open would be told they conflict with a change nobody made. Following the
+   * chain lets those saves through; a real write in the middle breaks it and still conflicts.
+   *
+   * In-process, like `healedByRead`: a heal performed by another instance is unknown here and
+   * falls back to reporting the conflict, which is the safe direction to be wrong in.
+   */
+  private rememberHeal(name: string, from: Date | string | undefined, to: Date | string | undefined): void {
+    const before = eponymeRevision(from)
+    const after = eponymeRevision(to)
+    if (!before || !after || before === after) return
+    this.healedRevisions.set(`${name}\n${before}`, after)
+  }
+
+  /**
    * Writes a new state only if the row still carries the `updatedAt` we read.
-   * Returns false when a concurrent editor won the race, so the caller can report a conflict
-   * instead of silently discarding their changes.
+   * Returns undefined when a concurrent editor won the race, so the caller can report a
+   * conflict instead of silently discarding their changes.
+   *
+   * On success it answers with the row's new `updatedAt`: that is the token the editor has to
+   * hold from now on, and without it a second save would conflict against its own first one.
    *
    * Dropping the cached row is left to `transaction`, which does it once the write has
    * actually committed rather than while it is still in flight.
@@ -754,14 +811,35 @@ export class EponymeService {
     next: StoredEponymeState,
     expectedUpdatedAt: Date | string | undefined,
     db: PrismaEponymeDelegates,
-  ): Promise<boolean> {
+  ): Promise<{ updatedAt?: Date | string } | undefined> {
     const data = stateToColumns(next)
     if (!expectedUpdatedAt) {
-      await db.eponyme.update({ where: { name }, data })
-      return true
+      const row = await db.eponyme.update({ where: { name }, data })
+      return { updatedAt: row.updatedAt }
     }
     const { count } = await db.eponyme.updateMany({ where: { name, updatedAt: expectedUpdatedAt }, data })
-    return count > 0
+    if (!count) return undefined
+    const row = await db.eponyme.findUnique({ where: { name } })
+    return { updatedAt: row?.updatedAt }
+  }
+
+  /**
+   * Whether the token a client is writing against still describes the row.
+   *
+   * An absent token means the caller opted out of the check, which is what a public read or a
+   * server-side write does: those never held a revision to begin with.
+   *
+   * A token only superseded by heals is not stale: those rewrote the row with the shape it
+   * already read as, so the client is writing against exactly the content that is stored.
+   */
+  private isStaleRevision(name: string, expected: string | undefined, updatedAt: Date | string | undefined): boolean {
+    if (expected === undefined) return false
+    const current = eponymeRevision(updatedAt)
+    let revision: string | undefined = expected
+    // One heal per entry per process in practice; the cap only keeps a broken chain finite.
+    for (let hop = 0; revision !== undefined && revision !== current && hop < 8; hop++)
+      revision = this.healedRevisions.get(`${name}\n${revision}`)
+    return revision !== current
   }
 
   /**
@@ -865,8 +943,10 @@ export class EponymeService {
   async getResult(name: string, version: EponymeVersionSelector = 'published'): Promise<EponymeResult | undefined> {
     // A numeric selector reads a point in history rather than the entry's current state.
     if (typeof version === 'number') return this.getVersionResult(name, version)
-    const state = await this.loadState(name, { cache: version === 'published' })
-    if (!state) return undefined
+    const cache = version === 'published'
+    const row = await this.loadRow(name, { cache })
+    if (!row) return undefined
+    const { state } = row
     if (version === 'published' && !isEponymeLive(state.__eponyme, new Date())) return undefined
     return {
       data: state.__eponyme[version],
@@ -874,6 +954,9 @@ export class EponymeService {
       publishedAt: state.__eponyme.publishedAt,
       scheduledPublishAt: state.__eponyme.scheduledPublishAt,
       scheduledUnpublishAt: state.__eponyme.scheduledUnpublishAt,
+      // A cached row's `updatedAt` may lag behind the database, and a token that lags turns
+      // an honest save into a conflict. Only the uncached draft read hands one out.
+      revision: cache ? null : eponymeRevision(row.updatedAt),
     }
   }
 
@@ -890,6 +973,7 @@ export class EponymeService {
       publishedAt: state.__eponyme.publishedAt,
       scheduledPublishAt: state.__eponyme.scheduledPublishAt,
       scheduledUnpublishAt: state.__eponyme.scheduledUnpublishAt,
+      revision: null,
     }
   }
 
@@ -1279,7 +1363,8 @@ export class EponymeService {
       if (isPrismaError(error, 'P2002')) return await this.slugTakenError(definition, entryName) ?? { errors: { [definition.slugField]: [t('server.slugTaken')] } }
       throw error
     }
-    return { slug, data, status: 'draft', publishedAt: null, scheduledPublishAt: null, scheduledUnpublishAt: null }
+    // No revision: the dashboard navigates to the new entry, which reads its own token.
+    return { slug, data, status: 'draft', publishedAt: null, scheduledPublishAt: null, scheduledUnpublishAt: null, revision: null }
   }
 
   /**
@@ -1329,8 +1414,16 @@ export class EponymeService {
    * Refused while another entry points at it: a reference is only worth having if it cannot
    * quietly stop resolving, and the editor is told which entries to detach first.
    */
-  async deleteCollectionEntry(name: string, actor?: string | EponymeActor): Promise<{ deleted: true } | { referencedBy: string[] } | undefined> {
+  async deleteCollectionEntry(
+    name: string,
+    actor?: string | EponymeActor,
+    expectedRevision?: string,
+  ): Promise<{ deleted: true } | { referencedBy: string[] } | EponymeConflict | undefined> {
     if (!this.getCollectionEntry(name)) return undefined
+    // Read straight from the row rather than through `loadRow`: this is the same token the
+    // listing handed out, and healing here would move it under the caller's feet.
+    const row = await this.client.eponyme.findUnique({ where: { name } })
+    if (this.isStaleRevision(name, expectedRevision, row?.updatedAt)) return { conflict: true }
     const referencedBy = await this.findEponymeReferrers(name)
     if (referencedBy.length) return { referencedBy }
     // Guarding on `deletedAt: null` makes a second delete a no-op rather than
@@ -1338,7 +1431,7 @@ export class EponymeService {
     const count = await this.transaction(async (tx, invalidate) => {
       invalidate(name)
       const updated = await tx.eponyme.updateMany({
-        where: { name, deletedAt: null },
+        where: { name, deletedAt: null, ...(expectedRevision ? { updatedAt: row!.updatedAt } : {}) },
         data: { deletedAt: new Date() },
       })
       if (updated.count) await this.audit(tx, actor, 'content.trashed', 'collection', name)
@@ -1383,12 +1476,19 @@ export class EponymeService {
     return errors
   }
 
-  async restoreCollectionEntry(name: string, actor?: string | EponymeActor): Promise<boolean> {
+  async restoreCollectionEntry(
+    name: string,
+    actor?: string | EponymeActor,
+    expectedRevision?: string,
+  ): Promise<boolean | EponymeConflict> {
     if (!this.getCollectionEntry(name)) return false
+    // `loadRow` reads a trashed entry as missing, so the token comes from the row itself.
+    const row = await this.client.eponyme.findUnique({ where: { name } })
+    if (this.isStaleRevision(name, expectedRevision, row?.updatedAt)) return { conflict: true }
     const count = await this.transaction(async (tx, invalidate) => {
       invalidate(name)
       const updated = await tx.eponyme.updateMany({
-        where: { name, deletedAt: { not: null } },
+        where: { name, deletedAt: { not: null }, ...(expectedRevision ? { updatedAt: row!.updatedAt } : {}) },
         data: { deletedAt: null },
       })
       if (updated.count) await this.audit(tx, actor, 'content.restored_from_trash', 'collection', name)
@@ -1454,12 +1554,16 @@ export class EponymeService {
     action: EponymeAction = 'publish',
     actor?: string | EponymeActor,
     schedule: EponymeSchedule = {},
+    expectedRevision?: string,
   ): Promise<(EponymeResult & { errors?: never, conflict?: never }) | { errors: ValidationErrors, conflict?: never } | EponymeConflict | undefined> {
     const schema = this.getSchema(name)
     if (!schema) return undefined
     const row = await this.loadRow(name, { heal: true })
     if (!row) return undefined
     const { state, updatedAt } = row
+    // Checked before validating: an editor writing against a version that no longer exists
+    // should be told so, not handed errors computed against content they never saw.
+    if (this.isStaleRevision(name, expectedRevision, updatedAt)) return { conflict: true }
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { errors: { _form: ['Body must be an object.'] } }
 
     const collectionEntry = this.getCollectionEntry(name)
@@ -1493,7 +1597,8 @@ export class EponymeService {
     // gain an entry the content never took, nor miss one it did.
     const written = await this.transaction(async (tx, invalidate) => {
       invalidate(name)
-      if (!await this.writeState(name, next, updatedAt, tx)) return false
+      const write = await this.writeState(name, next, updatedAt, tx)
+      if (!write) return undefined
       await this.reindexEntry(tx, name, next)
       await tx.eponymeVersion.create({
         data: {
@@ -1512,10 +1617,10 @@ export class EponymeService {
         name,
         { status: next.__eponyme.status },
       )
-      return true
+      return write
     })
     if (!written) return { conflict: true }
-    return toResult(next, next.__eponyme.draft)
+    return toResult(next, next.__eponyme.draft, eponymeRevision(written.updatedAt))
   }
 
   /**
@@ -1614,17 +1719,24 @@ export class EponymeService {
     }))
   }
 
-  async restore(name: string, versionId: number, actor?: string | EponymeActor): Promise<EponymeResult | EponymeConflict | undefined> {
+  async restore(
+    name: string,
+    versionId: number,
+    actor?: string | EponymeActor,
+    expectedRevision?: string,
+  ): Promise<EponymeResult | EponymeConflict | undefined> {
     const schema = this.getSchema(name)
     if (!schema) return undefined
     const version = await this.client.eponymeVersion.findUnique({ where: { id: versionId } })
     if (!version || version.entryName !== name) return undefined
     const current = await this.loadRow(name, { heal: true })
     if (!current) return undefined
+    if (this.isStaleRevision(name, expectedRevision, current.updatedAt)) return { conflict: true }
     const state = this.normalizeState(schema, version.data)
     const written = await this.transaction(async (tx, invalidate) => {
       invalidate(name)
-      if (!await this.writeState(name, state, current.updatedAt, tx)) return false
+      const write = await this.writeState(name, state, current.updatedAt, tx)
+      if (!write) return undefined
       await this.reindexEntry(tx, name, state)
       await tx.eponymeVersion.create({
         data: {
@@ -1643,16 +1755,10 @@ export class EponymeService {
         name,
         { versionId },
       )
-      return true
+      return write
     })
     if (!written) return { conflict: true }
-    return {
-      data: state.__eponyme.draft,
-      status: state.__eponyme.status,
-      publishedAt: state.__eponyme.publishedAt,
-      scheduledPublishAt: state.__eponyme.scheduledPublishAt,
-      scheduledUnpublishAt: state.__eponyme.scheduledUnpublishAt,
-    }
+    return toResult(state, state.__eponyme.draft, eponymeRevision(written.updatedAt))
   }
 }
 
@@ -1907,14 +2013,29 @@ function wrapState(
   return { __eponyme: { version: 1, draft, published, status, publishedAt, scheduledPublishAt, scheduledUnpublishAt } }
 }
 
-function toResult(state: StoredEponymeState, data: Record<string, unknown>): EponymeResult {
+function toResult(state: StoredEponymeState, data: Record<string, unknown>, revision: string | null = null): EponymeResult {
   return {
     data,
     status: state.__eponyme.status,
     publishedAt: state.__eponyme.publishedAt,
     scheduledPublishAt: state.__eponyme.scheduledPublishAt,
     scheduledUnpublishAt: state.__eponyme.scheduledUnpublishAt,
+    revision,
   }
+}
+
+/**
+ * The lock token an entry is read at: its `updatedAt`, as an ISO string.
+ *
+ * A string rather than the raw column, because it travels to the browser and back. It is only
+ * ever compared to another token here, never turned back into a date to query on: the write
+ * still locks on the value it read from the row, so a store whose `updatedAt` is not a `Date`
+ * compares the same way the database does.
+ */
+export function eponymeRevision(updatedAt: Date | string | undefined): string | null {
+  if (!updatedAt) return null
+  const date = new Date(updatedAt)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
 }
 
 function stateToColumns(state: StoredEponymeState): EponymeRowWrite {

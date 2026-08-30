@@ -35,10 +35,25 @@ describe('ssr', async () => {
   })
   let authCookie = ''
   const authenticated = () => ({ headers: { cookie: authCookie } })
+  // Trashing, untrashing and restoring a version lock on the version the caller last read,
+  // so each helper fetches it first rather than writing blind.
+  const revised = (revision: string) => ({ headers: { 'cookie': authCookie, 'x-eponyme-revision': revision } })
+  const draftRevision = async (name: string) => {
+    const entry = await $fetch<{ revision: string | null }>(`/api/eponyme/${name}?version=draft`, authenticated())
+    return entry.revision ?? ''
+  }
+  const trashedRevision = async (collection: string, slug: string) => {
+    const { entries } = await $fetch<{ entries: Array<{ slug: string, updatedAt: string | null }> }>(`/api/eponyme-trash/${collection}`, authenticated())
+    return entries.find(entry => entry.slug === slug)?.updatedAt ?? ''
+  }
+  const trashEntry = async (name: string) =>
+    await $fetch(`/api/eponyme-collections/${name}`, { method: 'DELETE', ...revised(await draftRevision(name)) })
+  const untrashEntry = async (collection: string, slug: string) =>
+    await $fetch(`/api/eponyme-trash/${collection}/${slug}`, { method: 'PATCH', ...revised(await trashedRevision(collection, slug)) })
   // Deleting only moves an entry to the trash, where it keeps its slug. Tests share
   // one database and reuse slugs, so cleanup has to purge as well.
   const removeArticle = async (slug: string) => {
-    await $fetch(`/api/eponyme-collections/articles/${slug}`, { method: 'DELETE', ...authenticated() })
+    await trashEntry(`articles/${slug}`)
     await $fetch(`/api/eponyme-trash/articles/${slug}`, { method: 'DELETE', ...authenticated() })
   }
   const saveAndPublish = async (name: string, data: Record<string, unknown>) => {
@@ -370,7 +385,7 @@ describe('ssr', async () => {
     // so its label must still reach the server-rendered HTML rather than a loading placeholder.
     expect(html).toContain('Body')
 
-    await expect($fetch('/api/eponyme-collections/articles/first-article', { method: 'DELETE', ...authenticated() })).resolves.toEqual({ deleted: true })
+    await expect(trashEntry('articles/first-article')).resolves.toEqual({ deleted: true })
     await $fetch('/api/eponyme-trash/articles/first-article', { method: 'DELETE', ...authenticated() })
   })
 
@@ -382,7 +397,7 @@ describe('ssr', async () => {
       excerpt: 'Soon in the trash.',
     })
 
-    await expect($fetch('/api/eponyme-collections/articles/trashed-article', { method: 'DELETE', ...authenticated() })).resolves.toEqual({ deleted: true })
+    await expect(trashEntry('articles/trashed-article')).resolves.toEqual({ deleted: true })
     // Gone from every read, including the public ones.
     await expect($fetch('/api/eponyme-collections/articles')).resolves.toEqual({ entries: [], total: 0 })
     await expect($fetch('/api/eponyme/articles/trashed-article')).rejects.toMatchObject({ status: 404 })
@@ -399,17 +414,60 @@ describe('ssr', async () => {
       ...authenticated(),
     })).resolves.toMatchObject({ errors: { slug: [expect.stringContaining('trash')] } })
 
-    await expect($fetch('/api/eponyme-trash/articles/trashed-article', { method: 'PATCH', ...authenticated() })).resolves.toEqual({ restored: true })
+    await expect(untrashEntry('articles', 'trashed-article')).resolves.toEqual({ restored: true })
     await expect($fetch('/api/eponyme-collections/articles')).resolves.toMatchObject({ entries: [{ slug: 'trashed-article' }] })
     // Restoring kept the history the hard delete used to destroy.
     const { history } = await $fetch<{ history: unknown[] }>('/api/eponyme-history/articles/trashed-article', authenticated())
     expect(history.length).toBeGreaterThan(0)
 
-    await $fetch('/api/eponyme-collections/articles/trashed-article', { method: 'DELETE', ...authenticated() })
+    await trashEntry('articles/trashed-article')
     await expect($fetch('/api/eponyme-trash/articles/trashed-article', { method: 'DELETE', ...authenticated() })).resolves.toEqual({ purged: true })
     await expect($fetch('/api/eponyme-trash/articles', authenticated())).resolves.toEqual({ entries: [], total: 0 })
     // Purged for good: the slug is free again.
     await expect($fetch('/api/eponyme-trash/articles/trashed-article', { method: 'DELETE', ...authenticated() })).rejects.toMatchObject({ status: 404 })
+  })
+
+  it('locks a write on the revision the editor read, over HTTP', async () => {
+    await $fetch('/api/eponyme-collections/articles', { method: 'POST', body: { title: 'Concurrent article' }, ...authenticated() })
+    await saveAndPublish('articles/concurrent-article', {
+      title: 'Concurrent article',
+      slug: 'concurrent-article',
+      excerpt: 'Two editors, one entry.',
+    })
+
+    // What the editor holds after opening the entry. A public read hands out no token.
+    const opened = await $fetch<{ revision: string | null }>('/api/eponyme/articles/concurrent-article?version=draft', authenticated())
+    expect(opened.revision).toEqual(expect.any(String))
+    await expect($fetch<{ revision: string | null }>('/api/eponyme/articles/concurrent-article?version=published'))
+      .resolves.toMatchObject({ revision: null })
+
+    // Someone else saves in the meantime.
+    await $fetch('/api/eponyme/articles/concurrent-article?action=draft', {
+      method: 'PATCH',
+      body: { excerpt: 'Saved by someone else.' },
+      ...authenticated(),
+    })
+
+    await expect($fetch('/api/eponyme/articles/concurrent-article?action=draft', {
+      method: 'PATCH',
+      body: { excerpt: 'Saved from a stale tab.' },
+      ...revised(opened.revision!),
+    })).rejects.toMatchObject({ status: 409 })
+    await expect($fetch<{ data: { excerpt: string } }>('/api/eponyme/articles/concurrent-article?version=draft', authenticated()))
+      .resolves.toMatchObject({ data: { excerpt: 'Saved by someone else.' } })
+
+    // Trashing and untrashing refuse to run blind rather than defaulting to last write wins.
+    await expect($fetch('/api/eponyme-collections/articles/concurrent-article', { method: 'DELETE', ...authenticated() }))
+      .rejects.toMatchObject({ status: 428 })
+    await expect($fetch('/api/eponyme-collections/articles/concurrent-article', { method: 'DELETE', ...revised(opened.revision!) }))
+      .rejects.toMatchObject({ status: 409 })
+
+    await expect(trashEntry('articles/concurrent-article')).resolves.toEqual({ deleted: true })
+    await expect($fetch('/api/eponyme-trash/articles/concurrent-article', { method: 'PATCH', ...revised(opened.revision!) }))
+      .rejects.toMatchObject({ status: 409 })
+    await expect(untrashEntry('articles', 'concurrent-article')).resolves.toEqual({ restored: true })
+
+    await removeArticle('concurrent-article')
   })
 
   it('filters a collection over HTTP', async () => {
@@ -591,7 +649,7 @@ describe('ssr', async () => {
       data: { errors: { related: ['Points at an entry that does not exist: not-an-article.'] } },
     })
 
-    await $fetch('/api/eponyme-collections/articles/referring', { method: 'DELETE', ...authenticated() })
+    await trashEntry('articles/referring')
   })
 
   it('refuses to trash an entry another one still points at', async () => {
@@ -600,15 +658,15 @@ describe('ssr', async () => {
     await $fetch('/api/eponyme/articles/source', { method: 'PATCH', body: { related: ['target'] }, ...authenticated() })
 
     // Named rather than merely refused: the editor has to know where to go and detach it.
-    await expect($fetch('/api/eponyme-collections/articles/target', { method: 'DELETE', ...authenticated() }))
+    await expect(trashEntry('articles/target'))
       .rejects.toMatchObject({ status: 409, data: { data: { referencedBy: ['articles/source'] } } })
 
     // The reference held by a draft counts, so dropping it is what unlocks the deletion.
     await $fetch('/api/eponyme/articles/source', { method: 'PATCH', body: { related: [] }, ...authenticated() })
-    await expect($fetch('/api/eponyme-collections/articles/target', { method: 'DELETE', ...authenticated() }))
+    await expect(trashEntry('articles/target'))
       .resolves.toMatchObject({ deleted: true })
 
-    await $fetch('/api/eponyme-collections/articles/source', { method: 'DELETE', ...authenticated() })
+    await trashEntry('articles/source')
     await $fetch('/api/eponyme-trash/articles/target', { method: 'DELETE', ...authenticated() })
     await $fetch('/api/eponyme-trash/articles/source', { method: 'DELETE', ...authenticated() })
   })
@@ -1170,7 +1228,7 @@ describe('ssr', async () => {
       ...authenticated(),
     })).resolves.toBeTruthy()
 
-    await $fetch('/api/eponyme-collections/releases/cut', { method: 'DELETE', ...authenticated() })
+    await trashEntry('releases/cut')
     await $fetch('/api/eponyme-trash/releases/cut', { method: 'DELETE', ...authenticated() })
   })
 

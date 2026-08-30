@@ -5,6 +5,7 @@ import { assertEponymeMutationOrigin } from '../../utils/auth'
 import { requireEponymePermission } from '../../utils/eponyme-permissions'
 import { callEponymeHook } from '../../utils/eponyme-hooks'
 import { splitEponymeCollectionEntry } from '../../utils/eponyme-entry'
+import { requireEponymeRevision } from '../../utils/eponyme-revision'
 
 export default defineEventHandler(async (event) => {
   assertEponymeMutationOrigin(event)
@@ -14,8 +15,9 @@ export default defineEventHandler(async (event) => {
   if (!collection) throw createError({ status: 404, message: t('server.collectionEntryNotFound') })
   const user = await requireEponymePermission(event, 'content.trash', { kind: 'collection', name: collection.name })
 
-  const result = await service.deleteCollectionEntry(name, user)
+  const result = await service.deleteCollectionEntry(name, user, requireEponymeRevision(event))
   if (!result) throw createError({ status: 404, message: t('server.collectionEntryNotFound') })
+  if ('conflict' in result) throw createError({ status: 409, message: t('server.entryConflict') })
   // Refused rather than left to break: the entries holding the reference are named, so the
   // editor knows exactly what to detach first.
   if ('referencedBy' in result) {

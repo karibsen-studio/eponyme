@@ -5,6 +5,7 @@ import { assertEponymeMutationOrigin } from '../../utils/auth'
 import { requireEponymePermission, resolveEponymeContentResource } from '../../utils/eponyme-permissions'
 import { callEponymeHook } from '../../utils/eponyme-hooks'
 import { splitEponymeCollectionEntry } from '../../utils/eponyme-entry'
+import { requireEponymeRevision } from '../../utils/eponyme-revision'
 
 export default defineEventHandler(async (event) => {
   assertEponymeMutationOrigin(event)
@@ -18,7 +19,7 @@ export default defineEventHandler(async (event) => {
   if (!resource) throw createError({ status: 404, message: t('server.entryNotFound') })
   const user = await requireEponymePermission(event, 'content.restore', resource)
   const service = useEponymeService()
-  const result = await service.restore(name!, versionId, user)
+  const result = await service.restore(name!, versionId, user, requireEponymeRevision(event))
   if (!result) throw createError({ status: 404, message: t('server.versionNotFound') })
   if ('conflict' in result)
     throw createError({ status: 409, message: t('server.entryConflict') })

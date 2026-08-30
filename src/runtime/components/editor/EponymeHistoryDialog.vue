@@ -9,8 +9,14 @@ import EPDialog from '../ui/EPDialog.vue'
 import type { EponymeHistoryEntry } from '../../server/services/eponyme-store'
 import { formatVersionDate, useEponymeHistory } from '../../composables/useEponymeHistory'
 import { getEponymeErrorMessage } from '../../utils/eponyme-error'
+import { EPONYME_REVISION_HEADER } from '../../utils/eponyme-revision'
 
-const props = withDefaults(defineProps<{ open: boolean, name: string, canRestore?: boolean }>(), { canRestore: false })
+const props = withDefaults(
+  // `revision` is the version the editor is looking at: restoring replaces the whole entry,
+  // so it is refused when someone else has saved since.
+  defineProps<{ open: boolean, name: string, revision: string | null, canRestore?: boolean }>(),
+  { canRestore: false },
+)
 const emit = defineEmits<{ 'update:open': [value: boolean], 'restored': [] }>()
 const requestFetch = useRequestFetch()
 const { history, pending, error, load } = useEponymeHistory(() => props.name)
@@ -35,7 +41,10 @@ async function restore() {
   restorePending.value = true
   restoreError.value = ''
   try {
-    await requestFetch(`/api/eponyme-history/${props.name}/${version.id}`, { method: 'PATCH' })
+    await requestFetch(`/api/eponyme-history/${props.name}/${version.id}`, {
+      method: 'PATCH',
+      headers: props.revision ? { [EPONYME_REVISION_HEADER]: props.revision } : undefined,
+    })
     emit('restored')
     restoreTarget.value = undefined
     emit('update:open', false)

@@ -6,6 +6,7 @@ import { assertEponymeMutationOrigin } from '../../utils/auth'
 import { requireEponymePermission, resolveEponymeContentResource } from '../../utils/eponyme-permissions'
 import { callEponymeBlockingHook, callEponymeHook } from '../../utils/eponyme-hooks'
 import { readEponymeBody } from '../../utils/body'
+import { readEponymeRevision } from '../../utils/eponyme-revision'
 import { splitEponymeCollectionEntry } from '../../utils/eponyme-entry'
 import { isEponymePublicationEnabled } from '../../../utils/eponyme-publication'
 import type { EponymePublicationOption } from '../../../utils/eponyme-publication'
@@ -69,10 +70,12 @@ export default defineEventHandler(async (event) => {
   const beforeSave = { name, collection, action, data: data as Record<string, unknown>, userId: user.id }
   await callEponymeBlockingHook('eponyme:entry:beforeSave', beforeSave)
 
+  // Optional: a caller that never read a revision - a public read, a script - keeps writing
+  // last-write-wins. The dashboard always sends one, so it always gets the guard.
   const result = await service.patch(name, action === 'draft' ? beforeSave.data : {}, action, user, {
     scheduledPublishAt: typeof scheduleBody?.scheduledPublishAt === 'string' ? scheduleBody.scheduledPublishAt : null,
     scheduledUnpublishAt: typeof scheduleBody?.scheduledUnpublishAt === 'string' ? scheduleBody.scheduledUnpublishAt : null,
-  })
+  }, readEponymeRevision(event))
   if (!result) throw createError({ status: 404, message: t('server.entryNotFound') })
   if ('conflict' in result && result.conflict)
     throw createError({ status: 409, message: t('server.entryConflict') })
