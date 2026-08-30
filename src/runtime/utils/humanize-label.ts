@@ -1,3 +1,5 @@
+import { t } from '#eponyme/locale'
+
 /**
  * Turns a field name into a human label: `launch_date` -> `Launch Date`,
  * `productionPhoto` -> `Production Photo`.
@@ -5,7 +7,10 @@
  * can never drift apart.
  */
 export function humanizeLabel(name: string, configured?: string) {
-  if (configured) return configured
+  // A label the module wrote is a message key, so it reads in the dashboard's own language.
+  // `t` hands back anything it does not know unchanged, which is every label an application
+  // writes for itself.
+  if (configured) return t(configured as Parameters<typeof t>[0])
 
   return name
     .replace(/[-_]/g, ' ')
