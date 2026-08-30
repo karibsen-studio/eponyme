@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { t } from '#eponyme/locale'
-import { useAsyncData, useRequestFetch, useRoute, useRouter, useState } from '#app'
+import { useAsyncData, useRequestFetch, useRoute, useRouter } from '#app'
 import type { FetchError } from 'ofetch'
+import { watchDebounced } from '@vueuse/core'
 import { computed, ref, watch } from 'vue'
 import type { EponymeCollectionDefinitionBase } from '../../types'
-import type { EponymeCollectionEntry } from '../../server/services/eponyme-store'
+import type { EponymeCollectionEntryMeta } from '../../server/services/eponyme-store'
 import { getEponymeErrorMessage } from '../../utils/eponyme-error'
+import { EPONYME_REVISION_HEADER } from '../../utils/eponyme-revision'
 import { normalizeSlug } from '../../utils/normalize-slug'
 import { useEponymeAuth } from '../../composables/useEponymeAuth'
+import { useEponymeNavigation } from '../../composables/useEponymeNavigation'
 import EPAlertDialog from '../ui/EPAlertDialog.vue'
 import EPButton from '../ui/EPButton.vue'
 import EPDialog from '../ui/EPDialog.vue'
@@ -15,6 +18,9 @@ import EPFormField from '../ui/EPFormField.vue'
 import EPInputText from '../ui/EPInputText.vue'
 import { EPONYME_DATE_LOCALE } from '../../utils/date-locale'
 import { humanizeLabel } from '../../utils/humanize-label'
+
+/** Entries per page. Small enough that a page stays cheap, large enough to scan. */
+const PAGE_SIZE = 20
 
 const props = defineProps<{ basePath: string, name: string, definition: EponymeCollectionDefinitionBase }>()
 const route = useRoute()
@@ -26,7 +32,13 @@ const title = ref('')
 const slug = ref('')
 const slugTouched = ref(false)
 const errors = ref<Record<string, string[]>>({})
-const collectionEntries = useState<Record<string, EponymeCollectionEntry[]>>('eponyme:collection-entries', () => ({}))
+const { load: loadNavigation } = useEponymeNavigation()
+const searchInput = ref('')
+/**
+ * Page and search move together as one value: changing the search resets to the first page,
+ * and a single source means a single refetch rather than one per part.
+ */
+const listQuery = ref({ page: 1, search: '' })
 const endpoint = computed(() => `/api/eponyme-collections/${props.name}`)
 const trashEndpoint = computed(() => `/api/eponyme-trash/${props.name}`)
 const auth = useEponymeAuth()
@@ -36,23 +48,60 @@ const canTrash = computed(() => auth.can('content.trash', resource.value))
 const canRestore = computed(() => auth.can('content.restore', resource.value))
 const canPurge = computed(() => auth.can('content.purge', resource.value))
 const view = ref<'entries' | 'trash'>('entries')
-const duplicateOf = ref<EponymeCollectionEntry>()
-const entryAction = ref<{ type: 'trash' | 'purge', entry: EponymeCollectionEntry }>()
+const duplicateOf = ref<EponymeCollectionEntryMeta>()
+const entryAction = ref<{ type: 'trash' | 'purge', entry: EponymeCollectionEntryMeta }>()
 const entryActionPending = ref(false)
 const entryActionError = ref('')
+const restoreError = ref('')
 
 const { data: response, pending, refresh } = useAsyncData(
   `eponyme:collection:${props.name}`,
-  () => requestFetch<{ entries: EponymeCollectionEntry[] }>(endpoint.value, { query: { version: 'draft', raw: 1 } }),
+  // `fields=meta` leaves out the payload of every entry: this list shows titles and dates.
+  () => requestFetch<{ entries: EponymeCollectionEntryMeta[], total: number }>(endpoint.value, {
+    query: {
+      version: 'draft',
+      raw: 1,
+      fields: 'meta',
+      take: PAGE_SIZE,
+      skip: (listQuery.value.page - 1) * PAGE_SIZE,
+      search: listQuery.value.search || undefined,
+    },
+  }),
+  { watch: [listQuery] },
 )
 
 const { data: trashResponse, refresh: refreshTrash } = useAsyncData(
   `eponyme:collection-trash:${props.name}`,
   () => canRestore.value
-    ? requestFetch<{ entries: EponymeCollectionEntry[] }>(trashEndpoint.value)
+    ? requestFetch<{ entries: EponymeCollectionEntryMeta[] }>(trashEndpoint.value)
     : Promise.resolve({ entries: [] }),
 )
 const entries = computed(() => response.value?.entries ?? [])
+const total = computed(() => response.value?.total ?? 0)
+const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
+const isSearching = computed(() => listQuery.value.search.length > 0)
+/**
+ * The page numbers to show: the first, the last, and the ones around the current page.
+ * `null` is where a gap is drawn, so a collection of two hundred pages still fits.
+ */
+const pageItems = computed<Array<number | null>>(() => {
+  const last = pageCount.value
+  const current = listQuery.value.page
+  const shown = new Set([1, last, current, current - 1, current + 1])
+  const items: Array<number | null> = []
+  for (let page = 1; page <= last; page++) {
+    if (!shown.has(page)) {
+      if (items.at(-1) !== null) items.push(null)
+      continue
+    }
+    items.push(page)
+  }
+  return items
+})
+
+function goToPage(page: number) {
+  listQuery.value = { ...listQuery.value, page: Math.min(Math.max(1, page), pageCount.value) }
+}
 const trashEntries = computed(() => trashResponse.value?.entries ?? [])
 const label = computed(() => props.definition.label || humanize(props.name.split('/').at(-1) || props.name))
 const addLabel = computed(() => props.definition.addLabel || t('collection.create'))
@@ -61,7 +110,12 @@ watch(title, (value) => {
   if (!slugTouched.value) slug.value = normalizeSlug(value)
 })
 watch(() => route.query.create, value => createOpen.value = value === '1')
-watch(entries, value => collectionEntries.value = { ...collectionEntries.value, [props.name]: value }, { immediate: true })
+watchDebounced(searchInput, value => listQuery.value = { page: 1, search: value.trim() }, { debounce: 300 })
+
+/** The sidebar holds its own window on the collection, so a write here refreshes both. */
+async function refreshEntries() {
+  await Promise.all([refresh(), loadNavigation()])
+}
 
 function humanize(value: string) {
   return humanizeLabel(value)
@@ -90,7 +144,7 @@ function resetCreateForm() {
  * Reuses the create dialog: a copy is a new entry that happens to start from another one's
  * draft, so it goes through the same endpoint, the same validation and the same slug rules.
  */
-function duplicateEntry(entry: EponymeCollectionEntry) {
+function duplicateEntry(entry: EponymeCollectionEntryMeta) {
   duplicateOf.value = entry
   slugTouched.value = false
   title.value = t('collection.copyOf', { title: entry.title })
@@ -130,7 +184,7 @@ async function createEntry() {
         [props.definition.slugField]: slug.value,
       },
     })
-    await refresh()
+    await refreshEntries()
     await setCreateOpen(false)
     await router.push(`${props.basePath}/${props.name}/${result.slug}`)
   }
@@ -143,15 +197,34 @@ async function createEntry() {
   }
 }
 
-function requestEntryAction(type: 'trash' | 'purge', entry: EponymeCollectionEntry) {
+function requestEntryAction(type: 'trash' | 'purge', entry: EponymeCollectionEntryMeta) {
   entryAction.value = { type, entry }
   entryActionError.value = ''
 }
 
-async function restoreEntry(entry: EponymeCollectionEntry) {
-  await requestFetch(`${trashEndpoint.value}/${entry.slug}`, { method: 'PATCH' })
-  await Promise.all([refresh(), refreshTrash()])
-  if (!trashEntries.value.length) view.value = 'entries'
+async function restoreEntry(entry: EponymeCollectionEntryMeta) {
+  restoreError.value = ''
+  try {
+    await requestFetch(`${trashEndpoint.value}/${entry.slug}`, {
+      method: 'PATCH',
+      headers: revisionHeaders(entry),
+    })
+    await Promise.all([refreshEntries(), refreshTrash()])
+    if (!trashEntries.value.length) view.value = 'entries'
+  }
+  catch (caught) {
+    restoreError.value = getEponymeErrorMessage(caught, t('collection.restoreFailed'))
+    await refreshTrash()
+  }
+}
+
+/**
+ * The version the listing showed this entry at. Trashing and restoring both hide or bring
+ * back content someone else may have edited since the list was loaded, so the server checks
+ * it against the row before touching it.
+ */
+function revisionHeaders(entry: EponymeCollectionEntryMeta) {
+  return entry.updatedAt ? { [EPONYME_REVISION_HEADER]: entry.updatedAt } : undefined
 }
 
 function setEntryActionOpen(open: boolean) {
@@ -167,8 +240,11 @@ async function confirmEntryAction() {
   entryActionError.value = ''
   try {
     if (action.type === 'trash') {
-      await requestFetch(`${endpoint.value}/${action.entry.slug}`, { method: 'DELETE' })
-      await Promise.all([refresh(), refreshTrash()])
+      await requestFetch(`${endpoint.value}/${action.entry.slug}`, {
+        method: 'DELETE',
+        headers: revisionHeaders(action.entry),
+      })
+      await Promise.all([refreshEntries(), refreshTrash()])
     }
     else {
       await requestFetch(`${trashEndpoint.value}/${action.entry.slug}`, { method: 'DELETE' })
@@ -227,11 +303,37 @@ function formatDate(value: string | null) {
     </header>
 
     <div
+      v-if="view === 'entries' && (total || isSearching)"
+      class="ep:relative ep:mt-6"
+    >
+      <Icon
+        name="mingcute:search-line"
+        size="17"
+        aria-hidden="true"
+        class="ep:pointer-events-none ep:absolute ep:top-1/2 ep:left-3 ep:-translate-y-1/2 ep:text-text-muted"
+      />
+      <EPInputText
+        v-model="searchInput"
+        padded
+        type="search"
+        :placeholder="t('collection.search')"
+        :aria-label="t('collection.searchLabel')"
+      />
+    </div>
+
+    <div
       v-if="view === 'trash'"
       class="ep:mt-8 ep:grid ep:gap-3"
     >
       <p class="ep:m-0 ep:text-sm ep:text-text-muted">
         {{ t('collection.trashHint') }}
+      </p>
+      <p
+        v-if="restoreError"
+        role="alert"
+        class="ep:m-0 ep:rounded-lg ep:bg-danger/10 ep:p-3 ep:text-sm ep:text-danger"
+      >
+        {{ restoreError }}
       </p>
       <article
         v-for="entry in trashEntries"
@@ -326,16 +428,65 @@ function formatDate(value: string | null) {
       class="ep:mt-8 ep:rounded-xl ep:border ep:border-dashed ep:border-border-default ep:p-8 ep:text-center"
     >
       <p class="ep:m-0 ep:text-sm ep:text-text-muted">
-        {{ t('collection.empty') }}
+        {{ isSearching ? t('collection.noMatch', { query: listQuery.search }) : t('collection.empty') }}
       </p>
       <EPButton
-        v-if="canCreate"
+        v-if="canCreate && !isSearching"
         class="ep:mt-4"
         @click="createOpen = true"
       >
         {{ t('collection.createFirst') }}
       </EPButton>
     </div>
+
+    <nav
+      v-if="view === 'entries' && pageCount > 1"
+      class="ep:mt-6 ep:flex ep:flex-wrap ep:items-center ep:justify-center ep:gap-1"
+      :aria-label="t('collection.pagination')"
+    >
+      <EPButton
+        size="icon"
+        variant="ghost"
+        icon="mingcute:left-line"
+        :disabled="listQuery.page <= 1"
+        :aria-label="t('action.previous')"
+        @click="goToPage(listQuery.page - 1)"
+      />
+      <template
+        v-for="(item, index) in pageItems"
+        :key="item ?? `gap-${index}`"
+      >
+        <span
+          v-if="item === null"
+          class="ep:px-1 ep:text-sm ep:text-text-muted"
+        >…</span>
+        <EPButton
+          v-else
+          size="sm"
+          :variant="item === listQuery.page ? 'primary' : 'ghost'"
+          :aria-current="item === listQuery.page ? 'page' : undefined"
+          @click="goToPage(item)"
+        >
+          {{ item }}
+        </EPButton>
+      </template>
+      <EPButton
+        size="icon"
+        variant="ghost"
+        icon="mingcute:right-line"
+        :disabled="listQuery.page >= pageCount"
+        :aria-label="t('action.next')"
+        @click="goToPage(listQuery.page + 1)"
+      />
+    </nav>
+    <p
+      v-if="view === 'entries' && total"
+      class="ep:mt-3 ep:text-center ep:text-xs ep:text-text-muted"
+    >
+      {{ t('collection.results', { count: total }) }}<template v-if="pageCount > 1">
+        · {{ t('collection.page', { page: listQuery.page, pages: pageCount }) }}
+      </template>
+    </p>
 
     <EPDialog
       :open="createOpen && canCreate"

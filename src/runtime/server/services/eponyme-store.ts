@@ -173,6 +173,9 @@ export interface EponymeCollectionPage<Data extends Record<string, unknown> = Re
   total: number
 }
 
+/** What a listing returns with `fields=meta`: the entry without its payload. */
+export type EponymeCollectionEntryMeta = Omit<EponymeCollectionEntry, 'data'>
+
 export const COLLECTION_METADATA_KEYS = ['updatedAt', 'publishedAt', 'title', 'slug'] as const
 
 /**

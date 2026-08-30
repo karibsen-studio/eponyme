@@ -389,6 +389,38 @@ describe('ssr', async () => {
     await $fetch('/api/eponyme-trash/articles/first-article', { method: 'DELETE', ...authenticated() })
   })
 
+  it('lists a collection page by page, and without the payloads when asked for metadata', async () => {
+    const slugs = ['meta-one', 'meta-two', 'meta-three']
+    for (const slug of slugs) {
+      await $fetch('/api/eponyme-collections/articles', { method: 'POST', body: { title: slug }, ...authenticated() })
+      await saveAndPublish(`articles/${slug}`, { title: slug, slug, excerpt: 'An excerpt nobody asked for.' })
+    }
+
+    type Page = { entries: Array<{ slug: string, title: string, data?: unknown }>, total: number }
+    const first = await $fetch<Page>('/api/eponyme-collections/articles?fields=meta&take=2')
+    // `total` counts the collection, not the page, which is what a pager needs.
+    expect(first.total).toBe(3)
+    expect(first.entries).toHaveLength(2)
+    expect(first.entries.every(entry => entry.data === undefined)).toBe(true)
+    expect(first.entries.every(entry => entry.title.startsWith('meta-'))).toBe(true)
+
+    const second = await $fetch<Page>('/api/eponyme-collections/articles?fields=meta&take=2&skip=2')
+    expect(second.entries).toHaveLength(1)
+    expect(new Set([...first.entries, ...second.entries].map(entry => entry.slug)).size).toBe(3)
+
+    // A search narrows the count as well as the page, otherwise the pager would offer
+    // pages the search cannot fill.
+    const found = await $fetch<Page>('/api/eponyme-collections/articles?fields=meta&search=meta-two')
+    expect(found.total).toBe(1)
+    expect(found.entries[0]).toMatchObject({ slug: 'meta-two' })
+
+    // Without the flag the payload is still there: the public composable reads it.
+    const full = await $fetch<Page>('/api/eponyme-collections/articles?take=1')
+    expect(full.entries[0]!.data).toMatchObject({ excerpt: 'An excerpt nobody asked for.' })
+
+    for (const slug of slugs) await removeArticle(slug)
+  })
+
   it('trashes, restores and purges a collection entry over HTTP', async () => {
     await $fetch('/api/eponyme-collections/articles', { method: 'POST', body: { title: 'Trashed article' }, ...authenticated() })
     await saveAndPublish('articles/trashed-article', {

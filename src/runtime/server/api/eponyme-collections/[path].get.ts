@@ -100,6 +100,12 @@ export default defineEventHandler(async (event) => {
     search: query.search === undefined ? undefined : String(query.search),
   })
   if (!page) throw createError({ status: 404, message: t('server.collectionNotFound') })
+  // A listing shows titles, statuses and dates, never content. Dropping the payload is what
+  // keeps a large collection cheap to transfer and to parse, and the dashboard asks for it.
+  if (query.fields === 'meta') {
+    const entries = page.entries.map(({ data, ...entry }) => entry)
+    return { ...page, entries: query.raw ? entries : entries.map(entry => interpolateEponymeContent(entry)) }
+  }
   if (query.raw) return page
   // The entry's own schema is what tells rich text apart from plain text; the envelope
   // around it – a title carrying a variable – goes through the general pass as before.
