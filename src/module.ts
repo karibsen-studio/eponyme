@@ -483,6 +483,7 @@ export default defineNuxtModule<ModuleOptions>({
             'mingcute:movie-line',
             'mingcute:film-line',
             'mingcute:alert-line',
+            'mingcute:fullscreen-exit-2-line',
           ],
         },
       },

@@ -42,6 +42,7 @@ const DownloadableLinkAttribute = Extension.create({
 })
 
 const variableHighlightKey = new PluginKey<DecorationSet>('eponymeVariableHighlight')
+const bubbleMenuKey = new PluginKey('eponymeRichTextBubble')
 
 function createVariableDecorations(document: ProseMirrorNode) {
   const decorations: Decoration[] = []
@@ -117,6 +118,7 @@ const editingImage = ref(false)
 const fullscreen = ref(false)
 const toolbarMenusOpen = ref(false)
 const bubbleMenusOpen = ref(false)
+const bubbleDismissed = ref(false)
 const initialContent = typeof props.modelValue === 'string' ? props.modelValue : ''
 const editor = useEditor({
   content: initialContent,
@@ -144,6 +146,7 @@ const editor = useEditor({
     Color,
     BackgroundColor,
   ],
+  onSelectionUpdate: () => { bubbleDismissed.value = false },
   onTransaction: () => revision.value++,
   onUpdate: ({ editor }) => emit('update:modelValue', editor.isEmpty ? '' : editor.getHTML()),
 })
@@ -241,10 +244,11 @@ const highlightColor = computed(() => textStyleAttribute('backgroundColor'))
 
 /**
  * The field clips itself to its rounded corners, and a bubble over a selection near an edge
- * hangs outside them – so it is mounted on the body, above the field rather than inside it.
+ * hangs outside them - so it is mounted on the dashboard root, which clips nothing and holds
+ * the sticky chrome the bubble has to stay under.
  */
 function bubbleContainer() {
-  return document.body
+  return document.querySelector<HTMLElement>('.eponyme-root') ?? document.body
 }
 
 /**
@@ -252,14 +256,43 @@ function bubbleContainer() {
  * moment it opens – so an open menu keeps it on screen until the choice is made.
  */
 function shouldShowBubbleMenu({ view, state, from, to }: { view: EditorView, state: EditorState, from: number, to: number }) {
-  if (props.disabled || state.selection.empty) return false
+  if (props.disabled || state.selection.empty || bubbleDismissed.value) return false
   if (!state.doc.textBetween(from, to, ' ').trim()) return false
   return view.hasFocus() || bubbleMenusOpen.value
 }
 
-/** A colour menu takes Escape for itself, so only a closed one means "leave full screen". */
+/**
+ * The bubble only follows the scrollport it is told about, and the window never scrolls here:
+ * the dashboard shell has its own, and full screen turns the field into another. Scroll does
+ * not bubble, so the document is listened to in the capture phase to catch whichever moved.
+ */
+const bubbleScrollTarget = {
+  addEventListener: (type: string, handler: EventListener) => document.addEventListener(type, handler, true),
+  removeEventListener: (type: string, handler: EventListener) => document.removeEventListener(type, handler, true),
+} as unknown as Window
+
+const bubbleOptions = {
+  strategy: 'fixed' as const,
+  // Takes the bubble away once the selection has been scrolled out of sight.
+  hide: {},
+  scrollTarget: bubbleScrollTarget,
+}
+
+/** Hides the bubble now rather than at the next selection, which is what Escape asks for. */
+function dismissBubbleMenu() {
+  const instance = editor.value
+  if (!instance || bubbleDismissed.value) return false
+  const { from, to, empty } = instance.state.selection
+  if (empty || !instance.state.doc.textBetween(from, to, ' ').trim()) return false
+  bubbleDismissed.value = true
+  instance.view.dispatch(instance.state.tr.setMeta(bubbleMenuKey, 'hide'))
+  return true
+}
+
+/** A colour menu takes Escape for itself, then the bubble, and only then full screen. */
 function handleEscape() {
   if (toolbarMenusOpen.value || bubbleMenusOpen.value) return
+  if (dismissBubbleMenu()) return
   fullscreen.value = false
 }
 
@@ -426,15 +459,20 @@ const historyTools = computed<Tool[]>(() => {
           </template>
         </EPDropdownMenu>
       </div>
+      <!-- No reposition delay: the default one only fires once the scroll has stopped. -->
       <BubbleMenu
         v-if="editor"
         :editor="editor"
+        :plugin-key="bubbleMenuKey"
         :should-show="shouldShowBubbleMenu"
         :append-to="bubbleContainer"
-        class="eponyme-portal"
+        :resize-delay="0"
+        :options="bubbleOptions"
+        class="eponyme-rich-text-bubble"
+        :class="{ 'eponyme-rich-text-bubble-fullscreen': fullscreen }"
       >
         <div
-          class="eponyme-portal ep:flex ep:items-center ep:gap-1 ep:rounded-xl ep:border ep:border-border-default ep:bg-surface-raised ep:p-1 ep:shadow-xl"
+          class="ep:flex ep:items-center ep:gap-1 ep:rounded-xl ep:border ep:border-border-default ep:bg-surface-raised ep:p-1 ep:shadow-xl"
           role="toolbar"
           :aria-label="t('richText.selectionToolbar')"
         >
