@@ -29,7 +29,7 @@ const embedUrl = computed(() => eponymeMediaEmbedUrl(media.value))
       :title="label || t('media.preview')"
       loading="lazy"
       referrerpolicy="strict-origin-when-cross-origin"
-      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; screen-wake-lock; fullscreen"
       allowfullscreen
       class="ep:h-full ep:w-full ep:border-0"
     />

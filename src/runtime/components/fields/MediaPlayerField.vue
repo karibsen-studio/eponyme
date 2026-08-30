@@ -23,8 +23,9 @@ const emit = defineEmits<{ 'update:modelValue': [value: MediaPlayerValue] }>()
 
 const PROVIDER_LABELS: Record<MediaPlayerProvider, { label: string, icon: string }> = {
   youtube: { label: t('media.youtube'), icon: 'mingcute:youtube-line' },
-  // mingcute has no Vimeo mark, so the generic video icon stands in for it.
+
   vimeo: { label: t('media.vimeo'), icon: 'mingcute:movie-line' },
+  vkvideo: { label: t('media.vkvideo'), icon: 'mingcute:movie-line' },
   url: { label: t('media.direct'), icon: 'mingcute:film-line' },
 }
 

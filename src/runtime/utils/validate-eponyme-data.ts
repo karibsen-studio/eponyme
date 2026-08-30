@@ -392,6 +392,7 @@ function isAllowedProtocol(href: string, protocols: readonly string[] | undefine
 const MEDIA_PLAYER_LABELS: Record<MediaPlayerProvider, EponymeMessageKey> = {
   youtube: 'field.videoYoutube',
   vimeo: 'field.videoVimeo',
+  vkvideo: 'field.videoVkvideo',
   url: 'field.videoUrl',
 }
 

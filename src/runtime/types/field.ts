@@ -190,7 +190,7 @@ export interface UrlFieldDefinition {
  * Where a video comes from. `YouTube` and `vimeo` are embedded in an iframe; `url` is a file
  * the browser plays directly in a `<video>` element.
  */
-export type MediaPlayerProvider = 'youtube' | 'vimeo' | 'url'
+export type MediaPlayerProvider = 'youtube' | 'vimeo' | 'vkvideo' | 'url'
 
 export interface MediaPlayerValue {
   /** Detected from `url`. Empty while nothing has been entered, or when nothing recognized it. */
@@ -207,7 +207,7 @@ export interface MediaPlayerFieldOptions extends DefaultFieldOptions<MediaPlayer
    * Sources this field accepts. A video from any other one is refused rather than stored as
    * an address nothing can play.
    *
-   * @default ['youtube', 'vimeo', 'url']
+   * @default ['youtube', 'vimeo', 'vkvideo', 'url']
    */
   providers?: readonly MediaPlayerProvider[]
 }

@@ -671,6 +671,17 @@ describe('field.mediaPlayer()', () => {
     expect(parseEponymeMediaUrl('https://player.vimeo.com/video/76979871')).toMatchObject({ provider: 'vimeo', id: '76979871' })
   })
 
+  it('reads a VK Video id from a share, a feed and an embed address', () => {
+    for (const url of [
+      'https://vkvideo.ru/video-217986831_456240041',
+      'https://vk.com/video-217986831_456240041',
+      'https://vk.com/video?z=video-217986831_456240041%2Fpl_cat_updates',
+      'https://vkvideo.ru/video_ext.php?oid=-217986831&id=456240041&hd=4',
+    ]) expect(parseEponymeMediaUrl(url)).toMatchObject({ provider: 'vkvideo', id: '-217986831_456240041' })
+    // A video owned by a person rather than a community carries a positive owner.
+    expect(parseEponymeMediaUrl('https://vkvideo.ru/video123_456')).toMatchObject({ provider: 'vkvideo', id: '123_456' })
+  })
+
   it('falls back to a direct file, which has no id', () => {
     expect(parseEponymeMediaUrl('https://cdn.example.com/reel.mp4')).toEqual({
       provider: 'url',
@@ -691,6 +702,8 @@ describe('field.mediaPlayer()', () => {
       .toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ')
     expect(eponymeMediaEmbedUrl(parseEponymeMediaUrl('https://vimeo.com/76979871/abc123')))
       .toBe('https://player.vimeo.com/video/76979871?h=abc123')
+    expect(eponymeMediaEmbedUrl(parseEponymeMediaUrl('https://vkvideo.ru/video-217986831_456240041')))
+      .toBe('https://vkvideo.ru/video_ext.php?oid=-217986831&id=456240041&hd=4')
     // A direct file is played as it stands, and an empty value embeds nothing.
     expect(eponymeMediaEmbedUrl(parseEponymeMediaUrl('https://cdn.example.com/reel.mp4'))).toBe('https://cdn.example.com/reel.mp4')
     expect(eponymeMediaEmbedUrl({ provider: 'youtube', url: 'https://youtu.be/x', id: '' })).toBe('')
@@ -718,7 +731,7 @@ describe('field.mediaPlayer()', () => {
     expect(validate({ required: true }, { provider: '', url: '', id: '' })).toEqual(['This field is required.'])
     expect(validate({}, 'https://youtu.be/dQw4w9WgXcQ')).toEqual(['Must be a video.'])
     expect(validate({}, { provider: '', url: 'not a url', id: '' }))
-      .toEqual(['Must be a YouTube link, a Vimeo link or a direct video URL.'])
+      .toEqual(['Must be a YouTube link, a Vimeo link, a VK Video link or a direct video URL.'])
   })
 })
 

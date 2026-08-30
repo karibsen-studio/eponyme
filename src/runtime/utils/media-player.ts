@@ -1,13 +1,15 @@
 import type { MediaPlayerFieldOptions, MediaPlayerProvider, MediaPlayerValue } from '../types/field'
 
-export const MEDIA_PLAYER_PROVIDERS: readonly MediaPlayerProvider[] = ['youtube', 'vimeo', 'url']
+export const MEDIA_PLAYER_PROVIDERS: readonly MediaPlayerProvider[] = ['youtube', 'vimeo', 'vkvideo', 'url']
 
 const YOUTUBE_HOSTS = ['youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtube-nocookie.com', 'www.youtube-nocookie.com']
 const YOUTUBE_SHORT_HOSTS = ['youtu.be', 'www.youtu.be']
 const VIMEO_HOSTS = ['vimeo.com', 'www.vimeo.com', 'player.vimeo.com']
+const VK_HOSTS = ['vkvideo.ru', 'www.vkvideo.ru', 'vk.com', 'www.vk.com', 'm.vk.com', 'vk.ru', 'www.vk.ru']
 
 const YOUTUBE_ID = /^[\w-]{6,20}$/
 const VIMEO_ID = /^\d+$/
+const VK_ID = /^-?\d+_\d+$/
 
 export const EMPTY_MEDIA_PLAYER_VALUE: MediaPlayerValue = { provider: '', url: '', id: '' }
 
@@ -46,6 +48,11 @@ export function parseEponymeMediaUrl(url: unknown, options: Pick<MediaPlayerFiel
   if (allowed.includes('vimeo')) {
     const id = vimeoId(parsed, host)
     if (id) return { provider: 'vimeo', url: raw, id }
+  }
+
+  if (allowed.includes('vkvideo')) {
+    const id = vkVideoId(parsed, host)
+    if (id) return { provider: 'vkvideo', url: raw, id }
   }
 
   // A hosted address that its provider is not allowed to serve must not fall through to
@@ -93,6 +100,13 @@ export function eponymeMediaEmbedUrl(value: unknown): string {
     return `https://player.vimeo.com/video/${encodeURIComponent(media.id)}${hash ? `?h=${encodeURIComponent(hash)}` : ''}`
   }
 
+  if (media.provider === 'vkvideo') {
+    // VK splits the id back into the two parameters its player takes, and `hd` asks for the
+    // best quality it has rather than the 360p it otherwise starts on.
+    const [owner = '', id = ''] = media.id.split('_')
+    return `https://vkvideo.ru/video_ext.php?oid=${encodeURIComponent(owner)}&id=${encodeURIComponent(id)}&hd=4`
+  }
+
   return ''
 }
 
@@ -127,7 +141,7 @@ function parseUrl(raw: string): URL | undefined {
 }
 
 function isHostedHost(host: string) {
-  return YOUTUBE_HOSTS.includes(host) || YOUTUBE_SHORT_HOSTS.includes(host) || VIMEO_HOSTS.includes(host)
+  return YOUTUBE_HOSTS.includes(host) || YOUTUBE_SHORT_HOSTS.includes(host) || VIMEO_HOSTS.includes(host) || VK_HOSTS.includes(host)
 }
 
 function youtubeId(url: URL, host: string): string {
@@ -148,6 +162,24 @@ function vimeoId(url: URL, host: string): string {
   // `vimeo.com/123`, and the id is also the last numeric segment of `channels/x/123`.
   const numeric = [...parts].reverse().find(part => VIMEO_ID.test(part))
   return validId(numeric, VIMEO_ID)
+}
+
+function vkVideoId(url: URL, host: string): string {
+  if (!VK_HOSTS.includes(host)) return ''
+
+  const parts = segments(url)
+  if (parts[0] === 'video_ext.php') {
+    const owner = url.searchParams.get('oid')
+    const id = url.searchParams.get('id')
+    return validId(owner && id ? `${owner}_${id}` : '', VK_ID)
+  }
+
+  // `vkvideo.ru/video-1_2` is what a share gives, `vk.com/video?z=video-1_2` what a feed does.
+  for (const candidate of [...parts, url.searchParams.get('z') ?? '']) {
+    const pair = candidate.replace(/^video/, '').split('/')[0] ?? ''
+    if (VK_ID.test(pair)) return pair
+  }
+  return ''
 }
 
 function vimeoPrivacyHash(raw: string): string {

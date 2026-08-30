@@ -300,8 +300,8 @@ export default defineEponymeConfig({
       }),
       video: field.mediaPlayer({
         label: 'Video',
-        description: 'Vimeo ou un fichier vidéo. YouTube n’est pas accepté ici.',
-        providers: ['vimeo', 'url'],
+        description: 'Vimeo, VK Video ou un fichier vidéo. YouTube n’est pas accepté ici.',
+        providers: ['vimeo', 'vkvideo', 'url'],
         placeholder: 'https://vimeo.com/76979871',
       }),
       body: field.richText({
