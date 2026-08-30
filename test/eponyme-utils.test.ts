@@ -21,6 +21,7 @@ import { eponymeMediaEmbedUrl, parseEponymeMediaUrl } from '../src/runtime/utils
 import { normalizeEponymeValues } from '../src/runtime/utils/normalize-eponyme-values'
 import { validateEponymeData } from '../src/runtime/utils/validate-eponyme-data'
 import { middleEllipsis } from '../src/runtime/utils/middle-ellipsis'
+import { resolveLoginRedirect } from '../src/runtime/utils/login-redirect'
 
 describe('middleEllipsis', () => {
   it('keeps short text unchanged', () => {
@@ -769,5 +770,52 @@ describe('resolveEponymeSeo', () => {
       themeColor: '#111111',
       title: undefined,
     })
+  })
+})
+
+describe('resolveLoginRedirect', () => {
+  const config = {
+    pages: { homepage: { title: field.string() } },
+    articles: collection({ titleField: 'title', slugField: 'slug', fields: { title: field.string(), slug: field.slug() } }),
+    contact: form({ fields: { email: field.email() } }),
+  }
+
+  /** Stands in for the dashboard router: everything unknown falls into the catch-all detail route. */
+  function resolve(path: string) {
+    const name = path.slice('/__eponyme'.length).replace(/^\//, '').split(/[?#]/)[0] ?? ''
+    if (name === 'login') return { name: 'eponyme-login', params: {} }
+    if (name === 'users') return { name: 'eponyme-users', params: {} }
+    if (!name) return { name: 'eponyme-index', params: {} }
+    return { name: 'eponyme-detail', params: { eponyme: name.split('/') } }
+  }
+
+  function redirect(target: unknown) {
+    return resolveLoginRedirect(target, '/__eponyme', config, resolve)
+  }
+
+  it('keeps a target that still exists', () => {
+    expect(redirect('/__eponyme/pages/homepage')).toBe('/__eponyme/pages/homepage')
+    expect(redirect('/__eponyme/articles')).toBe('/__eponyme/articles')
+    expect(redirect('/__eponyme/articles/hello-world')).toBe('/__eponyme/articles/hello-world')
+    expect(redirect('/__eponyme/contact?page=2')).toBe('/__eponyme/contact?page=2')
+    expect(redirect('/__eponyme/pages')).toBe('/__eponyme/pages')
+    expect(redirect('/__eponyme/users')).toBe('/__eponyme/users')
+  })
+
+  it('falls back to the dashboard when the entry is gone', () => {
+    expect(redirect('/__eponyme/removed')).toBe('/__eponyme')
+    expect(redirect('/__eponyme/pages/removed')).toBe('/__eponyme')
+    expect(redirect('/__eponyme/articles/hello/world')).toBe('/__eponyme')
+  })
+
+  it('ignores a missing or foreign target', () => {
+    expect(redirect(undefined)).toBe('/__eponyme')
+    expect(redirect('/somewhere-else')).toBe('/__eponyme')
+    expect(redirect('//evil.test/__eponyme/articles')).toBe('/__eponyme')
+    expect(redirect(['/__eponyme/articles', '/__eponyme/contact'])).toBe('/__eponyme/articles')
+  })
+
+  it('never sends the visitor back to the login page', () => {
+    expect(redirect('/__eponyme/login')).toBe('/__eponyme')
   })
 })

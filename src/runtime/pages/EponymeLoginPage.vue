@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { t } from '#eponyme/locale'
-import { navigateTo, useRoute, useRuntimeConfig, useSeoMeta } from '#app'
+import { navigateTo, useRoute, useRouter, useRuntimeConfig, useSeoMeta } from '#app'
 import { computed, ref } from 'vue'
 import { useEponymeAuth } from '../composables/useEponymeAuth'
+import { useEponymeConfig } from '../composables/useEponymeConfig'
 import { useEponymeFavicon } from '../composables/useEponymeFavicon'
 import EponymeScreen from '../components/editor/EponymeScreen.vue'
 import EPButton from '../components/ui/EPButton.vue'
@@ -10,10 +11,13 @@ import EPFormField from '../components/ui/EPFormField.vue'
 import EPInputPassword from '../components/ui/EPInputPassword.vue'
 import EPInputText from '../components/ui/EPInputText.vue'
 import { getEponymeErrorMessage } from '../utils/eponyme-error'
+import { resolveLoginRedirect } from '../utils/login-redirect'
 import logoUrl from '../assets/logo.png?url'
 
 const route = useRoute()
+const router = useRouter()
 const auth = useEponymeAuth()
+const config = useEponymeConfig()
 const username = ref('')
 const password = ref('')
 const error = ref('')
@@ -40,10 +44,7 @@ async function submit() {
 async function navigateAfterLogin(mustChangePassword: boolean) {
   if (mustChangePassword)
     return navigateTo(`${dashboardPath.value}/change-password`)
-  const redirect = Array.isArray(route.query.redirect) ? route.query.redirect[0] : route.query.redirect
-  const destination = typeof redirect === 'string' && redirect.startsWith(`${dashboardPath.value}/`)
-    ? redirect
-    : dashboardPath.value
+  const destination = resolveLoginRedirect(route.query.redirect, dashboardPath.value, config, path => router.resolve(path))
   return navigateTo(destination)
 }
 </script>
