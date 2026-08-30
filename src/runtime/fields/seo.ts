@@ -1,3 +1,4 @@
+import { t } from '#eponyme/locale'
 import type { SectionFieldDefinition } from '../types/field'
 import { boolean } from './boolean'
 import { image } from './image'
@@ -49,23 +50,27 @@ const DESCRIPTION_MAX_LENGTH = 160
  * them there never invalidates an export.
  */
 export function seo(options: SeoFieldOptions = {}): EponymeSeoDefinition {
-  const { label = 'SEO', description, image: withImage = true, social = true, siteName, themeColor } = options
+  const { label = t('seo.label'), description, image: withImage = true, social = true, siteName, themeColor } = options
 
   return {
     ...section({
       label,
       description,
       fields: {
-        title: string({ maxLength: TITLE_MAX_LENGTH, showCounter: true }),
-        description: textarea({ maxLength: DESCRIPTION_MAX_LENGTH, showCounter: true }),
-        ...withImage ? { image: image({ label: 'Sharing image' }) } : {},
+        // Ces champs sont fabriques par le module, pas ecrits par l'application : leurs
+        // libelles viennent donc du catalogue, comme le reste du dashboard. Sans cela un
+        // dashboard en francais affiche une section SEO entierement en anglais, et l'auteur
+        // n'a aucun moyen de la corriger puisqu'il ne declare pas ces sous-champs.
+        title: string({ label: t('seo.title'), maxLength: TITLE_MAX_LENGTH, showCounter: true }),
+        description: textarea({ label: t('seo.description'), maxLength: DESCRIPTION_MAX_LENGTH, showCounter: true }),
+        ...withImage ? { image: image({ label: t('seo.image') }) } : {},
         // The switch reads as an opt-out: an author who never opens this section shares the
         // page's own title and description, which is the right default.
         ...social
           ? {
-              shareSameAsPage: boolean({ label: 'Reuse the title and description when sharing', defaultValue: true }),
-              ogTitle: string({ maxLength: TITLE_MAX_LENGTH, showCounter: true, visibleWhen: { field: 'shareSameAsPage', equals: false } }),
-              ogDescription: textarea({ maxLength: DESCRIPTION_MAX_LENGTH, showCounter: true, visibleWhen: { field: 'shareSameAsPage', equals: false } }),
+              shareSameAsPage: boolean({ label: t('seo.shareSameAsPage'), defaultValue: true }),
+              ogTitle: string({ label: t('seo.ogTitle'), maxLength: TITLE_MAX_LENGTH, showCounter: true, visibleWhen: { field: 'shareSameAsPage', equals: false } }),
+              ogDescription: textarea({ label: t('seo.ogDescription'), maxLength: DESCRIPTION_MAX_LENGTH, showCounter: true, visibleWhen: { field: 'shareSameAsPage', equals: false } }),
             }
           : {},
       },

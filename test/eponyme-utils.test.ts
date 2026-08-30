@@ -7,6 +7,7 @@ import { collection } from '../src/config/collection'
 import { form } from '../src/config/form'
 import { field } from '../src/runtime/fields'
 import { resolveEponymeSeo } from '../src/runtime/fields/seo'
+import { eponymeEnglishMessages } from '../src/runtime/locales'
 import { isFieldVisible } from '../src/runtime/utils/is-field-visible'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas, isEponymeForm, isEponymeSchema } from '../src/runtime/utils/get-eponyme-schemas'
 import { findEponymeVariableRanges, interpolateEponymeText, interpolateEponymeValue, resolveEponymeVariables, summariseEponymeVariables } from '../src/runtime/utils/variables'
@@ -753,6 +754,22 @@ describe('field.seo', () => {
     expect(fields.ogTitle!.options.visibleWhen).toEqual({ field: 'shareSameAsPage', equals: false })
     expect(isFieldVisible(fields.ogTitle!.options, { shareSameAsPage: true })).toBe(false)
     expect(isFieldVisible(fields.ogTitle!.options, { shareSameAsPage: false })).toBe(true)
+  })
+
+  it('labels every field from the catalogue, so a translated dashboard translates the section too', () => {
+    const fields = field.seo().options.fields
+    // Une chaine ecrite en dur ici serait invisible : la section s'afficherait en anglais dans
+    // un dashboard traduit, et l'auteur n'a aucun moyen de la corriger puisqu'il ne declare pas
+    // ces sous-champs.
+    expect(fields.title!.options.label).toBe(eponymeEnglishMessages['seo.title'])
+    expect(fields.description!.options.label).toBe(eponymeEnglishMessages['seo.description'])
+    expect(fields.image!.options.label).toBe(eponymeEnglishMessages['seo.image'])
+    expect(fields.shareSameAsPage!.options.label).toBe(eponymeEnglishMessages['seo.shareSameAsPage'])
+    expect(fields.ogTitle!.options.label).toBe(eponymeEnglishMessages['seo.ogTitle'])
+    expect(fields.ogDescription!.options.label).toBe(eponymeEnglishMessages['seo.ogDescription'])
+    expect(field.seo().options.label).toBe(eponymeEnglishMessages['seo.label'])
+    // Un libelle fourni par l'application l'emporte toujours.
+    expect(field.seo({ label: 'Referencement' }).options.label).toBe('Referencement')
   })
 
   it('keeps the site-wide constants off the fields', () => {
