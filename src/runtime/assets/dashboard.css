@@ -105,6 +105,16 @@
   }
 }
 
+/* Un ::selection defini par le site hote traverse le dashboard, d'ou le !important. */
+.eponyme-root::selection,
+.eponyme-root ::selection,
+.eponyme-portal::selection,
+.eponyme-portal ::selection {
+  background-color: Highlight !important;
+  color: HighlightText !important;
+  text-shadow: none !important;
+}
+
 .eponyme-date-input {
   color-scheme: inherit;
   appearance: none;
