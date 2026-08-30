@@ -70,3 +70,6 @@ RELEASE-NOTES-*.md
 /scripts
 security.md
 AGENTS.md
+.todo.md
+rapport.md
+eponyme-read-batching-fr.md
