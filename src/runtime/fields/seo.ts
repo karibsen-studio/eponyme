@@ -1,4 +1,3 @@
-import { t } from '#eponyme/locale'
 import type { SectionFieldDefinition } from '../types/field'
 import { boolean } from './boolean'
 import { image } from './image'
@@ -50,27 +49,26 @@ const DESCRIPTION_MAX_LENGTH = 160
  * them there never invalidates an export.
  */
 export function seo(options: SeoFieldOptions = {}): EponymeSeoDefinition {
-  const { label = t('seo.label'), description, image: withImage = true, social = true, siteName, themeColor } = options
+  const { label = 'seo.label', description, image: withImage = true, social = true, siteName, themeColor } = options
 
   return {
     ...section({
       label,
       description,
       fields: {
-        // Ces champs sont fabriques par le module, pas ecrits par l'application : leurs
-        // libelles viennent donc du catalogue, comme le reste du dashboard. Sans cela un
-        // dashboard en francais affiche une section SEO entierement en anglais, et l'auteur
-        // n'a aucun moyen de la corriger puisqu'il ne declare pas ces sous-champs.
-        title: string({ label: t('seo.title'), maxLength: TITLE_MAX_LENGTH, showCounter: true }),
-        description: textarea({ label: t('seo.description'), maxLength: DESCRIPTION_MAX_LENGTH, showCounter: true }),
-        ...withImage ? { image: image({ label: t('seo.image') }) } : {},
+        // Message keys, not text: this file is evaluated by Node when the application config
+        // is read, where `#eponyme/locale` does not resolve. `humanizeLabel` translates them
+        // when the dashboard renders, which is also the only moment the locale is known.
+        title: string({ label: 'seo.title', maxLength: TITLE_MAX_LENGTH, showCounter: true }),
+        description: textarea({ label: 'seo.description', maxLength: DESCRIPTION_MAX_LENGTH, showCounter: true }),
+        ...withImage ? { image: image({ label: 'seo.image' }) } : {},
         // The switch reads as an opt-out: an author who never opens this section shares the
         // page's own title and description, which is the right default.
         ...social
           ? {
-              shareSameAsPage: boolean({ label: t('seo.shareSameAsPage'), defaultValue: true }),
-              ogTitle: string({ label: t('seo.ogTitle'), maxLength: TITLE_MAX_LENGTH, showCounter: true, visibleWhen: { field: 'shareSameAsPage', equals: false } }),
-              ogDescription: textarea({ label: t('seo.ogDescription'), maxLength: DESCRIPTION_MAX_LENGTH, showCounter: true, visibleWhen: { field: 'shareSameAsPage', equals: false } }),
+              shareSameAsPage: boolean({ label: 'seo.shareSameAsPage', defaultValue: true }),
+              ogTitle: string({ label: 'seo.ogTitle', maxLength: TITLE_MAX_LENGTH, showCounter: true, visibleWhen: { field: 'shareSameAsPage', equals: false } }),
+              ogDescription: textarea({ label: 'seo.ogDescription', maxLength: DESCRIPTION_MAX_LENGTH, showCounter: true, visibleWhen: { field: 'shareSameAsPage', equals: false } }),
             }
           : {},
       },
