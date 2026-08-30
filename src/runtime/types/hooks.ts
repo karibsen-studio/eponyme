@@ -5,7 +5,7 @@ export interface EponymeEntryContext {
   name: string
   /** Collection name and slug when the entry belongs to one. */
   collection?: { name: string, slug: string }
-  action: EponymeAction | 'restore'
+  action: EponymeAction | 'restore' | 'import'
   status: EponymeStatus
   publishedAt: string | null
   scheduledPublishAt: string | null
@@ -46,9 +46,12 @@ export interface EponymeHooks {
    * enforce a rule the schema cannot express. Mutating `data` amends the payload.
    */
   'eponyme:entry:beforeSave': (context: EponymeEntryBeforeSaveContext) => void | Promise<void>
-  /** After a draft save. The entry is already stored. */
+  /** After a draft save, and after an import wrote an entry that is not published. */
   'eponyme:entry:saved': (context: EponymeEntryContext) => void | Promise<void>
-  /** After a publication: the usual place to purge a cache or ping a webhook. */
+  /**
+   * After a publication: the usual place to purge a cache or ping a webhook. An import fires
+   * it once per published entry it wrote, so a purge covers imported content too.
+   */
   'eponyme:entry:published': (context: EponymeEntryContext) => void | Promise<void>
   /** After a publication was removed while retaining its published content. */
   'eponyme:entry:unpublished': (context: EponymeEntryContext) => void | Promise<void>

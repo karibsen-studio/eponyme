@@ -1385,14 +1385,25 @@ describe('ssr', async () => {
       body: { excerpt: 'Overwritten in production' },
       ...authenticated(),
     })
+    const beforeDryRun = (await $fetch<{ seen: string[] }>('/_hooks')).seen.length
     await expect($fetch('/api/eponyme-import', {
       method: 'POST',
       query: { dryRun: 1 },
       body: file,
       ...authenticated(),
     })).resolves.toMatchObject({ dryRun: true, created: 0, skipped: [] })
-    await expect($fetch('/api/eponyme-import', { method: 'POST', body: file, ...authenticated() }))
-      .resolves.toMatchObject({ dryRun: false, skipped: [] })
+    // A dry run writes nothing, so it must announce nothing either.
+    const beforeImport = (await $fetch<{ seen: string[] }>('/_hooks')).seen
+    expect(beforeImport.length).toBe(beforeDryRun)
+
+    const imported = await $fetch<Record<string, unknown>>('/api/eponyme-import', { method: 'POST', body: file, ...authenticated() })
+    expect(imported).toMatchObject({ dryRun: false, skipped: [] })
+    // The written entries are what the hooks are built from, and stay on the server.
+    expect(imported).not.toHaveProperty('written')
+    // An import is a write like any other: it announces itself, which is where a host
+    // purges the CDN copies the import just made stale.
+    const announced = (await $fetch<{ seen: string[] }>('/_hooks')).seen.slice(beforeImport.length)
+    expect(announced.some(entry => entry.includes('articles/export-round-trip'))).toBe(true)
     await expect($fetch('/api/eponyme/articles/export-round-trip', {
       query: { version: 'draft' },
       ...authenticated(),

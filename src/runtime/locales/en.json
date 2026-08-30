@@ -487,6 +487,7 @@
   "server.slugInTrash": "An entry with this slug is in the trash. Restore it or delete it permanently first.",
   "server.importNoSchema": "No schema is configured for this entry.",
   "server.importInTrash": "An entry with this name is in the trash. Restore it or delete it permanently first.",
+  "server.importRelationMissing": "\u201c{name}\u201d points at \u201c{target}\u201d, which neither the file nor this application holds.",
   "server.passwordChangeFailed": "Unable to change password.",
   "server.userCreateFailed": "Unable to create user.",
   "server.entryConflict": "This entry was changed by someone else. Reload the page to get the latest version.",

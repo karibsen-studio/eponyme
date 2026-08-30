@@ -107,6 +107,22 @@ export interface EponymeImportResult {
   skipped: Array<{ name: string, reason: string }>
 }
 
+/** An entry the import actually wrote, as the hooks the route emits need to describe it. */
+export interface EponymeImportedEntry extends EponymeResult {
+  name: string
+  collection?: { name: string, slug: string }
+  /** Whether the entry was published before the import, so the route can emit an unpublication. */
+  wasPublished: boolean
+}
+
+/**
+ * What the store hands back. `written` stays on the server: the route reads it to emit its
+ * hooks and answers with the counts alone, which is all the dashboard shows.
+ */
+export interface EponymeImportOutcome extends EponymeImportResult {
+  written: EponymeImportedEntry[]
+}
+
 /** The import was refused as a whole, before any write. */
 export interface EponymeImportRejection {
   errors: string[]
@@ -1193,7 +1209,7 @@ export class EponymeService {
   async importContent(
     file: unknown,
     options: { dryRun?: boolean, actorId?: string, actorUsername?: string } = {},
-  ): Promise<EponymeImportResult | EponymeImportRejection> {
+  ): Promise<EponymeImportOutcome | EponymeImportRejection> {
     const parsed = parseExportFile(file)
     if (!parsed) return { errors: ['This file is not an Eponyme export.'] }
 
@@ -1215,6 +1231,9 @@ export class EponymeService {
       }
     }
 
+    const danglingRelations = await this.importRelationErrors(parsed)
+    if (danglingRelations.length) return { errors: danglingRelations }
+
     // A dry run only reads, so it stays outside a transaction: opening one would hold a
     // connection for the length of the file to protect writes that never happen.
     if (options.dryRun) return await this.applyImport(parsed, options, this.client, () => {})
@@ -1227,6 +1246,49 @@ export class EponymeService {
   }
 
   /**
+   * Relations an export points at that nothing would satisfy. A normal save runs the same
+   * check through `relationRejections()`, which an import bypassed: an old or hand-edited
+   * file could store a reference to an entry that does not exist.
+   *
+   * Entries the file itself carries count as present, so a whole-site export stays importable
+   * whatever order its entries are in. Runs before any write, like the schema check, so the
+   * file is refused as a whole rather than half applied.
+   */
+  private async importRelationErrors(parsed: EponymeExportFile): Promise<string[]> {
+    const references: Array<{ entry: string, entryName: string }> = []
+    for (const entry of parsed.entries) {
+      const schema = this.schemas[entry.name] ?? this.getCollectionEntry(entry.name)?.definition.fields
+      if (!schema) continue
+      for (const version of [entry.draft, entry.published]) {
+        for (const reference of collectEponymeRelations(schema, normalizeEponymeValues(schema, version)))
+          references.push({ entry: entry.name, entryName: reference.entryName })
+      }
+    }
+    if (!references.length) return []
+
+    const carried = new Set(parsed.entries.map(entry => entry.name))
+    const names = [...new Set(references.map(reference => reference.entryName))].filter(name => !carried.has(name))
+    const rows = names.length
+      ? await this.client.eponyme.findMany({
+          where: { name: { in: names }, deletedAt: null },
+          orderBy: [{ name: 'asc' }],
+          select: { name: true },
+        })
+      : []
+    const existing = new Set([...carried, ...rows.map(row => row.name)])
+
+    const errors: string[] = []
+    const reported = new Set<string>()
+    for (const reference of references) {
+      const key = `${reference.entry}:${reference.entryName}`
+      if (existing.has(reference.entryName) || reported.has(key)) continue
+      reported.add(key)
+      errors.push(t('server.importRelationMissing', { name: reference.entry, target: reference.entryName }))
+    }
+    return errors
+  }
+
+  /**
    * The body of an import, over whichever client it was handed: the live one for a dry
    * run, a transaction for the real thing.
    */
@@ -1235,8 +1297,8 @@ export class EponymeService {
     options: { dryRun?: boolean, actorId?: string, actorUsername?: string },
     db: PrismaEponymeDelegates,
     invalidate: (name: string) => void,
-  ): Promise<EponymeImportResult> {
-    const result: EponymeImportResult = { dryRun: Boolean(options.dryRun), created: 0, updated: 0, skipped: [] }
+  ): Promise<EponymeImportOutcome> {
+    const result: EponymeImportOutcome = { dryRun: Boolean(options.dryRun), created: 0, updated: 0, skipped: [], written: [] }
     for (const entry of parsed.entries) {
       const collectionEntry = this.getCollectionEntry(entry.name)
       const schema = this.schemas[entry.name] ?? collectionEntry?.definition.fields
@@ -1287,6 +1349,12 @@ export class EponymeService {
             status: state.__eponyme.status,
             userId: options.actorId ?? null,
           },
+        })
+        result.written.push({
+          name: entry.name,
+          collection: collectionEntry && { name: collectionEntry.name, slug: collectionEntry.slug },
+          wasPublished: row?.status === 'published',
+          ...toResult(state, state.__eponyme.draft),
         })
       }
       if (row) result.updated++

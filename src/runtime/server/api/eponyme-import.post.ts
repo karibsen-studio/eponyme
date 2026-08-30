@@ -2,6 +2,7 @@ import { t } from '#eponyme/locale'
 import { createError, defineEventHandler, getQuery, setResponseHeader } from 'h3'
 import { useEponymeService } from '../services/eponyme-service'
 import { assertEponymeMutationOrigin } from '../utils/auth'
+import { callEponymeHook } from '../utils/eponyme-hooks'
 import { requireEponymePermission } from '../utils/eponyme-permissions'
 import { readEponymeRawBody } from '../utils/body'
 
@@ -38,5 +39,28 @@ export default defineEventHandler(async (event) => {
       data: { errors: result.errors, schemaMismatch: result.schemaMismatch ?? [] },
     })
   }
-  return result
+
+  // Every other write emits a hook, which is where a host purges its CDN. Without one an
+  // import left the database and the dashboard current while cached pages kept serving the
+  // content it replaced. Empty on a dry run, which writes nothing.
+  const { written, ...summary } = result
+  for (const { wasPublished, ...entry } of written) {
+    // An entry that leaves the public site emits an unpublication, so a purge listening to the
+    // publication hooks alone does not keep serving the page the import just took down.
+    const hook = entry.status === 'published'
+      ? 'eponyme:entry:published'
+      : wasPublished ? 'eponyme:entry:unpublished' : 'eponyme:entry:saved'
+    await callEponymeHook(hook, {
+      name: entry.name,
+      collection: entry.collection,
+      action: 'import',
+      status: entry.status,
+      publishedAt: entry.publishedAt,
+      scheduledPublishAt: entry.scheduledPublishAt,
+      scheduledUnpublishAt: entry.scheduledUnpublishAt,
+      data: entry.data,
+      userId: user.id,
+    })
+  }
+  return summary
 })

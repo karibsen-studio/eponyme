@@ -1397,6 +1397,78 @@ describe('Eponyme export and import', () => {
     expect(applied.updated).toBe(1)
   })
 
+  it('reports whether an imported entry was published, so the route can purge what it takes down', async () => {
+    const { service: source } = await seed()
+    const file = await source.exportContent()
+    // The entry leaves the public site: exported as a draft, published on the target.
+    file.entries.find(entry => entry.name === 'articles/ete-a-paris')!.status = 'draft'
+
+    const { client } = createClient()
+    const target = new EponymeService(config, client)
+    await target.syncAll()
+    await target.createCollectionEntry('articles', { title: 'Été à Paris', summary: 'Live' })
+    await target.patch('articles/ete-a-paris', { summary: 'Live' }, 'publish')
+
+    const applied = await target.importContent(file) as Exclude<Awaited<ReturnType<EponymeService['importContent']>>, { errors: string[] }>
+
+    expect(applied.written).toContainEqual(expect.objectContaining({
+      name: 'articles/ete-a-paris',
+      status: 'draft',
+      wasPublished: true,
+    }))
+    // A creation has no previous state, so it never reads as an unpublication.
+    expect(applied.written).toContainEqual(expect.objectContaining({ name: 'articles/still-a-draft', wasPublished: false }))
+  })
+
+  it('refuses a file whose relations point at an entry neither it nor the application holds', async () => {
+    const related = defineEponymeConfig({
+      homepage: { author: field.relation({ to: 'articles' }) },
+      articles: collection({
+        label: 'Articles',
+        titleField: 'title',
+        slugField: 'slug',
+        fields: { title: field.string({ required: true }), slug: field.slug({ required: true }) },
+      }),
+    })
+    const { client, rows } = createClient()
+    const target = new EponymeService(related, client)
+    await target.syncAll()
+
+    const file: EponymeExportFile = {
+      eponyme: {
+        format: 1,
+        exportedAt: new Date().toISOString(),
+        schemas: { homepage: schemaFingerprint(related.homepage), articles: schemaFingerprint(related.articles.fields) },
+      },
+      entries: [{
+        name: 'homepage',
+        draft: { author: 'ete-a-paris' },
+        published: {},
+        status: 'draft',
+        publishedAt: null,
+        scheduledPublishAt: null,
+        scheduledUnpublishAt: null,
+      }],
+    }
+    const before = new Map(rows)
+
+    await expect(target.importContent(file)).resolves.toMatchObject({ errors: [expect.stringContaining('ete-a-paris')] })
+    expect([...rows.entries()]).toEqual([...before.entries()])
+
+    // The same file becomes importable once it carries the entry it points at.
+    file.entries.push({
+      name: 'articles/ete-a-paris',
+      collection: 'articles',
+      draft: { title: 'Été à Paris', slug: 'ete-a-paris' },
+      published: {},
+      status: 'draft',
+      publishedAt: null,
+      scheduledPublishAt: null,
+      scheduledUnpublishAt: null,
+    })
+    await expect(target.importContent(file)).resolves.toMatchObject({ created: 1, updated: 1 })
+  })
+
   it('rejects a file that is not an Eponyme export', async () => {
     const { client } = createClient()
     const service = new EponymeService(config, client)
