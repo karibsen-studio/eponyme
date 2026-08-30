@@ -50,7 +50,7 @@ async function navigateAfterLogin(mustChangePassword: boolean) {
 
 <template>
   <EponymeScreen class="ep:flex ep:items-center ep:justify-center ep:px-6 ep:py-12">
-    <section class="ep:w-full ep:max-w-sm">
+    <main class="ep:w-full ep:max-w-sm">
       <img
         :src="logoUrl"
         :alt="t('sidebar.logo')"
@@ -107,6 +107,6 @@ async function navigateAfterLogin(mustChangePassword: boolean) {
           {{ t('login.heading') }}
         </EPButton>
       </form>
-    </section>
+    </main>
   </EponymeScreen>
 </template>

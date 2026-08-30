@@ -194,6 +194,7 @@
   "folder.entries": "{folder} entries",
   "entry.draft": "Draft",
   "sidebar.logo": "Eponyme",
+  "sidebar.skipToContent": "Skip to content",
   "sidebar.expand": "Expand sidebar",
   "sidebar.collapse": "Collapse sidebar",
   "sidebar.contentEntries": "Content entries",

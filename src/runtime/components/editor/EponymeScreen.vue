@@ -10,12 +10,12 @@ const target = computed(() => (useRuntimeConfig().public.eponyme as { teleportTa
 
 <template>
   <Teleport :to="target">
-    <main
+    <div
       class="eponyme-root ep:bg-surface-page ep:font-sans ep:text-text-default"
       v-bind="$attrs"
     >
       <slot />
-    </main>
+    </div>
   </Teleport>
 </template>
 

@@ -130,9 +130,29 @@ html:has(.eponyme-root) {
   overflow: hidden;
 }
 
+.eponyme-skip-link {
+  position: absolute;
+  z-index: 1;
+  inset-block-start: 0.5rem;
+  inset-inline-start: 0.5rem;
+  transform: translateY(-200%);
+}
+
+.eponyme-skip-link:focus-visible {
+  transform: translateY(0);
+}
+
 
 .eponyme-portal {
   z-index: 2147483001;
+}
+
+.eponyme-rich-text-bubble {
+  z-index: 15;
+}
+
+.eponyme-rich-text-bubble-fullscreen {
+  z-index: 60;
 }
 
 .rich-text-tool {

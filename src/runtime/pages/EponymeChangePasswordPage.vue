@@ -43,7 +43,7 @@ async function logout() {
 
 <template>
   <EponymeScreen class="ep:flex ep:items-center ep:justify-center ep:px-6 ep:py-12">
-    <section class="ep:w-full ep:max-w-md">
+    <main class="ep:w-full ep:max-w-md">
       <h1 class="ep:mt-2 ep:mb-2 ep:text-3xl ep:font-semibold ep:tracking-tight ep:text-text-strong">
         {{ t('password.heading') }}
       </h1>
@@ -112,6 +112,6 @@ async function logout() {
           </EPButton>
         </div>
       </form>
-    </section>
+    </main>
   </EponymeScreen>
 </template>
