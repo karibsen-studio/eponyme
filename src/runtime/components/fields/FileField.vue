@@ -215,49 +215,73 @@ function handleDragOver() {
 
       <div
         v-else
-        class="ep:flex ep:items-center ep:gap-3 ep:rounded-xl ep:border ep:border-border-default ep:p-3"
+        class="ep:flex ep:w-full ep:min-w-0 ep:max-w-full ep:flex-col ep:gap-3 ep:overflow-hidden ep:rounded-xl ep:border ep:border-border-default ep:p-3 ep:sm:flex-row ep:sm:items-center"
       >
-        <img
-          v-if="preview"
-          :src="value"
-          :alt="label"
-          class="ep:h-16 ep:w-16 ep:shrink-0 ep:rounded-lg ep:border ep:border-border-default ep:object-cover"
-        >
-        <Icon
-          v-else
-          name="mingcute:file-line"
-          size="24"
-          aria-hidden="true"
-          class="ep:shrink-0 ep:text-text-muted"
-        />
-        <div class="ep:min-w-0 ep:flex-1">
-          <p class="ep:m-0 ep:truncate ep:text-sm ep:font-medium ep:text-text-strong">
-            {{ fileName }}
-          </p>
-          <a
+        <div class="ep:flex ep:w-full ep:min-w-0 ep:max-w-full ep:items-center ep:gap-3 ep:sm:flex-1">
+          <img
+            v-if="preview"
+            :src="value"
+            :alt="label"
+            class="ep:h-16 ep:w-16 ep:shrink-0 ep:rounded-lg ep:border ep:border-border-default ep:object-cover"
+          >
+          <Icon
+            v-else
+            name="mingcute:file-line"
+            size="24"
+            aria-hidden="true"
+            class="ep:shrink-0 ep:text-text-muted"
+          />
+          <div class="ep:min-w-0 ep:flex-1">
+            <p class="ep:m-0 ep:break-all ep:whitespace-normal ep:text-sm ep:font-medium ep:text-text-strong">
+              {{ fileName }}
+            </p>
+            <a
+              :href="value"
+              target="_blank"
+              rel="noopener"
+              class="ep:hidden ep:text-xs ep:text-text-muted ep:sm:inline"
+            >{{ t('file.open') }}</a>
+          </div>
+        </div>
+        <div class="ep:flex ep:w-full ep:max-w-full ep:flex-col ep:gap-2 ep:sm:w-auto ep:sm:flex-row ep:sm:shrink-0">
+          <EPButton
+            variant="ghost"
             :href="value"
             target="_blank"
             rel="noopener"
-            class="ep:text-xs ep:text-text-muted"
-          >{{ t('file.open') }}</a>
-        </div>
-        <div class="ep:flex ep:shrink-0 ep:gap-1">
-          <EPButton
             size="sm"
-            variant="ghost"
-            :disabled="disabled"
-            @click="allowsUpload ? (pickerOpen = true) : openAddress()"
           >
-            {{ t('file.replace') }}
+            {{ t('file.open') }}
           </EPButton>
-          <EPButton
-            icon="mingcute:close-line"
-            size="icon"
-            variant="ghost"
-            :aria-label="t('file.remove')"
-            :disabled="disabled"
-            @click="emit('update:modelValue', '')"
-          />
+          <div class="ep:flex ep:w-full ep:gap-1 ep:sm:w-auto">
+            <EPButton
+              size="sm"
+              variant="primary"
+              class="ep:flex-1 ep:sm:flex-none"
+              :disabled="disabled"
+              @click="allowsUpload ? (pickerOpen = true) : openAddress()"
+            >
+              {{ t('file.replace') }}
+            </EPButton>
+            <EPButton
+              size="sm"
+              variant="danger"
+              class="ep:flex-1 ep:sm:flex-none ep:md:hidden"
+              :disabled="disabled"
+              @click="emit('update:modelValue', '')"
+            >
+              {{ t('file.remove') }}
+            </EPButton>
+            <EPButton
+              :aria-label="t('file.remove')"
+              :disabled="disabled"
+              icon="mingcute:close-line"
+              size="icon"
+              variant="ghost"
+              class="ep:md:inline-flex! ep:hidden!"
+              @click="emit('update:modelValue', '')"
+            />
+          </div>
         </div>
       </div>
 

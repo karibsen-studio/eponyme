@@ -102,7 +102,10 @@ function focusNextField(name: string) {
         v-for="([sectionFieldName, sectionField]) in fields"
         :key="sectionFieldName"
       >
-        <div v-if="isFieldVisible(sectionField.options, sectionData)">
+        <div
+          v-if="isFieldVisible(sectionField.options, sectionData)"
+          class="ep:min-w-0"
+        >
           <template v-if="sectionField.type === 'array'">
             <label
               :for="fieldPathId(fieldPath(sectionFieldName))"
