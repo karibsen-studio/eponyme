@@ -13,6 +13,7 @@ import { getEponymeCollections, getEponymeForms, getEponymeSchemas, isEponymeFor
 import { findEponymeVariableRanges, interpolateEponymeText, interpolateEponymeValue, resolveEponymeVariables, summariseEponymeVariables } from '../src/runtime/utils/variables'
 import { applyPreviewSlug, readPreviewQuery, readPreviewVersion, resolvePreviewPath } from '../src/runtime/utils/preview'
 import { buildEponymeNavigationTree } from '../src/runtime/utils/build-navigation-tree'
+import { flattenEponymeNavigationTree } from '../src/runtime/utils/flatten-navigation-tree'
 import { filterEponymeNavigationTree, preloadEponymeNavigationSearch } from '../src/runtime/utils/filter-navigation-tree'
 import { cacheDuringHydrationOnly, cacheForPublicRead } from '../src/runtime/utils/hydration-cache'
 import { getEponymeCacheTags, tagPreviewPathRoutes } from '../src/runtime/utils/cache-tags'
@@ -847,5 +848,57 @@ describe('resolveLoginRedirect', () => {
 
   it('never sends the visitor back to the login page', () => {
     expect(redirect('/__eponyme/login')).toBe('/__eponyme')
+  })
+})
+
+describe('flattenEponymeNavigationTree', () => {
+  const tree = () => buildEponymeNavigationTree({
+    schemas: { 'pages/homepage': {}, 'pages/legal/terms': {} },
+    collections: { articles: { label: 'Articles' } },
+    forms: {},
+    collectionEntries: {
+      articles: [
+        { slug: 'lete-a-paris', title: 'L’été à Paris' },
+        { slug: 'nuxt-modules', title: 'Nuxt modules' },
+      ],
+    },
+  })
+
+  it('lists only what the open folders reveal', () => {
+    expect(flattenEponymeNavigationTree(tree(), { openFolders: [] }).map(row => row.path))
+      .toEqual(['pages', 'articles'])
+
+    const rows = flattenEponymeNavigationTree(tree(), { openFolders: ['pages', 'articles'] })
+    expect(rows.map(row => row.path)).toEqual([
+      'pages',
+      'pages/homepage',
+      'pages/legal',
+      'articles',
+      'articles/lete-a-paris',
+      'articles/nuxt-modules',
+    ])
+    // The nesting survives as a depth, which is what the flat list indents on.
+    expect(rows.map(row => row.depth)).toEqual([0, 1, 1, 0, 1, 1])
+  })
+
+  it('opens everything while a search is active', () => {
+    const rows = flattenEponymeNavigationTree(tree(), { openFolders: [], forceOpen: true })
+    expect(rows.map(row => row.path)).toContain('pages/legal/terms')
+  })
+
+  it('marks the collapsible rows, and only those', () => {
+    const rows = flattenEponymeNavigationTree(tree(), { openFolders: ['pages', 'articles'] })
+    expect(rows.filter(row => row.open !== undefined).map(row => row.path)).toEqual(['pages', 'pages/legal', 'articles'])
+  })
+
+  it('closes a collection with a row to load the rest of it', () => {
+    const rows = flattenEponymeNavigationTree(tree(), {
+      openFolders: ['articles'],
+      hasMore: collection => collection === 'articles',
+    })
+    expect(rows.at(-1)).toMatchObject({ kind: 'more', path: 'articles', depth: 1 })
+    // Nothing to load, nothing to show.
+    expect(flattenEponymeNavigationTree(tree(), { openFolders: ['articles'], hasMore: () => false })
+      .some(row => row.kind === 'more')).toBe(false)
   })
 })

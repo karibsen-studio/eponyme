@@ -71,6 +71,7 @@
     "@nuxt/kit": "^4.4.8",
     "@tailwindcss/vite": "^4.1.12",
     "@tanstack/vue-table": "^8.21.3",
+    "@tanstack/vue-virtual": "^3.13.36",
     "@tiptap/extension-image": "^3.29.2",
     "@tiptap/extension-placeholder": "^3.28.0",
     "@tiptap/extension-text-align": "^3.30.1",

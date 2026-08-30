@@ -9,6 +9,7 @@ import EPToast from '../components/ui/EPToast.vue'
 import { useEponymeAuth } from '../composables/useEponymeAuth'
 import { useEponymeConfig } from '../composables/useEponymeConfig'
 import { useEponymeFavicon } from '../composables/useEponymeFavicon'
+import { useEponymeNavigation } from '../composables/useEponymeNavigation'
 import type { EponymeExportFile, EponymeImportResult } from '../server/services/eponyme-store'
 import { getEponymeErrorBody } from '../utils/eponyme-error'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas } from '../utils/get-eponyme-schemas'
@@ -19,6 +20,7 @@ const config = useEponymeConfig()
 const route = useRoute()
 const auth = useEponymeAuth()
 const request = useRequestFetch()
+const { load: loadNavigation } = useEponymeNavigation()
 const eponymes = getEponymeSchemas(config)
 const collections = getEponymeCollections(config)
 const forms = getEponymeForms(config)
@@ -116,8 +118,9 @@ async function confirmImport() {
   try {
     const result = await request<EponymeImportResult>('/api/eponyme-import', { method: 'POST', body: pendingFile.value })
     closePreview()
-    // The sidebar reads the publication statuses, which the import just changed.
-    await refreshNuxtData()
+    // The menu holds the entries and their statuses in shared state, which the import just
+    // changed: without this reload a new entry stays missing from it until a full refresh.
+    await Promise.all([refreshNuxtData(), loadNavigation()])
     await showToast(
       'success',
       t('index.imported'),

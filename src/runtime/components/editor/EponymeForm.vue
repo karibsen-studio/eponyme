@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { t } from '#eponyme/locale'
-import { useRouter, useRuntimeConfig, useState } from '#app'
+import { useRouter, useRuntimeConfig } from '#app'
 import { onKeyStroke, useEventListener } from '@vueuse/core'
 import { computed, nextTick, onScopeDispose, ref, useId, watch } from 'vue'
 import EponymeHistoryDialog from './EponymeHistoryDialog.vue'
@@ -17,9 +17,10 @@ import EPToast from '../ui/EPToast.vue'
 import { useEponyme } from '../../composables/useEponyme'
 import { useEponymeAuth } from '../../composables/useEponymeAuth'
 import { useEponymeConfig } from '../../composables/useEponymeConfig'
+import { useEponymeNavigation } from '../../composables/useEponymeNavigation'
 import { useEponymeValidation } from '../../composables/useEponymeValidation'
 import type { EponymeSchema } from '../../types'
-import type { EponymeAction, EponymeSchedule, EponymeStatus } from '../../server/services/eponyme-store'
+import type { EponymeAction, EponymeSchedule } from '../../server/services/eponyme-store'
 import { getEponymeCollections } from '../../utils/get-eponyme-schemas'
 import { isFieldVisible } from '../../utils/is-field-visible'
 import { resolvePreviewPath, splitCollectionEntry } from '../../utils/preview'
@@ -91,7 +92,7 @@ const scheduleErrorId = useId()
 const scheduleError = ref('')
 const previewOpen = ref(false)
 const previewPanel = ref<{ reload: () => void }>()
-const entryStatuses = useState<Record<string, EponymeStatus>>('eponyme:entry-statuses', () => ({}))
+const { statuses: entryStatuses } = useEponymeNavigation()
 const hasSchedule = computed(() => Boolean(scheduledPublishAt.value || scheduledUnpublishAt.value))
 const scheduleDirty = computed(() => schedulePublishValue.value !== toLocalDateTime(scheduledPublishAt.value)
   || scheduleUnpublishValue.value !== toLocalDateTime(scheduledUnpublishAt.value))

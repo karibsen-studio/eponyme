@@ -214,6 +214,7 @@
   "sidebar.audit": "Audit log",
   "sidebar.media": "Media",
   "sidebar.editables": "Editables",
+  "sidebar.loadingMore": "Loading more…",
   "sidebar.noMatch": "No match for “{query}”.",
   "sidebar.profileMenu": "{username} profile",
   "sidebar.lightTheme": "Light theme",

@@ -9,6 +9,7 @@ import EponymePageNavigation from '../components/editor/EponymePageNavigation.vu
 import { useEponymeConfig } from '../composables/useEponymeConfig'
 import { useEponymeFavicon } from '../composables/useEponymeFavicon'
 import { useEponymeAuth } from '../composables/useEponymeAuth'
+import { useEponymeNavigation } from '../composables/useEponymeNavigation'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas } from '../utils/get-eponyme-schemas'
 import { humanizeLabel as label } from '../utils/humanize-label'
 import '../assets/dashboard.css'
@@ -35,7 +36,23 @@ const collectionEntry = computed(() => Object.entries(collections).find(([name])
   return eponymeName.value.startsWith(prefix) && !eponymeName.value.slice(prefix.length).includes('/')
 }))
 const schema = computed(() => schemas[eponymeName.value] ?? collectionEntry.value?.[1].fields ?? {})
-const entries = Object.keys(schemas).filter(name => auth.can('content.read', { kind: 'singleton', name }))
+const { collectionEntries } = useEponymeNavigation()
+/**
+ * Same pagination for a singleton and for a collection entry: the singletons of the
+ * configuration, or the sibling entries the sidebar has already loaded, in the same order.
+ */
+const entries = computed(() => {
+  if (!collectionEntry.value) {
+    return Object.keys(schemas)
+      .filter(name => auth.can('content.read', { kind: 'singleton', name }))
+      .map(name => ({ name, label: label(name.split('/').at(-1) ?? name) }))
+  }
+  const [collectionName] = collectionEntry.value
+  return (collectionEntries.value[collectionName] ?? []).map(entry => ({
+    name: `${collectionName}/${entry.slug}`,
+    label: entry.title || label(entry.slug),
+  }))
+})
 const indexPath = computed(() => route.path.slice(0, -(eponymeName.value.length + 1)) || '/')
 /** What `EponymeFolderNav` renders for, and what a sticky rich text toolbar has to clear. */
 const breadcrumbsVisible = computed(() => eponymeName.value.includes('/'))
@@ -95,7 +112,6 @@ if (!readable.value) throw createError({ status: 403, message: t('server.forbidd
         :style="breadcrumbsVisible ? { '--ep-rich-text-sticky-top': '3.5rem' } : undefined"
       />
       <EponymePageNavigation
-        v-if="!collectionEntry"
         :base-path="indexPath"
         :current="eponymeName"
         :entries="entries"

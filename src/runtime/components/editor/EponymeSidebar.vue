@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { t } from '#eponyme/locale'
-import { navigateTo, useRequestFetch, useRoute, useState } from '#app'
-import { onKeyStroke, useMediaQuery } from '@vueuse/core'
+import { navigateTo, useRoute, useState } from '#app'
+import { onKeyStroke, useMediaQuery, watchDebounced } from '@vueuse/core'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import type { EponymeCollectionEntry, EponymeStatus } from '../../server/services/eponyme-store'
 import EponymeNavigationLink from './EponymeNavigationLink.vue'
 import EponymeSidebarTree from './EponymeSidebarTree.vue'
 import { useEponymeConfig } from '../../composables/useEponymeConfig'
-import { getEponymeCollections, getEponymeForms, getEponymeSchemas } from '../../utils/get-eponyme-schemas'
+import { getEponymeForms, getEponymeSchemas } from '../../utils/get-eponyme-schemas'
 import { buildEponymeNavigationTree } from '../../utils/build-navigation-tree'
+import { flattenEponymeNavigationTree } from '../../utils/flatten-navigation-tree'
 import { filterEponymeNavigationTree, preloadEponymeNavigationSearch } from '../../utils/filter-navigation-tree'
 import { useEponymeAuth } from '../../composables/useEponymeAuth'
+import { useEponymeNavigation } from '../../composables/useEponymeNavigation'
 import { useEponymeStorageSettings } from '../../composables/useEponymeMedia'
 import EPAvatar from '../ui/EPAvatar.vue'
 import EPDropdownMenu from '../ui/EPDropdownMenu.vue'
@@ -22,13 +23,10 @@ const props = defineProps<{ basePath: string }>()
 const route = useRoute()
 const config = useEponymeConfig()
 const collapsed = useState<boolean>('eponyme:sidebar-collapsed', () => false)
-const statuses = useState<Record<string, EponymeStatus>>('eponyme:entry-statuses', () => ({}))
-const requestFetch = useRequestFetch()
+const { statuses, visibleEntries, collections, load: loadNavigation, loadMore, hasMore, search: searchCollections } = useEponymeNavigation()
 const searchInput = ref<{ $el?: HTMLInputElement }>()
 const searchQuery = ref('')
-const collectionEntries = useState<Record<string, EponymeCollectionEntry[]>>('eponyme:collection-entries', () => ({}))
 const allSchemas = getEponymeSchemas(config)
-const allCollections = getEponymeCollections(config)
 const allForms = getEponymeForms(config)
 const normalizedBasePath = computed(() => props.basePath.replace(/\/$/, ''))
 const navigationElement = ref<HTMLElement>()
@@ -36,8 +34,6 @@ const navigationScrollTop = useState<number>(`eponyme:sidebar-scroll:${normalize
 const auth = useEponymeAuth()
 const schemas = computed(() => Object.fromEntries(Object.entries(allSchemas)
   .filter(([name]) => auth.can('content.read', { kind: 'singleton', name }))))
-const collections = computed(() => Object.fromEntries(Object.entries(allCollections)
-  .filter(([name]) => auth.can('content.read', { kind: 'collection', name }))))
 const forms = computed(() => Object.fromEntries(Object.entries(allForms)
   .filter(([name]) => auth.can('submissions.read', { kind: 'form', name }))))
 const canReadMedia = computed(() => auth.can('media.read', { kind: 'system', name: 'media' }))
@@ -76,15 +72,7 @@ async function restoreNavigationScroll() {
 
 onMounted(async () => {
   await restoreNavigationScroll()
-  const [statusResponse, ...collectionResponses] = await Promise.all([
-    requestFetch<{ statuses: Record<string, EponymeStatus> }>('/api/eponyme-statuses'),
-    ...Object.keys(collections.value).map(name => requestFetch<{ entries: EponymeCollectionEntry[] }>(`/api/eponyme-collections/${name}`, { query: { version: 'draft', raw: 1 } })),
-  ])
-  statuses.value = { ...statusResponse.statuses }
-  collectionEntries.value = Object.fromEntries(Object.keys(collections.value).map((name, index) => [name, collectionResponses[index]?.entries ?? []]))
-  for (const [name, entries] of Object.entries(collectionEntries.value)) {
-    for (const entry of entries) statuses.value[`${name}/${entry.slug}`] = entry.status
-  }
+  await loadNavigation()
   await restoreNavigationScroll()
 })
 
@@ -141,13 +129,33 @@ const navigationTree = computed(() => buildEponymeNavigationTree({
   schemas: schemas.value,
   collections: collections.value,
   forms: forms.value,
-  collectionEntries: collectionEntries.value,
+  collectionEntries: visibleEntries.value,
 }))
 const isFiltering = computed(() => searchQuery.value.trim().length > 0)
 const filteredTree = computed(() => filterEponymeNavigationTree(navigationTree.value, searchQuery.value))
 const openFolders = useState<string[]>(`eponyme:open-folders:${normalizedBasePath.value}`, () => (
   navigation.value.filter(item => item.kind === 'folder').map(item => item.path)
 ))
+
+/**
+ * The flat list the tree renders. Only what is open is in it, which is what lets a
+ * collection of a few thousand entries cost the rows actually on screen.
+ */
+const rows = computed(() => flattenEponymeNavigationTree(filteredTree.value, {
+  openFolders: openFolders.value,
+  forceOpen: isFiltering.value,
+  // A filtered list shows matches, not a collection being walked: nothing more to load.
+  hasMore: isFiltering.value ? undefined : hasMore,
+}))
+
+// Only one page per collection is loaded, so the sidebar search has to be the server's.
+watchDebounced(searchQuery, value => void searchCollections(value), { debounce: 300 })
+
+function toggleFolder(path: string) {
+  const next = new Set(openFolders.value)
+  if (!next.delete(path)) next.add(path)
+  openFolders.value = [...next]
+}
 
 function entryPath(name: string) {
   return `${normalizedBasePath.value}/${name}`
@@ -251,14 +259,14 @@ watch(() => route.path, () => {
       />
       <div class="ep:mx-2 ep:h-px ep:bg-border-default ep:my-1.5" />
       <EponymeSidebarTree
-        :nodes="filteredTree"
+        :rows="rows"
         :base-path="normalizedBasePath"
         :current-path="route.path"
         :statuses="statuses"
-        :open-folders="openFolders"
-        :force-open="isFiltering"
+        :scroll-element="navigationElement"
         :can-create="canCreateInCollection"
-        @update:open-folders="openFolders = $event"
+        @toggle="toggleFolder"
+        @load-more="loadMore"
       />
       <p
         v-if="isFiltering && !filteredTree.length"
