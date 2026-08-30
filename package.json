@@ -25,6 +25,9 @@
   "publishConfig": {
     "access": "public"
   },
+  "imports": {
+    "#eponyme/locale": "./dist/runtime/locales/fallback.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/types.d.mts",
