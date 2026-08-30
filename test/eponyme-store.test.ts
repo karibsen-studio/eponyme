@@ -1342,6 +1342,13 @@ describe('Eponyme export and import', () => {
     expect([...rows.entries()]).toEqual([...before.entries()])
   })
 
+  it('reads a relation by its target collection and arity, since both change what a value means', () => {
+    const single = { author: field.relation({ to: 'authors' }) }
+    expect(schemaFingerprint({ author: field.relation({ to: 'people' }) })).not.toBe(schemaFingerprint(single))
+    expect(schemaFingerprint({ author: field.relation({ to: 'authors', multiple: true }) })).not.toBe(schemaFingerprint(single))
+    expect(schemaFingerprint({ author: field.relation({ to: 'authors', placeholder: 'Pick one' }) })).toBe(schemaFingerprint(single))
+  })
+
   it('ignores relabelled fields, since only the shape of a schema matters', () => {
     const before = { title: field.string({ label: 'Title', required: true }) }
     const after = { title: field.string({ label: 'Headline', placeholder: 'Type here' }) }

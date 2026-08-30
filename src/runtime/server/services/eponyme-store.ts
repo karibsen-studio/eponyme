@@ -1915,6 +1915,10 @@ function describeField(field: unknown): string {
   }
   if (field.type === 'custom')
     return `custom(${typeof field.name === 'string' ? field.name : 'unknown'})`
+  // The collection pointed at and the arity decide what the stored value means, so a change
+  // to either has to read as a different schema.
+  if (field.type === 'relation')
+    return `relation(${typeof options.to === 'string' ? options.to : 'unknown'},${options.multiple ? 'many' : 'one'})`
   return field.type
 }
 
