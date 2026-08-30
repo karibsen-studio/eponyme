@@ -4,14 +4,15 @@ import { computed } from 'vue'
 import { normalizeHexColor, sameHexColor } from '../../utils/normalize-hex-color'
 
 const props = withDefaults(defineProps<{
-  /** Lands on the native picker, which is the focusable control the label points at. */
   id?: string
   modelValue?: string
   /** Clickable palette; an empty list leaves only the custom picker. */
   presets?: ReadonlyArray<{ label: string, value: string }>
+  /** Offers the native picker next to the palette; off leaves the presets as the only choices. */
+  allowCustom?: boolean
   disabled?: boolean
   invalid?: boolean
-}>(), { modelValue: '', presets: () => [] })
+}>(), { modelValue: '', presets: () => [], allowCustom: true })
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
@@ -32,7 +33,8 @@ function select(value: string) {
 <template>
   <div class="ep:flex ep:flex-wrap ep:items-center ep:gap-2">
     <button
-      v-for="preset in presets"
+      v-for="(preset, index) in presets"
+      :id="!allowCustom && index === 0 ? id : undefined"
       :key="preset.value"
       type="button"
       :class="[swatchClasses, sameHexColor(preset.value, modelValue) ? 'ep:ring-2 ep:ring-contrast ep:ring-offset-2 ep:ring-offset-surface-raised' : 'ep:hover:scale-110']"
@@ -45,6 +47,7 @@ function select(value: string) {
     />
 
     <span
+      v-if="allowCustom"
       class="ep:relative ep:inline-flex"
       :class="{ 'ep:ml-1': presets.length }"
     >

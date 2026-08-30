@@ -411,6 +411,8 @@ export interface ColorPreset {
 export interface ColorFieldOptions extends DefaultFieldOptions<string> {
   /** Clickable palette for this field; falls back to the module-wide `colorPresets`. */
   presets?: ReadonlyArray<string | ColorPreset>
+  /** Keeps the native color picker next to the palette. Turn it off to allow presets only. */
+  allowCustom?: boolean
 }
 
 export interface ColorFieldDefinition {

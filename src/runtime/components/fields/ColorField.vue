@@ -15,7 +15,9 @@ const props = withDefaults(defineProps<{
   disabled?: boolean
   /** Overrides the module-wide palette for this field only. */
   presets?: ReadonlyArray<string | ColorPreset>
-}>(), { errors: () => [] })
+  /** Keeps the native color picker next to the palette. */
+  allowCustom?: boolean
+}>(), { errors: () => [], allowCustom: true })
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
@@ -36,6 +38,7 @@ const value = computed(() => typeof props.modelValue === 'string' ? props.modelV
       :id="id"
       :model-value="value"
       :presets="presets"
+      :allow-custom="allowCustom"
       :disabled="disabled"
       :invalid="Boolean(errors.length)"
       @update:model-value="emit('update:modelValue', $event)"

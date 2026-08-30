@@ -176,7 +176,8 @@ export default defineEponymeConfig({
                 }),
                 badgeColor: field.color({
                   label: 'Badge color',
-                  description: 'Overrides the global palette with its own presets.',
+                  description: 'Overrides the global palette with its own presets, and drops the native picker.',
+                  allowCustom: false,
                   presets: [
                     { label: 'Success', value: '#72d39a' },
                     { label: 'Warning', value: '#e6b85c' },
