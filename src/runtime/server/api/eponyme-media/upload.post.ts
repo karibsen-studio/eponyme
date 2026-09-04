@@ -12,13 +12,7 @@ interface UploadRequest {
   size?: number
 }
 
-/**
- * Reserves a key and says how to send the bytes.
- *
- * `presign` hands the browser a URL onto the provider, so the file never travels through the
- * application. A driver without `presignPut` – the local one, and any other with no third party
- * to sign for – gets `direct` instead, and the bytes go through Eponyme's own route.
- */
+/** Reserves a key and says how to send the bytes. */
 export default defineEventHandler(async (event) => {
   await requireEponymePermission(event, 'media.upload', { kind: 'system', name: 'media' })
   assertEponymeMutationOrigin(event)
@@ -43,8 +37,8 @@ export default defineEventHandler(async (event) => {
       key,
       url: presigned.url,
       headers: presigned.headers,
-      // Whether the browser is allowed to reach the bucket is a CORS rule only the browser can
-      // discover, so the answer carries both routes and the client falls back on its own.
+      // Whether the browser is allowed to reach the bucket is a CORS rule only the browser can discover, so
+      // the answer carries both routes and the client falls back on its own.
       fallbackUrl: throughApplication,
       publicUrl: await eponymePublicUrl(driver, key),
     }

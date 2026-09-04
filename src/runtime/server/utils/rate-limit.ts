@@ -3,7 +3,10 @@ import { createError, getRequestIP, setResponseHeader } from 'h3'
 import type { H3Event } from 'h3'
 import { useRuntimeConfig } from 'nitropack/runtime'
 import { useEponymeRateLimitService } from '../services/eponyme-rate-limit-service'
-import type { EponymeRateLimitPolicy } from '../services/eponyme-rate-limit-store'
+import type { EponymeRateLimitPolicy, EponymeRateLimitResult } from '../services/eponyme-rate-limit-store'
+
+/** What one address keeps once the global form window is full. A floor, not a setting. */
+const FORM_RESERVE: EponymeRateLimitPolicy = { limit: 1, windowMs: 60_000 }
 
 export function eponymeRateLimitPolicies() {
   const config = useRuntimeConfig().eponymeRateLimits
@@ -13,6 +16,7 @@ export function eponymeRateLimitPolicies() {
     loginAccountFailure: { limit: config.loginAccountFailures, windowMs: 15 * 60_000 },
     formIp: { limit: config.formPerIp, windowMs: 60_000 },
     formGlobal: { limit: config.formGlobal, windowMs: 60_000 },
+    formReserve: FORM_RESERVE,
   } satisfies Record<string, EponymeRateLimitPolicy>
 }
 
@@ -21,9 +25,19 @@ export async function assertEponymeRateLimit(
   scope: string,
   policy: EponymeRateLimitPolicy,
 ): Promise<void> {
-  const result = await useEponymeRateLimitService().consume(scope, policy)
-  if (result.allowed) return
+  const result = await consumeEponymeRateLimit(scope, policy)
+  if (!result.allowed) refuseEponymeRateLimit(event, result)
+}
 
+/** Counts a hit without deciding, for a caller with a second limit to consult. */
+export function consumeEponymeRateLimit(
+  scope: string,
+  policy: EponymeRateLimitPolicy,
+): Promise<EponymeRateLimitResult> {
+  return useEponymeRateLimitService().consume(scope, policy)
+}
+
+export function refuseEponymeRateLimit(event: H3Event, result: EponymeRateLimitResult): never {
   setResponseHeader(event, 'Retry-After', result.retryAfterSeconds)
   setResponseHeader(event, 'X-RateLimit-Limit', String(result.limit))
   setResponseHeader(event, 'X-RateLimit-Remaining', '0')

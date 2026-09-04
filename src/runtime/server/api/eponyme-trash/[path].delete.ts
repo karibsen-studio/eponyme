@@ -1,14 +1,15 @@
 import { t } from '#eponyme/locale'
-import { createError, defineEventHandler, getRequestURL } from 'h3'
+import { createError, defineEventHandler } from 'h3'
 import { useEponymeService } from '../../services/eponyme-service'
 import { assertEponymeMutationOrigin } from '../../utils/auth'
 import { requireEponymePermission } from '../../utils/eponyme-permissions'
 import { callEponymeHook } from '../../utils/eponyme-hooks'
 import { splitEponymeCollectionEntry } from '../../utils/eponyme-entry'
+import { readEponymeRoutePath } from '../../utils/route-path'
 
 export default defineEventHandler(async (event) => {
   assertEponymeMutationOrigin(event)
-  const name = decodeURIComponent(getRequestURL(event).pathname.replace(/^\/api\/eponyme-trash\//, ''))
+  const name = readEponymeRoutePath(event, /^\/api\/eponyme-trash\//)
   const service = useEponymeService()
   const collection = name ? splitEponymeCollectionEntry(service, name) : undefined
   if (!collection)

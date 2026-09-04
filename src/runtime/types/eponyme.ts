@@ -1,7 +1,7 @@
 import type { ArrayFieldDefinition, ArrayItemValue, BooleanFieldDefinition, CheckboxGroupFieldDefinition, EmailFieldDefinition, EponymeCustomFieldDefinition, FieldDefinition, MediaPlayerFieldDefinition, MediaPlayerValue, NumberFieldDefinition, PhoneFieldDefinition, RadioFieldDefinition, RelationFieldDefinition, SectionFieldDefinition, SectionValue, SelectFieldDefinition, SlugFieldDefinition, StringFieldDefinition, TabFieldDefinition, TagsFieldDefinition, TagsValueOf, TabsValue, TextareaFieldDefinition, UrlFieldDefinition, UrlValue } from './field'
 
-// Kept here rather than beside the store: the hook contract needs them, and an application
-// typing a Nitro plugin should not have to pull the whole store into its program.
+// Kept here rather than beside the store: the hook contract needs them, and an application typing a Nitro
+// plugin should not have to pull the whole store into its program.
 export type EponymeAction = 'draft' | 'publish' | 'unpublish' | 'revertToDraft' | 'schedule' | 'unschedule'
 export type EponymeStatus = 'draft' | 'published' | 'unpublished'
 
@@ -22,10 +22,7 @@ export interface EponymeCollectionOptions<T extends EponymeSchema = EponymeSchem
   description?: string
   /** Replaces the whole text of the create button. Defaults to `+ New <singular label>`. */
   addLabel?: string
-  /**
-   * Whether entries of this collection offer the publication tab. Overrides the module-wide
-   * `publication` option, whether that one is a boolean or a per-name record.
-   */
+  /** Whether entries of this collection offer the publication tab. */
   publication?: boolean
   fields: T
   slugField: keyof T & string
@@ -39,11 +36,7 @@ export interface EponymeCollectionDefinition<T extends EponymeSchema = EponymeSc
   titleField: keyof T & string
 }
 
-/**
- * A public form only accepts field types a visitor can meaningfully fill in.
- * `slug`, `richText`, `image`, `date`, `datetime`, `duration`, `color`, `array`, `section` and `tabs` are
- * authoring concerns and are rejected by `form()`.
- */
+/** A public form only accepts field types a visitor can meaningfully fill in. */
 export type EponymeFormFieldDefinition
   = | StringFieldDefinition
     | TextareaFieldDefinition
@@ -65,7 +58,7 @@ export interface EponymeFormSubmissionOptions {
   mode?: EponymeFormMode
   /**
    * Whether the dashboard collects submissions a `custom` route stored itself with
-   * `storeEponymeFormSubmission()`. Implied by `managed`, which does the storing.
+   * `storeEponymeFormSubmission()`.
    */
   store?: boolean
   /** Maximum retained rows for this form. `false` disables the cap. @default 10000 */
@@ -147,23 +140,15 @@ export type EponymeCollectionDataByName<
   Name extends EponymeCollectionName<T>,
 > = EponymeCollectionAtPath<T, Name> extends EponymeCollectionDefinition<infer Schema> ? EponymeData<Schema> : never
 
-/**
- * Field types a `where` can filter on, mirroring the write path's `INDEXABLE_TYPES`.
- *
- * The two lists are separate because one runs on values and the other on types, but they
- * describe the same rule: a filterable field is one whose stored form compares correctly as
- * text. That is why `date` and canonical UTC `datetime` are here, while `number` and
- * `duration` are not, since `'10'` sorts before `'9'`.
- */
+/** Field types a `where` can filter on, mirroring the write path's `INDEXABLE_TYPES`. */
 type FilterableFieldType = 'tags' | 'checkboxGroup' | 'select' | 'radio' | 'boolean' | 'date' | 'datetime'
 
 /** A multi-valued field is filtered by one of its items, not by the whole list. */
 type FilterOperand<T extends FieldDefinition> = FieldValue<T> extends readonly (infer Item)[] ? Item : FieldValue<T>
 
 /**
- * Bounds, offered only where alphabetical order is the value's natural order – which is
- * `field.date()` and `field.datetime()`, both pinned to chronological strings. On a tag or a select, comparing
- * with `gte` would sort labels, which answers no question anyone asks.
+ * Bounds, offered only where alphabetical order is the value's natural order - which is `field.date()` and
+ * `field.datetime()`, both pinned to chronological strings.
  */
 export interface EponymeFilterBounds {
   gte?: string
@@ -177,13 +162,7 @@ type FilterOperators<T extends FieldDefinition> = {
   in?: readonly FilterOperand<T>[]
   /** None of these. Combines with the positive operators to narrow then subtract. */
   not?: FilterOperand<T> | readonly FilterOperand<T>[]
-  /**
-   * Substring of the stored value, case-insensitive.
-   *
-   * The only operator that cannot use the index's ordering – a leading wildcard scans it.
-   * That still reads a narrow table instead of every entry's content, but it does not
-   * scale the way the others do.
-   */
+  /** Substring of the stored value, case-insensitive. */
   contains?: string
 } & (T extends { type: 'date' | 'datetime' } ? EponymeFilterBounds : unknown)
 
@@ -191,11 +170,7 @@ type FilterOperators<T extends FieldDefinition> = {
 export type EponymeFieldFilter<T extends FieldDefinition>
   = FilterOperand<T> | readonly FilterOperand<T>[] | FilterOperators<T>
 
-/**
- * The filter a schema accepts, keyed by field name. Nested fields are left out: a field
- * inside a section, a tab or an array has no single key to name it by, which is the same
- * reason `orderBy` cannot reach one.
- */
+/** The filter a schema accepts, keyed by field name. */
 export type EponymeFilterInput<T extends EponymeSchema> = {
   [K in keyof T as T[K] extends { type: FilterableFieldType } ? K : never]?: T[K] extends FieldDefinition ? EponymeFieldFilter<T[K]> : never
 }

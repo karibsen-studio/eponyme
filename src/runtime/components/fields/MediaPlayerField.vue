@@ -35,8 +35,8 @@ const detected = computed(() => value.value.provider ? PROVIDER_LABELS[value.val
 
 const placeholder = computed(() => props.placeholder ?? t('media.placeholder', { providers: providers.value.map(provider => PROVIDER_LABELS[provider]?.label).join(', ') }))
 
-// The provider is read from the address on every keystroke, so the preview and the badge
-// describe what is actually stored rather than what was picked in a separate control.
+// The provider is read from the address on every keystroke, so the preview and the badge describe what is
+// actually stored rather than what was picked in a separate control.
 function update(url: string | number) {
   emit('update:modelValue', parseEponymeMediaUrl(String(url), { providers: props.providers }))
 }

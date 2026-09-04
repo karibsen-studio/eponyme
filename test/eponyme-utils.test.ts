@@ -5,6 +5,7 @@ import { childErrors, errorsAt, fieldPathId, hasErrorsUnder, joinFieldPath } fro
 import { normalizeHexColor, sameHexColor } from '../src/runtime/utils/normalize-hex-color'
 import { collection } from '../src/config/collection'
 import { form } from '../src/config/form'
+import { eponymeConfigInteger } from '../src/config/numbers'
 import { field } from '../src/runtime/fields'
 import { resolveEponymeSeo } from '../src/runtime/fields/seo'
 import { eponymeEnglishMessages } from '../src/runtime/locales'
@@ -259,6 +260,19 @@ describe('form()', () => {
   it('refuses invalid submission retention limits', () => {
     expect(() => form({ fields: { email: field.email() }, submission: { maxStored: 0 } })).toThrow(/maxStored/)
     expect(() => form({ fields: { email: field.email() }, submission: { retentionDays: Number.NaN } })).toThrow(/retentionDays/)
+  })
+
+  it('refuses a pattern on a field whose length is not bounded', () => {
+    // A visitor picks the string the expression runs on, so the field has to cap it - whatever the
+    // expression is, since nothing here can tell a safe one from one that backtracks.
+    expect(() => form({ fields: { ref: field.string({ regex: /^[a-z]+$/ }) } })).toThrow(/regex without a maxLength/)
+    expect(() => form({ fields: { ref: field.string({ regex: /^[a-z]+$/, maxLength: 40 }) } })).not.toThrow()
+    expect(() => form({ fields: { ref: field.string({ maxLength: 40 }) } })).not.toThrow()
+  })
+
+  it('refuses a body limit that is not a usable size', () => {
+    for (const maxBodyBytes of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 64 * 1024 * 1024])
+      expect(() => form({ fields: { email: field.email() }, maxBodyBytes })).toThrow(/maxBodyBytes/)
   })
 })
 
@@ -902,5 +916,22 @@ describe('flattenEponymeNavigationTree', () => {
     // Nothing to load, nothing to show.
     expect(flattenEponymeNavigationTree(tree(), { openFolders: ['articles'], hasMore: () => false })
       .some(row => row.kind === 'more')).toBe(false)
+  })
+})
+
+describe('eponymeConfigInteger()', () => {
+  it('falls back when the option is absent', () => {
+    expect(eponymeConfigInteger('cacheSeconds', undefined, { fallback: 5 })).toBe(5)
+    expect(eponymeConfigInteger('cacheSeconds', 30, { fallback: 5 })).toBe(30)
+  })
+
+  it('accepts zero only where the range allows it', () => {
+    expect(eponymeConfigInteger('cacheSeconds', 0, { fallback: 5, min: 0 })).toBe(0)
+    expect(() => eponymeConfigInteger('sessionDurationDays', 0, { fallback: 7 })).toThrow(/sessionDurationDays/)
+  })
+
+  it('refuses a value a header or a cookie could not carry', () => {
+    for (const value of [Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5, 2 ** 53])
+      expect(() => eponymeConfigInteger('cacheSeconds', value, { fallback: 5, min: 0, max: 31_536_000 })).toThrow(/between 0 and 31536000/)
   })
 })

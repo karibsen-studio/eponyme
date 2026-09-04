@@ -16,9 +16,8 @@ export type EponymeCollectionSortKey<Name extends ConfigCollectionName>
     | (keyof EponymeCollectionDataByName<typeof eponymeConfig, Name> & string)
 
 /**
- * The `where` a collection accepts: only the fields stored in a form the index can compare,
- * each with the values that field can actually hold. The server rejects anything else, so
- * the two agree rather than one silently widening the other.
+ * The `where` a collection accepts: only the fields stored in a form the index can compare, each with the
+ * values that field can actually hold.
  */
 export type EponymeCollectionFilterInput<Name extends ConfigCollectionName>
   = EponymeCollectionFilter<typeof eponymeConfig, Name>
@@ -28,11 +27,7 @@ export interface UseEponymeCollectionOptions<Name extends ConfigCollectionName> 
   skip?: number
   orderBy?: EponymeCollectionSortKey<Name>
   order?: EponymeSortDirection
-  /**
-   * Keeps only the entries matching every key. A list of values matches any of them; `not`
-   * excludes; `contains` matches a substring; and `gte`/`lte`/`gt`/`lt` compare as text,
-   * which is exact for `field.date()`, pinned by validation to `YYYY-MM-DD`.
-   */
+  /** Keeps only the entries matching every key. */
   where?: EponymeCollectionFilterInput<Name>
 }
 
@@ -65,9 +60,8 @@ export interface UseEponymeCollectionEntryResult<Data extends Record<string, unk
 }
 
 /**
- * The query and the cache key come from one sorted walk on purpose: a key that missed part of
- * the filter would let two listings share a cache entry, which reads as a filter that
- * randomly stops working.
+ * The query and the cache key come from one sorted walk on purpose: a key that missed part of the filter
+ * would let two listings share a cache entry, which reads as a filter that randomly stops working.
  */
 function serializeFilter(
   where: Record<string, unknown> | undefined,
@@ -79,8 +73,8 @@ function serializeFilter(
     query[name] = values
     parts.push(`${name}=${values.join('|')}`)
   }
-  // `String` rather than the raw value: a boolean field is filtered with `true`, and the
-  // index stores every value as text.
+  // `String` rather than the raw value: a boolean field is filtered with `true`, and the index stores every
+  // value as text.
   const list = (value: unknown) => (Array.isArray(value) ? value : [value]).map(String).filter(Boolean)
 
   for (const key of Object.keys(where ?? {}).sort()) {
@@ -113,9 +107,9 @@ export function useEponymeCollection<const Name extends ConfigCollectionName>(
     ...filter.query,
   }
   const result = useAsyncData(
-    // Every option belongs in the key, otherwise two differently sorted – or differently
-    // filtered – calls to the same collection would share one cache entry and one would
-    // silently answer with the other's results.
+    // Every option belongs in the key, otherwise two differently sorted - or differently filtered - calls
+    // to the same collection would share one cache entry and one would silently answer with the other's
+    // results.
     `eponyme:collection:public:${name}:${options.take ?? ''}:${options.skip ?? ''}:${options.orderBy ?? ''}:${options.order ?? ''}:${filter.key}`,
     // Always the published listing, which is publicly cacheable: the browser cache may answer it.
     () => requestFetch<{ entries: EponymeCollectionEntry<Data>[], total: number }>(`/api/eponyme-collections/${name}`, { query }),
@@ -147,8 +141,8 @@ export function useEponymeCollectionEntry<const Name extends ConfigCollectionNam
   const version = options.version ?? (preview.entry === `${name}/${slug}` ? readPreviewVersion(preview.version) : 'published')
   const requestFetch = useRequestFetch()
   const isPublicContent = version === 'published'
-  // See `useEponyme`: a version taken from the preview query is fetched from the browser
-  // only, so a cached page route can never hold unreleased content.
+  // See `useEponyme`: a version taken from the preview query is fetched from the browser only, so a cached
+  // page route can never hold unreleased content.
   const isPreviewRead = options.version === undefined && !isPublicContent
   const result = useAsyncData(
     `eponyme:collection-entry:${name}:${slug}:${version}`,

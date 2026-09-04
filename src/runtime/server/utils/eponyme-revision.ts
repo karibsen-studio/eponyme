@@ -9,8 +9,8 @@ export function readEponymeRevision(event: H3Event): string | undefined {
 }
 
 /**
- * Same, for the writes that must not happen blind: a restore, a trashing and an untrashing
- * all replace or hide content the caller may never have looked at.
+ * Same, for the writes that must not happen blind: a restore, a trashing and an untrashing all replace or
+ * hide content the caller may never have looked at.
  */
 export function requireEponymeRevision(event: H3Event): string {
   const revision = readEponymeRevision(event)

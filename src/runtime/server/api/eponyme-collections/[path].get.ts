@@ -1,9 +1,10 @@
 import { t } from '#eponyme/locale'
-import { createError, defineEventHandler, getQuery, getRequestURL } from 'h3'
+import { createError, defineEventHandler, getQuery } from 'h3'
 import { useEponymeService } from '../../services/eponyme-service'
 import { requireEponymePermission } from '../../utils/eponyme-permissions'
 import { getEponymeCacheTags, setEponymePublicCache } from '../../utils/eponyme-cache'
 import { interpolateEponymeContent, interpolateEponymeEntry } from '../../utils/eponyme-variables'
+import { readEponymeRoutePath } from '../../utils/route-path'
 import type { EponymeFilterCondition, EponymeFilterOperators, EponymeFilterRange } from '../../services/eponyme-store'
 
 const MAX_TAKE = 200
@@ -20,13 +21,7 @@ function readCount(raw: unknown, min: number, max: number): number | undefined {
   return Math.min(max, Math.max(min, Math.trunc(value)))
 }
 
-/**
- * Repeating a key means "any of", which is what the parser already hands back as an array.
- *
- * An unknown field or operator is rejected rather than dropped, for the same reason
- * `orderBy` is: a filter that silently does nothing returns the whole collection, and the
- * caller reads that as a legitimate result.
- */
+/** Repeating a key means "any of", which is what the parser already hands back as an array. */
 function readFilter(query: Record<string, unknown>, allowed: string[] | undefined): Record<string, EponymeFilterCondition> | undefined {
   const where: Record<string, EponymeFilterCondition> = {}
   for (const [rawKey, rawValue] of Object.entries(query)) {
@@ -51,8 +46,8 @@ function readFilter(query: Record<string, unknown>, allowed: string[] | undefine
       })
     }
     const existing = where[key]
-    // The operators of one key accumulate, so `gte` and `lte`, or `in` and `not`, stay one
-    // condition rather than the last one overwriting the others.
+    // The operators of one key accumulate, so `gte` and `lte`, or `in` and `not`, stay one condition rather
+    // than the last one overwriting the others.
     const operators: EponymeFilterOperators = existing && typeof existing === 'object' && !Array.isArray(existing) ? existing : {}
     if (LIST_OPERATORS.has(operator)) {
       const values = (Array.isArray(rawValue) ? rawValue : [rawValue]).map(String).filter(Boolean)
@@ -67,11 +62,10 @@ function readFilter(query: Record<string, unknown>, allowed: string[] | undefine
 }
 
 export default defineEventHandler(async (event) => {
-  const name = decodeURIComponent(getRequestURL(event).pathname.replace(/^\/api\/eponyme-collections\//, ''))
+  const name = readEponymeRoutePath(event, /^\/api\/eponyme-collections\//)
   const query = getQuery(event)
   const version = query.version === 'draft' ? 'draft' : 'published'
-  // A draft listing carries unpublished titles and content. The no-store middleware keeps
-  // it out of every cache, so only the published listing declares anything here.
+  // A draft listing carries unpublished titles and content.
   if (version === 'draft') await requireEponymePermission(event, 'content.read', { kind: 'collection', name })
   else if (!query.raw) setEponymePublicCache(event, getEponymeCacheTags(name))
   if (!name) throw createError({ status: 404, message: t('server.collectionNotFound') })
@@ -81,8 +75,8 @@ export default defineEventHandler(async (event) => {
   if (orderBy) {
     const allowed = service.collectionSortKeys(name)
     if (!allowed) throw createError({ status: 404, message: t('server.collectionNotFound') })
-    // Rejected rather than ignored, so a typo cannot return an arbitrary order the
-    // caller believes is sorted.
+    // Rejected rather than ignored, so a typo cannot return an arbitrary order the caller believes is
+    // sorted.
     if (!allowed.includes(orderBy)) {
       throw createError({
         status: 400,
@@ -100,15 +94,14 @@ export default defineEventHandler(async (event) => {
     search: query.search === undefined ? undefined : String(query.search),
   })
   if (!page) throw createError({ status: 404, message: t('server.collectionNotFound') })
-  // A listing shows titles, statuses and dates, never content. Dropping the payload is what
-  // keeps a large collection cheap to transfer and to parse, and the dashboard asks for it.
+  // A listing shows titles, statuses and dates, never content.
   if (query.fields === 'meta') {
     const entries = page.entries.map(({ data, ...entry }) => entry)
     return { ...page, entries: query.raw ? entries : entries.map(entry => interpolateEponymeContent(entry)) }
   }
   if (query.raw) return page
-  // The entry's own schema is what tells rich text apart from plain text; the envelope
-  // around it – a title carrying a variable – goes through the general pass as before.
+  // The entry's own schema is what tells rich text apart from plain text; the envelope around it - a title
+  // carrying a variable - goes through the general pass as before.
   const fields = service.getCollection(name)?.fields
   return {
     ...page,

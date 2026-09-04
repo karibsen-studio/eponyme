@@ -19,8 +19,7 @@ export interface EponymeLocalStorageOptions {
    */
   dir?: string
   /**
-   * Base the returned URLs are built on. The default points at Eponyme's own read route, which
-   * streams the file back – so nothing has to be served statically for this to work.
+   * Base the returned URLs are built on.
    *
    * @default "/api/eponyme-media/raw"
    */
@@ -65,12 +64,7 @@ function isReadOnly(error: unknown): boolean {
   return code === 'EROFS' || code === 'EACCES' || code === 'EPERM'
 }
 
-/**
- * Raised instead of the errno, which says `EROFS` and nothing about what to do next.
- *
- * `code` is what the upload route matches on to turn this into a message an editor sees, rather
- * than the unhandled 500 an unrecognised throw becomes.
- */
+/** Raised instead of the errno, which says `EROFS` and nothing about what to do next. */
 function readOnlyError(root: string): Error {
   return Object.assign(
     new Error(
@@ -82,28 +76,14 @@ function readOnlyError(root: string): Error {
   )
 }
 
-/**
- * A filesystem driver, so a project can develop, and run its tests, without a bucket.
- *
- * Not meant for production, and on most hosts not merely unwise but impossible: a serverless
- * platform mounts the application read-only, so the first upload fails outright. Even where the
- * write succeeds, it lands on the one machine that served that request – the instance answering
- * the next one cannot see it, and nothing survives a container being replaced.
- *
- * ```ts
- * // eponyme.storage.ts
- * import { local } from '@karibsen/eponyme/storage'
- *
- * export default local({ dir: '.eponyme/media' })
- * ```
- */
+/** A filesystem driver, so a project can develop, and run its tests, without a bucket. */
 export function local(options: EponymeLocalStorageOptions = {}): EponymeStorageFactory {
   const root = resolve(process.cwd(), options.dir ?? DEFAULT_DIR)
   const publicUrl = (options.publicUrl ?? DEFAULT_PUBLIC_URL).replace(/\/+$/, '')
 
-  // At boot rather than on the first upload: a deployment that shipped this by accident should
-  // say so in its own logs, while someone is still looking at them – not days later through an
-  // editor reporting that a button does nothing.
+  // At boot rather than on the first upload: a deployment that shipped this by accident should say so in
+  // its own logs, while someone is still looking at them - not days later through an editor reporting that
+  // a button does nothing.
   if (process.env.NODE_ENV === 'production') {
     console.warn(
       `[Eponyme] Storage is the local filesystem driver, writing to ${root}, and NODE_ENV is production. `
@@ -162,8 +142,8 @@ export function local(options: EponymeLocalStorageOptions = {}): EponymeStorageF
         await writeFile(`${path}${TYPE_SUFFIX}`, meta.contentType, 'utf8')
       }
       catch (error) {
-        // The boot warning only fires when NODE_ENV says production, and a preview deployment
-        // or a container with the wrong ownership will not have said it. This catches those.
+        // The boot warning only fires when NODE_ENV says production, and a preview deployment or a
+        // container with the wrong ownership will not have said it.
         if (isReadOnly(error)) throw readOnlyError(root)
         throw error
       }
@@ -215,8 +195,8 @@ export function local(options: EponymeLocalStorageOptions = {}): EponymeStorageF
         if (stats) objects.push({ key, size: stats.size, lastModified: stats.mtime })
       }
 
-      // Paginated after the fact rather than during the walk: a `cursor` has to mean the same
-      // position whatever the caller asked for, and the delimiter decides what a position is.
+      // Paginated after the fact rather than during the walk: a `cursor` has to mean the same position
+      // whatever the caller asked for, and the delimiter decides what a position is.
       const start = listOptions.cursor ? objects.findIndex(object => object.key === listOptions.cursor) : 0
       const from = start === -1 ? objects.length : start
       const limit = listOptions.limit ?? objects.length
@@ -247,8 +227,7 @@ export function local(options: EponymeLocalStorageOptions = {}): EponymeStorageF
     },
   }
 
-  // No `presignPut`: there is no third party to sign a request for. Callers fall back to
-  // uploading through Eponyme's own route, which ends up calling `put` above.
+  // No `presignPut`: there is no third party to sign a request for.
   return () => driver
 }
 

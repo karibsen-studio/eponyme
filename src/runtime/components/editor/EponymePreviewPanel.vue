@@ -24,8 +24,8 @@ function newToken() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
-// Changing this remounts the iframe, which is the only reliable way to reload a
-// cross-document frame we do not control.
+// Changing this remounts the iframe, which is the only reliable way to reload a cross-document frame we do
+// not control.
 const previewToken = ref(newToken())
 
 const options = computed(() => [
@@ -52,8 +52,8 @@ async function reload() {
     selected.value = 'draft'
 }
 
-// Switching versions must repaint immediately; without a fresh token, going
-// draft -> published -> draft would rebuild the exact same URL.
+// Switching versions must repaint immediately; without a fresh token, going draft -> published -> draft
+// would rebuild the exact same URL.
 watch(selected, () => {
   previewToken.value = newToken()
 })

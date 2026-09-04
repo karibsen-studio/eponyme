@@ -111,8 +111,7 @@ export class EponymeAuthService {
 
   async login(username: unknown, password: unknown): Promise<LoginResult> {
     const normalized = typeof username === 'string' ? normalizeUsername(username) : ''
-    // Do not hand an attacker-controlled multi-megabyte string to scrypt. The route also has
-    // a byte limit; this guard protects direct service consumers and future login transports.
+    // Do not hand an attacker-controlled multi-megabyte string to scrypt.
     const submittedPassword = typeof password === 'string' && password.length <= PASSWORD_MAX_LENGTH ? password : ''
     const user = normalized
       ? await this.client.eponymeUser.findUnique({ where: { usernameNormalized: normalized } })
@@ -250,8 +249,8 @@ export class EponymeAuthService {
       return { error: t('server.selfUpdate') }
     const removesActiveOwner = user.role === 'owner' && user.active && (nextRole !== 'owner' || !nextActive)
 
-    // Counting owners and demoting must be atomic: two concurrent demotions could otherwise
-    // both see two owners and leave the instance with none, locking everyone out of the admin.
+    // Counting owners and demoting must be atomic: two concurrent demotions could otherwise both see two
+    // owners and leave the instance with none, locking everyone out of the admin.
     const apply = async (tx: PrismaEponymeAuthDelegates): Promise<{ user?: EponymeAuthUser, error?: string }> => {
       if (removesActiveOwner) {
         const activeOwnerCount = await tx.eponymeUser.count({ where: { role: 'owner', active: true } })

@@ -13,11 +13,7 @@ import { useEponymeNavigation } from '../composables/useEponymeNavigation'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas } from '../utils/get-eponyme-schemas'
 import { humanizeLabel as label } from '../utils/humanize-label'
 import '../assets/dashboard.css'
-/**
- * One of these renders per route, so importing all three made every route pay for the other
- * two. The submissions table alone brings `@tanstack/vue-table`, which a folder or a singleton
- * has no use for. Declared at module scope so each keeps one identity and one chunk.
- */
+/** One of these renders per route, so importing all three made every route pay for the other two. */
 const EponymeCollectionPage = defineAsyncComponent(() => import('../components/editor/EponymeCollectionPage.vue'))
 const EponymeFormPage = defineAsyncComponent(() => import('../components/editor/EponymeFormPage.vue'))
 const EponymeFolderPage = defineAsyncComponent(() => import('../components/editor/EponymeFolderPage.vue'))
@@ -38,8 +34,8 @@ const collectionEntry = computed(() => Object.entries(collections).find(([name])
 const schema = computed(() => schemas[eponymeName.value] ?? collectionEntry.value?.[1].fields ?? {})
 const { collectionEntries } = useEponymeNavigation()
 /**
- * Same pagination for a singleton and for a collection entry: the singletons of the
- * configuration, or the sibling entries the sidebar has already loaded, in the same order.
+ * Same pagination for a singleton and for a collection entry: the singletons of the configuration, or the
+ * sibling entries the sidebar has already loaded, in the same order.
  */
 const entries = computed(() => {
   if (!collectionEntry.value) {

@@ -8,6 +8,7 @@ import { Plugin, PluginKey } from '@tiptap/pm/state'
 import type { EditorView } from '@tiptap/pm/view'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
+import { TableKit } from '@tiptap/extension-table'
 import TextAlign from '@tiptap/extension-text-align'
 import { BackgroundColor, Color, TextStyle } from '@tiptap/extension-text-style'
 import { EditorContent, Extension, useEditor } from '@tiptap/vue-3'
@@ -137,14 +138,16 @@ const editor = useEditor({
     EponymeVariableHighlight,
     Placeholder.configure({ placeholder: props.placeholder }),
     Image.configure({ HTMLAttributes: { class: 'eponyme-rich-text-image' } }),
-    // Only the blocks the toolbar exposes, and only the alignments the sanitiser allows
-    // through – anything wider would be written here and dropped on save.
+    // Only the blocks the toolbar exposes, and only the alignments the sanitiser allows through - anything
+    // wider would be written here and dropped on save.
     TextAlign.configure({ types: ['heading', 'paragraph'], alignments: ['left', 'center', 'right'] }),
-    // Both colours ride on the same `<span>` mark, which is the only styled span the
-    // sanitiser lets through.
+    // Both colours ride on the same `<span>` mark, which is the only styled span the sanitiser lets
+    // through.
     TextStyle,
     Color,
     BackgroundColor,
+    // Not resizable: a width dragged on one screen would be stored for every reader.
+    TableKit.configure({ table: { resizable: false } }),
   ],
   onSelectionUpdate: () => { bubbleDismissed.value = false },
   onTransaction: () => revision.value++,
@@ -243,17 +246,17 @@ const textColor = computed(() => textStyleAttribute('color'))
 const highlightColor = computed(() => textStyleAttribute('backgroundColor'))
 
 /**
- * The field clips itself to its rounded corners, and a bubble over a selection near an edge
- * hangs outside them - so it is mounted on the dashboard root, which clips nothing and holds
- * the sticky chrome the bubble has to stay under.
+ * The field clips itself to its rounded corners, and a bubble over a selection near an edge hangs outside
+ * them - so it is mounted on the dashboard root, which clips nothing and holds the sticky chrome the bubble
+ * has to stay under.
  */
 function bubbleContainer() {
   return document.querySelector<HTMLElement>('.eponyme-root') ?? document.body
 }
 
 /**
- * The bubble hides itself as soon as the editor loses focus, which a colour menu takes the
- * moment it opens – so an open menu keeps it on screen until the choice is made.
+ * The bubble hides itself as soon as the editor loses focus, which a colour menu takes the moment it opens
+ * - so an open menu keeps it on screen until the choice is made.
  */
 function shouldShowBubbleMenu({ view, state, from, to }: { view: EditorView, state: EditorState, from: number, to: number }) {
   if (props.disabled || state.selection.empty || bubbleDismissed.value) return false
@@ -262,9 +265,8 @@ function shouldShowBubbleMenu({ view, state, from, to }: { view: EditorView, sta
 }
 
 /**
- * The bubble only follows the scrollport it is told about, and the window never scrolls here:
- * the dashboard shell has its own, and full screen turns the field into another. Scroll does
- * not bubble, so the document is listened to in the capture phase to catch whichever moved.
+ * The bubble only follows the scrollport it is told about, and the window never scrolls here: the dashboard
+ * shell has its own, and full screen turns the field into another.
  */
 const bubbleScrollTarget = {
   addEventListener: (type: string, handler: EventListener) => document.addEventListener(type, handler, true),
@@ -309,8 +311,8 @@ interface Tool {
 }
 
 const variables = useEponymeVariables()
-// The preview shows what the variable resolves to today, so an editor can tell
-// `currentYear` from `nextYear` without leaving the page.
+// The preview shows what the variable resolves to today, so an editor can tell `currentYear` from
+// `nextYear` without leaving the page.
 const variableItems = computed(() => variables.map(variable => ({
   label: variable.preview ? t('richText.variablePreview', { label: variable.label, preview: variable.preview }) : variable.label,
   value: variable.name,
@@ -344,6 +346,110 @@ const tools = computed<Tool[]>(() => {
 })
 
 const bubbleTools = computed(() => tools.value.filter(tool => tool.bubble))
+
+interface TableAction {
+  value: string
+  label: string
+  icon: string
+  disabled: boolean
+  danger?: boolean
+  run: () => void
+}
+
+/** A menu rather than ten more buttons, all but one of them disabled outside a table. */
+const tableActions = computed<TableAction[]>(() => {
+  const instance = editor.value
+  if (!instance) return []
+  trackEditorRevision()
+  const chain = () => instance.chain().focus()
+  return [
+    {
+      value: 'insert',
+      label: t('richText.tableInsert'),
+      icon: 'mingcute:table-2-line',
+      disabled: !instance.can().insertTable(),
+      run: () => chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
+    },
+    {
+      value: 'headerRow',
+      label: t('richText.tableHeaderRow'),
+      icon: 'mingcute:layout-grid-line',
+      disabled: !instance.can().toggleHeaderRow(),
+      run: () => chain().toggleHeaderRow().run(),
+    },
+    {
+      value: 'columnBefore',
+      label: t('richText.tableColumnBefore'),
+      icon: 'mingcute:arrow-to-left-line',
+      disabled: !instance.can().addColumnBefore(),
+      run: () => chain().addColumnBefore().run(),
+    },
+    {
+      value: 'columnAfter',
+      label: t('richText.tableColumnAfter'),
+      icon: 'mingcute:arrow-to-right-line',
+      disabled: !instance.can().addColumnAfter(),
+      run: () => chain().addColumnAfter().run(),
+    },
+    {
+      value: 'rowBefore',
+      label: t('richText.tableRowBefore'),
+      icon: 'mingcute:arrow-to-up-line',
+      disabled: !instance.can().addRowBefore(),
+      run: () => chain().addRowBefore().run(),
+    },
+    {
+      value: 'rowAfter',
+      label: t('richText.tableRowAfter'),
+      icon: 'mingcute:arrow-to-down-line',
+      disabled: !instance.can().addRowAfter(),
+      run: () => chain().addRowAfter().run(),
+    },
+    {
+      value: 'mergeOrSplit',
+      label: t('richText.tableMergeOrSplit'),
+      icon: 'mingcute:git-merge-line',
+      disabled: !instance.can().mergeOrSplit(),
+      run: () => chain().mergeOrSplit().run(),
+    },
+    {
+      value: 'deleteColumn',
+      label: t('richText.tableDeleteColumn'),
+      icon: 'mingcute:columns-2-line',
+      disabled: !instance.can().deleteColumn(),
+      danger: true,
+      run: () => chain().deleteColumn().run(),
+    },
+    {
+      value: 'deleteRow',
+      label: t('richText.tableDeleteRow'),
+      icon: 'mingcute:rows-2-line',
+      disabled: !instance.can().deleteRow(),
+      danger: true,
+      run: () => chain().deleteRow().run(),
+    },
+    {
+      value: 'deleteTable',
+      label: t('richText.tableDelete'),
+      icon: 'mingcute:delete-2-line',
+      disabled: !instance.can().deleteTable(),
+      danger: true,
+      run: () => chain().deleteTable().run(),
+    },
+  ]
+})
+
+const tableItems = computed(() => tableActions.value.map(({ value, label, icon, disabled, danger }) => ({
+  value,
+  label,
+  icon,
+  disabled,
+  danger,
+})))
+
+function runTableAction(value: string) {
+  tableActions.value.find(action => action.value === value)?.run()
+}
 
 const historyTools = computed<Tool[]>(() => {
   const instance = editor.value
@@ -437,6 +543,27 @@ const historyTools = computed<Tool[]>(() => {
             />
           </button>
         </template>
+        <EPDropdownMenu
+          :items="tableItems"
+          @select="runTableAction"
+        >
+          <template #trigger>
+            <button
+              type="button"
+              class="rich-text-tool"
+              :class="{ 'is-active': isActive('table') }"
+              :disabled="disabled"
+              :title="t('richText.table')"
+              :aria-label="t('richText.table')"
+            >
+              <Icon
+                name="mingcute:table-2-line"
+                size="18"
+                aria-hidden="true"
+              />
+            </button>
+          </template>
+        </EPDropdownMenu>
         <EPDropdownMenu
           v-if="variables.length"
           :items="variableItems"
@@ -662,6 +789,36 @@ const historyTools = computed<Tool[]>(() => {
 .eponyme-rich-text :deep(.tiptap img.ProseMirror-selectednode) {
   outline: 2px solid var(--ep-color-contrast, #ffffff);
   outline-offset: 2px;
+}
+
+.eponyme-rich-text :deep(.tiptap table) {
+  width: 100%;
+  margin: 1rem 0;
+  table-layout: fixed;
+  border-collapse: collapse;
+  overflow: hidden;
+}
+
+.eponyme-rich-text :deep(.tiptap th),
+.eponyme-rich-text :deep(.tiptap td) {
+  padding: .5rem .625rem;
+  border: 1px solid var(--ep-color-border-default, #3a3a3a);
+  vertical-align: top;
+}
+
+.eponyme-rich-text :deep(.tiptap th) {
+  background: var(--ep-color-surface-active, #1c1c1c);
+  font-weight: 650;
+  text-align: left;
+}
+
+.eponyme-rich-text :deep(.tiptap th > p),
+.eponyme-rich-text :deep(.tiptap td > p) {
+  margin: 0;
+}
+
+.eponyme-rich-text :deep(.tiptap .selectedCell) {
+  background: color-mix(in srgb, var(--ep-color-contrast, #ffffff) 12%, transparent);
 }
 
 .eponyme-rich-text :deep(.tiptap a) {

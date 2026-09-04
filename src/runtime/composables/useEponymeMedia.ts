@@ -56,8 +56,8 @@ export function formatEponymeBytes(bytes: number): string {
 }
 
 /**
- * Refused here as well as on the server, and for a different reason: the server has to refuse it,
- * this only spares the editor sending 200 MB before being told no.
+ * Refused here as well as on the server, and for a different reason: the server has to refuse it, this only
+ * spares the editor sending 200 MB before being told no.
  */
 export function checkEponymeFile(
   file: File,
@@ -76,14 +76,7 @@ export function checkEponymeFile(
   return ''
 }
 
-/**
- * Sent with `XMLHttpRequest` rather than `fetch` for one reason: upload progress. `fetch` reports
- * nothing until the response arrives, and a video upload with no progress bar reads as a freeze.
- *
- * Credentials are deliberately left off: a presigned URL points at the provider, and a cookie has
- * no business travelling there. A same-origin direct upload still carries its cookie, which is
- * what the default does.
- */
+/** Sent with `XMLHttpRequest` rather than `fetch` for one reason: upload progress. */
 /** The request never reached the other end: no answer, or a CORS preflight that refused it. */
 class UploadUnreachable extends Error {}
 
@@ -108,8 +101,8 @@ function sendWithProgress(
       if (request.status >= 200 && request.status < 300) resolve()
       else reject(new Error(t('library.uploadFailed')))
     })
-    // A refused preflight is indistinguishable from an unplugged cable here – the browser hides
-    // the reason on purpose. Both mean the same thing to the caller: this route is not usable.
+    // A refused preflight is indistinguishable from an unplugged cable here - the browser hides the reason
+    // on purpose.
     request.addEventListener('error', () => reject(new UploadUnreachable(t('library.uploadFailed'))))
     request.addEventListener('abort', () => reject(new Error(t('library.uploadFailed'))))
     request.send(body)
@@ -130,13 +123,7 @@ export interface UseEponymeMedia {
 /** Coalesces concurrent reads of the same page, which is what several open pickers would ask for. */
 let inFlight: Promise<void> | undefined
 
-/**
- * The media library: what it holds, and the two things an editor does to it.
- *
- * The state is shared rather than per caller. A form can carry a dozen file fields, and each one
- * building its own copy would mean a dozen listings of the same bucket and an upload made in one
- * picker staying invisible in the next. There is only one library, so there is one list of it.
- */
+/** The media library: what it holds, and the two things an editor does to it. */
 export function useEponymeMedia(): UseEponymeMedia {
   const items = useState<EponymeMediaItem[]>('eponyme:media-items', () => [])
   const cursor = useState<string | null>('eponyme:media-cursor', () => null)
@@ -188,10 +175,8 @@ export function useEponymeMedia(): UseEponymeMedia {
         await sendWithProgress(ticket.url, ticket.headers, file, onProgress)
       }
       catch (cause) {
-        // A bucket that does not allow this origin refuses the preflight, and the upload never
-        // leaves the browser. Rather than make CORS a prerequisite for uploading at all, the
-        // bytes go through the application instead – slower, but it always works. Configuring
-        // CORS on the bucket is what turns the fast path back on.
+        // A bucket that does not allow this origin refuses the preflight, and the upload never leaves the
+        // browser.
         if (!(cause instanceof UploadUnreachable) || !ticket.fallbackUrl) throw cause
         await sendWithProgress(ticket.fallbackUrl, { 'content-type': contentType }, file, onProgress)
       }
@@ -203,9 +188,9 @@ export function useEponymeMedia(): UseEponymeMedia {
         lastModified: new Date().toISOString(),
         contentType,
       }
-      // Prepended rather than refetched: a listing is eventually consistent on most providers,
-      // so asking again straight after an upload can answer without the object that was just
-      // written – which reads as the upload having failed.
+      // Prepended rather than refetched: a listing is eventually consistent on most providers, so asking
+      // again straight after an upload can answer without the object that was just written - which reads as
+      // the upload having failed.
       if (loaded.value) items.value = [item, ...items.value]
       return item
     },

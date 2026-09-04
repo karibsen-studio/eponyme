@@ -6,8 +6,8 @@ import type { ColorPreset } from '../../types'
 import RichTextColorMenu from './RichTextColorMenu.vue'
 
 /**
- * The text and highlight menus, as one pair – the toolbar and the selection bubble both offer
- * them, and each rendering needs its own open state or opening one would open the other.
+ * The text and highlight menus, as one pair - the toolbar and the selection bubble both offer them, and
+ * each rendering needs its own open state or opening one would open the other.
  */
 const props = defineProps<{
   editor: Editor

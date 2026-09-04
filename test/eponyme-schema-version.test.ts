@@ -41,6 +41,29 @@ describe('EponymeSchemaService', () => {
       .resolves.toEqual({ ok: false, reason: 'absent' })
   })
 
+  it('reports a read that failed for any other reason as unknown, with the error kept', async () => {
+    // A database that cannot be reached used to be reported as a missing table.
+    const refused = Object.assign(new Error('connect ECONNREFUSED 127.0.0.1:5432'), { code: 'ECONNREFUSED' })
+    const result = await new EponymeSchemaService(createClient(refused)).verify()
+    expect(result).toEqual({ ok: false, reason: 'unknown', cause: refused })
+  })
+
+  it('reads a missing table from the error code, not only from its wording', async () => {
+    for (const error of [
+      Object.assign(new Error('The table `_eponyme_schema` does not exist'), { code: 'P2021' }),
+      Object.assign(new Error('db error'), { meta: { code: '42P01' } }),
+    ]) {
+      await expect(new EponymeSchemaService(createClient(error)).verify())
+        .resolves.toEqual({ ok: false, reason: 'absent' })
+    }
+  })
+
+  it('treats a Prisma client generated without the model as absent', async () => {
+    const missingDelegate = { eponymeSchema: undefined } as unknown as PrismaEponymeSchemaClient
+    await expect(new EponymeSchemaService(missingDelegate).verify())
+      .resolves.toEqual({ ok: false, reason: 'absent' })
+  })
+
   it('matches the version the shipped migrations write', async () => {
     // The migration that last touched `_eponyme_schema` is the one that decides what a
     // correctly migrated database reports. If they drift, every install reports a mismatch.

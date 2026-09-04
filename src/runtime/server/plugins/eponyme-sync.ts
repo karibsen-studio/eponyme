@@ -7,19 +7,20 @@ import { EPONYME_SCHEMA_VERSION } from '../services/eponyme-schema-store'
 import { useEponymeService } from '../services/eponyme-service'
 
 export default defineNitroPlugin(async () => {
-  // First, because it explains every failure that would otherwise follow. A database left
-  // behind fails the next three checks one column at a time; this one names the cause once.
-  //
-  // Raising here surfaces as an unhandled rejection and Nitro keeps serving, which is what
-  // every check in this plugin already does. The value is a single accurate line in the logs
-  // at boot rather than a scattering of column errors on the first request.
+  // First, because it explains every failure that would otherwise follow.
   const schema = await useEponymeSchemaService().verify()
   if (!schema.ok && schema.reason === 'ahead') {
-    // Still served: a newer Eponyme only ever adds to the schema, so this build finds
-    // everything it needs. Said out loud because the deployment is behind its own database.
+    // Still served: a newer Eponyme only ever adds to the schema, so this build finds everything it needs.
     console.warn(
       `[Eponyme] The database is at schema version ${schema.version}, ahead of the ${EPONYME_SCHEMA_VERSION} this build expects. `
       + 'It was migrated by a newer Eponyme. Upgrade the module, or expect features it does not know about to be invisible.',
+    )
+  }
+  else if (!schema.ok && schema.reason === 'unknown') {
+    throw new Error(
+      '[Eponyme] Could not read the schema version from `_eponyme_schema`. The read failed for a reason other than a '
+      + 'missing table, so the migrations are not what to look at. The cause below is the original error.',
+      { cause: schema.cause },
     )
   }
   else if (!schema.ok) {
@@ -60,16 +61,14 @@ export default defineNitroPlugin(async () => {
   }
   await useEponymeService().syncAll()
 
-  // After `syncAll`, never beside it: that is the one place singletons are healed, and the
-  // index is built from what is stored. Indexing first would record pre-heal values.
+  // After `syncAll`, never beside it: that is the one place singletons are healed, and the index is built
+  // from what is stored.
   if (useRuntimeConfig().eponymeContent.autoReindex === false) return
   try {
     await useEponymeService().syncIndexState()
   }
   catch (error) {
-    // Loud rather than silent. A stale index is a public listing that quietly returns fewer
-    // entries than it should, which nobody notices; a failed boot is noticed immediately.
-    // `eponyme.autoReindex: false` is the way out if this ever fails on every start.
+    // Loud rather than silent.
     throw new Error(
       '[Eponyme] Index rebuild failed. Apply the EponymeEntryIndex and EponymeIndexState Prisma migrations before starting the application, '
       + 'or set `eponyme.autoReindex: false` to start without it and run `reindexEponymeEntries()` by hand.',

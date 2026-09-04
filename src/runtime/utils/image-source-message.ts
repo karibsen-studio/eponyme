@@ -10,9 +10,8 @@ export function isEponymeImageSourceAllowed(value: string, sources: readonly Ima
 }
 
 /**
- * Kept out of `image-source.ts`, which `field.image()` reaches from `eponyme.config.ts` and so
- * cannot depend on `#eponyme/locale`. Both the API and the editor say this, and a value refused
- * on save should not be refused in different words while it is being typed.
+ * Kept out of `image-source.ts`, which `field.image()` reaches from `eponyme.config.ts` and so cannot
+ * depend on `#eponyme/locale`.
  */
 export function eponymeImageSourceError(sources: readonly ImageSource[]): string {
   const names = sources.map(source => t(eponymeImageSourceLabel(source)))

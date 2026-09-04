@@ -24,8 +24,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ status: 400, message: t('server.importInvalidJson') })
   }
 
-  // `dryRun` reports what the import would do without writing, so the dashboard can
-  // show the counts before anything is overwritten.
+  // `dryRun` reports what the import would do without writing, so the dashboard can show the counts before
+  // anything is overwritten.
   const dryRun = Boolean(getQuery(event).dryRun)
   const result = await useEponymeService().importContent(payload, {
     dryRun,
@@ -40,13 +40,11 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // Every other write emits a hook, which is where a host purges its CDN. Without one an
-  // import left the database and the dashboard current while cached pages kept serving the
-  // content it replaced. Empty on a dry run, which writes nothing.
+  // Every other write emits a hook, which is where a host purges its CDN.
   const { written, ...summary } = result
   for (const { wasPublished, ...entry } of written) {
-    // An entry that leaves the public site emits an unpublication, so a purge listening to the
-    // publication hooks alone does not keep serving the page the import just took down.
+    // An entry that leaves the public site emits an unpublication, so a purge listening to the publication
+    // hooks alone does not keep serving the page the import just took down.
     const hook = entry.status === 'published'
       ? 'eponyme:entry:published'
       : wasPublished ? 'eponyme:entry:unpublished' : 'eponyme:entry:saved'

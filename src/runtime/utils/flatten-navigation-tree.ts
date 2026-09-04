@@ -20,12 +20,8 @@ export interface FlattenEponymeNavigationOptions {
 }
 
 /**
- * Turns the tree into the flat list of rows the sidebar actually shows: only what is
- * visible, in reading order, with the nesting kept as a `depth`.
- *
- * A virtualised list needs to know how many rows exist and where each one sits without
- * rendering any of them, which nested components cannot answer. Flattening first is what
- * makes a collection of a few thousand entries cost the handful of rows on screen.
+ * Turns the tree into the flat list of rows the sidebar actually shows: only what is visible, in reading
+ * order, with the nesting kept as a `depth`.
  */
 export function flattenEponymeNavigationTree(
   nodes: EponymeNavigationNode[],

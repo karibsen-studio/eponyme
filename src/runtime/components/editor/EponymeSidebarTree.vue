@@ -22,18 +22,13 @@ const props = defineProps<{
 const emit = defineEmits<{ toggle: [path: string], loadMore: [collection: string] }>()
 
 const listElement = ref<HTMLElement>()
-/**
- * Virtualising needs a scrolling element, which only exists in a browser. Until then the
- * rows are rendered plainly, and there are few of them: the server has no session, so the
- * tree it renders holds the configured entries and no collection entry at all.
- */
+/** Virtualising needs a scrolling element, which only exists in a browser. */
 const virtualized = ref(false)
 onMounted(() => virtualized.value = true)
 
 /**
- * The search field and the fixed links sit above this list inside the same scrolling
- * element, so the virtualiser is told how far down the list starts. Without it every row
- * would be positioned that distance too high.
+ * The search field and the fixed links sit above this list inside the same scrolling element, so the
+ * virtualiser is told how far down the list starts.
  */
 const scrollMargin = computed(() => {
   if (!listElement.value || !props.scrollElement) return 0
@@ -71,9 +66,8 @@ function entryPath(path: string) {
   return `${props.basePath}/${path}`
 }
 
-// Rendering the trailing row of a collection means its last loaded entry is on screen,
-// which is exactly when the next page is worth fetching. The composable ignores the call
-// when one is already in flight.
+// Rendering the trailing row of a collection means its last loaded entry is on screen, which is exactly
+// when the next page is worth fetching.
 watch(renderedRows, (rows) => {
   if (!virtualized.value) return
   for (const { row } of rows) {

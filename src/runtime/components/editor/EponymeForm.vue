@@ -34,8 +34,8 @@ const props = withDefaults(defineProps<{ name: string, schema: EponymeSchema, re
 const runtimeConfig = useRuntimeConfig()
 const eponymeOptions = runtimeConfig.public.eponyme as { previewPaths?: Record<string, string>, publication?: EponymePublicationOption } | undefined
 const previewPaths = eponymeOptions?.previewPaths ?? {}
-// Collection entries are named `<collection>/<slug>`, so the preview path comes
-// from the collection's `:slug` pattern rather than an exact key match.
+// Collection entries are named `<collection>/<slug>`, so the preview path comes from the collection's
+// `:slug` pattern rather than an exact key match.
 const collections = getEponymeCollections(useEponymeConfig())
 const collectionNames = Object.keys(collections)
 const collectionEntry = computed(() => splitCollectionEntry(collectionNames, props.name))
@@ -138,9 +138,9 @@ function fieldDisabled(fieldName: string) {
   return !canUpdate.value || props.readonlyFields.includes(fieldName)
 }
 
-// `flush: 'sync'` is what makes the server render the real values: during SSR the
-// fetch resolves after setup, and Vue never flushes queued watchers there, so a
-// default watcher would leave the form empty in the HTML and mismatch on hydration.
+// `flush: 'sync'` is what makes the server render the real values: during SSR the fetch resolves after
+// setup, and Vue never flushes queued watchers there, so a default watcher would leave the form empty in
+// the HTML and mismatch on hydration.
 watch(eponymeData, (value) => {
   if (value) {
     const next = cloneData(value as Record<string, unknown>)
@@ -182,8 +182,8 @@ async function save(action: EponymeAction = 'draft', schedule: EponymeSchedule =
         ? canUnpublish.value
         : canSchedule.value
   if (!allowed || pending.value) return false
-  // Publishing runs the full rules locally first, so an incomplete entry is reported
-  // instantly and every message is revealed instead of only the touched fields.
+  // Publishing runs the full rules locally first, so an incomplete entry is reported instantly and every
+  // message is revealed instead of only the touched fields.
   if ((action === 'publish' || action === 'schedule') && !validation.validateForPublish()) {
     activePanel.value = 'content'
     await showToast('error', t('form.invalidTitle'), t('form.invalidBody'))

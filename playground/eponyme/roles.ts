@@ -13,7 +13,7 @@ export default defineEponymeRoles({
     description: 'Can create and update blog drafts without publishing them.',
     permissions: [
       permission.allow(
-        ['content.read', 'content.create', 'content.update'],
+        ['content.read', 'content.create', 'content.update', 'content.create', 'content.publish'],
         permission.collection('articles'),
       ),
     ],

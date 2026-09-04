@@ -1,24 +1,10 @@
 export type EponymeTranslateParams = Record<string, string | number>
 
-/**
- * None, one, many. A locale that only distinguishes two forms writes the same text twice
- * rather than shortening the list, so every catalogue entry has the same shape.
- */
+/** None, one, many. */
 export function defaultEponymePlural(count: number): number {
   return count === 0 ? 0 : count === 1 ? 1 : 2
 }
 
-/**
- * Builds the `t` of a resolved catalogue.
- *
- * The catalogue is decided at build time and never changes afterwards, so this is a closure
- * over a constant rather than a composable: no reactivity, no injection, callable from a
- * server route as readily as from a component.
- *
- * A key with no message returns the key itself. That only happens when the key exists in
- * neither the locale nor the English fallback, which the build already warns about – showing
- * it raw is more useful than showing nothing.
- */
 export function createEponymeTranslator(
   messages: Record<string, string>,
   plural: (count: number) => number = defaultEponymePlural,

@@ -3,14 +3,8 @@ import type { EponymeSchema } from '../types'
 import { validateEponymeData, validateEponymePatch, type ValidationErrors, type ValidationMode } from './validate-eponyme-data'
 
 /**
- * Exposes the Eponyme rules as a standard zod schema, so the same validation runs
- * server-side on write and client-side on every keystroke.
- *
- * The rules themselves stay in `validate-eponyme-data.ts`: they carry mode-dependent
- * semantics (`required` and lower bounds only apply when publishing) and cross-field
- * context (`visibleWhen`, custom `validate`) that static zod checks cannot express.
- * This wrapper turns the resulting path-keyed errors into zod issues, which is what
- * gives consumers `issue.path` and a familiar `safeParse` API.
+ * Exposes the Eponyme rules as a standard zod schema, so the same validation runs server-side on write and
+ * client-side on every keystroke.
  */
 export type EponymeZodSchema = z.ZodType<Record<string, unknown>>
 

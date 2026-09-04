@@ -26,9 +26,11 @@ function createRedisClient() {
 
 function createRateLimitClient() {
   const rows = new Map<string, { key: string, count: number, expiresAt: Date }>()
+  const writes = { count: 0 }
   const client: PrismaEponymeRateLimitClient = {
     eponymeRateLimit: {
       async upsert({ where, create, update }) {
+        writes.count++
         const current = rows.get(where.key)
         const row = current
           ? { ...current, count: current.count + update.count.increment }
@@ -47,7 +49,7 @@ function createRateLimitClient() {
       },
     },
   }
-  return { client, rows }
+  return { client, rows, writes }
 }
 
 describe('EponymeRateLimitService', () => {
@@ -107,6 +109,34 @@ describe('EponymeRateLimitService', () => {
     await expect(service.consume('login:ip:127.0.0.1', policy, now)).resolves.toMatchObject({ allowed: true })
     await expect(service.consume('login:ip:127.0.0.1', policy, now)).resolves.toMatchObject({ allowed: false })
     expect(rows.size).toBe(1)
+  })
+
+  it('answers a window it has already refused without writing again', async () => {
+    const { client, writes } = createRateLimitClient()
+    const service = new EponymeRateLimitService(client)
+    const now = new Date('2026-08-08T12:00:00.000Z')
+    const policy = { limit: 1, windowMs: 60_000 }
+
+    await service.consume('form:contact:ip:1.2.3.4', policy, now)
+    await expect(service.consume('form:contact:ip:1.2.3.4', policy, now)).resolves.toMatchObject({ allowed: false })
+    expect(writes.count).toBe(2)
+
+    for (let hit = 0; hit < 50; hit++)
+      await expect(service.consume('form:contact:ip:1.2.3.4', policy, now)).resolves.toMatchObject({ allowed: false, retryAfterSeconds: 60 })
+    expect(writes.count).toBe(2)
+  })
+
+  it('forgets a refusal once its window is over, and never refuses another scope for it', async () => {
+    const { client } = createRateLimitClient()
+    const service = new EponymeRateLimitService(client)
+    const policy = { limit: 1, windowMs: 60_000 }
+
+    await service.consume('form:contact:ip:1.2.3.4', policy, new Date('2026-08-08T12:00:00.000Z'))
+    await service.consume('form:contact:ip:1.2.3.4', policy, new Date('2026-08-08T12:00:10.000Z'))
+    await expect(service.consume('form:contact:ip:5.6.7.8', policy, new Date('2026-08-08T12:00:20.000Z')))
+      .resolves.toMatchObject({ allowed: true })
+    await expect(service.consume('form:contact:ip:1.2.3.4', policy, new Date('2026-08-08T12:01:00.000Z')))
+      .resolves.toMatchObject({ allowed: true })
   })
 
   it('verifies the persistence delegate and removes expired windows at boot', async () => {

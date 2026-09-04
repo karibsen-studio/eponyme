@@ -3,11 +3,7 @@ import type { EponymeVariableDefinition, EponymeVariableValue, EponymeVariables 
 import { EPONYME_DATE_LOCALE } from './date-locale'
 import { mapEponymeRichText } from './rich-text-fields'
 
-/**
- * `{{ name }}` – the name is a plain identifier, never an expression. Content is
- * editable from the dashboard, so evaluating code from it would hand an editor
- * arbitrary execution on the server.
- */
+/** `{{ name }}` - the name is a plain identifier, never an expression. */
 const VARIABLE_PATTERN_SOURCE = String.raw`\{\{\s*([A-Z_]\w*)\s*\}\}`
 const VARIABLE_PATTERN = new RegExp(VARIABLE_PATTERN_SOURCE, 'gi')
 
@@ -24,9 +20,9 @@ export function builtinEponymeVariables(now: Date = new Date()): Record<string, 
     currentYear: { label: 'Current year', description: 'The year at the time the page is served.', value: () => now.getFullYear() },
     nextYear: { label: 'Next year', description: 'Useful for a season spanning two years.', value: () => now.getFullYear() + 1 },
     previousYear: { label: 'Previous year', value: () => now.getFullYear() - 1 },
-    // Pinned to the configured locale rather than the ambient one: `undefined` resolves to the
-    // server's locale during SSR and the visitor's in the browser, so the same page renders two
-    // different words and Vue reports a hydration mismatch.
+    // Pinned to the configured locale rather than the ambient one: `undefined` resolves to the server's
+    // locale during SSR and the visitor's in the browser, so the same page renders two different words and
+    // Vue reports a hydration mismatch.
     currentMonth: { label: 'Current month', value: () => now.toLocaleDateString(EPONYME_DATE_LOCALE, { month: 'long' }) },
     currentDay: { label: 'Current day', value: () => String(now.getDate()) },
     today: { label: 'Today', description: 'Localised date, for example 29 July 2026.', value: () => now.toLocaleDateString(EPONYME_DATE_LOCALE, { dateStyle: 'long' }) },
@@ -68,25 +64,13 @@ export function summariseEponymeVariables(custom: EponymeVariables = {}): Array<
   }))
 }
 
-/**
- * Replaces every `{{ name }}` occurrence. An unknown name is left untouched rather
- * than blanked, so a typo shows up on the page instead of silently deleting text.
- */
+/** Replaces every `{{ name }}` occurrence. */
 export function interpolateEponymeText(text: string, variables: Record<string, string>): string {
   if (!text.includes('{{')) return text
   return text.replace(VARIABLE_PATTERN, (match, name: string) => variables[name] ?? match)
 }
 
-/**
- * Same substitution, but a variable landing inside rich text is HTML-escaped first.
- *
- * A variable's value is a string, not markup – and a host may well compute it from data it
- * does not control. Substituted raw into stored HTML it would be parsed as markup, which is
- * exactly the hole the write-time sanitisation closes everywhere else.
- *
- * Rich text is resolved first so the general pass below, which knows nothing of HTML, finds
- * no `{{ name }}` left to replace there.
- */
+/** Same substitution, but a variable landing inside rich text is HTML-escaped first. */
 export function interpolateEponymeEntryData<T>(schema: EponymeSchema | undefined, data: T, variables: Record<string, string>): T {
   if (!schema || !data || typeof data !== 'object' || Array.isArray(data)) return interpolateEponymeValue(data, variables)
   const escaped = Object.fromEntries(Object.entries(variables).map(([name, value]) => [name, escapeHtml(value)]))
@@ -103,14 +87,7 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;')
 }
 
-/**
- * Walks strings nested in objects and arrays, leaving every other value alone.
- *
- * A branch containing no `{{ name }}` is returned as-is rather than rebuilt, so content
- * without variables – which is most of it – costs no copy. The result therefore shares
- * structure with its input and must be treated as read-only, which is already true of
- * everything the read routes return.
- */
+/** Walks strings nested in objects and arrays, leaving every other value alone. */
 export function interpolateEponymeValue<T>(value: T, variables: Record<string, string>): T {
   if (typeof value === 'string') return interpolateEponymeText(value, variables) as T
   if (Array.isArray(value)) {

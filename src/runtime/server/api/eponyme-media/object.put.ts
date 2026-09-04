@@ -6,10 +6,7 @@ import { useEponymeMediaSettings, useEponymeStorage } from '../../services/epony
 import { assertEponymeMediaKey, assertEponymeUpload, eponymePublicUrl } from '../../utils/eponyme-media'
 import { recordEponymeAudit } from '../../utils/eponyme-audit'
 
-/**
- * The upload path for a driver that cannot presign. The body is streamed straight to the
- * driver rather than buffered – a video would otherwise have to fit in memory first.
- */
+/** The upload path for a driver that cannot presign. */
 export default defineEventHandler(async (event) => {
   const user = await requireEponymePermission(event, 'media.upload', { kind: 'system', name: 'media' })
   assertEponymeMutationOrigin(event)
@@ -28,16 +25,16 @@ export default defineEventHandler(async (event) => {
     await driver.put(key, stream as ReadableStream<Uint8Array>, { contentType, size })
   }
   catch (error) {
-    // A misconfigured deployment, not a bad request: worth a sentence the editor can repeat to
-    // whoever deployed it, rather than the unhandled 500 an unrecognised throw becomes.
+    // A misconfigured deployment, not a bad request: worth a sentence the editor can repeat to whoever
+    // deployed it, rather than the unhandled 500 an unrecognised throw becomes.
     if ((error as { code?: string })?.code === 'read_only') {
       throw createError({ status: 500, message: t('server.mediaReadOnly') })
     }
     throw error
   }
 
-  // Read back rather than trusted: a stream that ended early would otherwise leave a truncated
-  // object behind a URL the editor is about to save into an entry.
+  // Read back rather than trusted: a stream that ended early would otherwise leave a truncated object
+  // behind a URL the editor is about to save into an entry.
   const stored = await driver.stat(key)
   if (!stored || stored.size !== size) {
     await driver.delete(key).catch(() => {})

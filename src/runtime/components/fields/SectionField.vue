@@ -43,8 +43,8 @@ function updateField(name: string, value: unknown) {
 }
 
 /**
- * A nested section is a block rather than a chapter of the page, so it carries its own frame
- * instead of the rule and the large heading that separate the top-level sections.
+ * A nested section is a block rather than a chapter of the page, so it carries its own frame instead of the
+ * rule and the large heading that separate the top-level sections.
  */
 const rootClass = computed(() => {
   if (props.nested) return 'ep:rounded-xl ep:bg-surface-active/30 ep:p-4'

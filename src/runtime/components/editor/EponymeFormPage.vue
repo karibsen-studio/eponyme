@@ -30,10 +30,6 @@ const search = ref('')
 const debouncedSearch = refDebounced(search, 300)
 const sorting = ref<SortingState>([{ id: 'createdAt', desc: true }])
 const selected = ref<EponymeFormSubmission>()
-/**
- * Ticked rows, by id. Kept to the page on screen: the pager loads one page at a time, so a
- * selection spanning pages would be a promise the "select all" tickbox cannot keep.
- */
 const selectedIds = ref(new Set<string>())
 const submissionAction = ref<{ type: 'clear' } | { type: 'deleteSelection' } | { type: 'delete', submission: EponymeFormSubmission }>()
 const submissionActionPending = ref(false)
@@ -164,8 +160,8 @@ function requestDeleteSubmission(submission: EponymeFormSubmission) {
 }
 
 /**
- * Three confirmations share one dialog, so the wording is chosen here rather than in three
- * nested ternaries in the template.
+ * Three confirmations share one dialog, so the wording is chosen here rather than in three nested ternaries
+ * in the template.
  */
 const actionCopy = computed(() => {
   const action = submissionAction.value
