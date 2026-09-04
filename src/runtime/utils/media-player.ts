@@ -19,17 +19,7 @@ export function mediaPlayerProviders(options: Pick<MediaPlayerFieldOptions, 'pro
   return providers?.length ? [...new Set(providers)] : [...MEDIA_PLAYER_PROVIDERS]
 }
 
-/**
- * Reads a pasted address into the value the field stores.
- *
- * The provider is detected rather than picked in the interface: an editor pastes the address
- * they have, and a provider chosen by hand is one more thing that can contradict the URL.
- * `url` is the fallback for a file served directly – anything the browser can play in a
- * `<video>` – so it only answers once the hosted providers have declined.
- *
- * `provider` is empty when nothing recognised it, which is what validation reports. The parse
- * never throws, so an address still being typed simply reads as unrecognised.
- */
+/** Reads a pasted address into the value the field stores. */
 export function parseEponymeMediaUrl(url: unknown, options: Pick<MediaPlayerFieldOptions, 'providers'> = {}): MediaPlayerValue {
   const raw = typeof url === 'string' ? url.trim() : ''
   if (!raw) return { ...EMPTY_MEDIA_PLAYER_VALUE }
@@ -55,8 +45,8 @@ export function parseEponymeMediaUrl(url: unknown, options: Pick<MediaPlayerFiel
     if (id) return { provider: 'vkvideo', url: raw, id }
   }
 
-  // A hosted address that its provider is not allowed to serve must not fall through to
-  // `url`: a YouTube watch page in a `<video>` element plays nothing.
+  // A hosted address that its provider is not allowed to serve must not fall through to `url`: a YouTube
+  // watch page in a `<video>` element plays nothing.
   if (isHostedHost(host)) return { provider: '', url: raw, id: '' }
 
   if (allowed.includes('url') && (parsed.protocol === 'http:' || parsed.protocol === 'https:'))
@@ -65,10 +55,7 @@ export function parseEponymeMediaUrl(url: unknown, options: Pick<MediaPlayerFiel
   return { provider: '', url: raw, id: '' }
 }
 
-/**
- * Rereads a stored value, so `provider` and `id` always describe the URL they sit next to.
- * The API accepts any JSON, so a client is never what decides which provider a value claims.
- */
+/** Rereads a stored value, so `provider` and `id` always describe the URL they sit next to. */
 export function normalizeEponymeMediaPlayer(value: unknown, options: Pick<MediaPlayerFieldOptions, 'providers'> = {}): unknown {
   if (typeof value === 'string') return parseEponymeMediaUrl(value, options)
   if (!value || typeof value !== 'object' || Array.isArray(value)) return value
@@ -78,11 +65,8 @@ export function normalizeEponymeMediaPlayer(value: unknown, options: Pick<MediaP
 }
 
 /**
- * Address to put in an `iframe` for a hosted provider, or the file itself for `url` – which
- * belongs in a `<video>` instead. Empty when the value carries nothing playable.
- *
- * Derived on read rather than stored: an embed address is the provider's contract, not the
- * editor's input, and a stored copy would keep serving yesterday's parameters.
+ * Address to put in an `iframe` for a hosted provider, or the file itself for `url` - which belongs in a
+ * `<video>` instead.
  */
 export function eponymeMediaEmbedUrl(value: unknown): string {
   const media = toMediaPlayerValue(value)
@@ -101,8 +85,8 @@ export function eponymeMediaEmbedUrl(value: unknown): string {
   }
 
   if (media.provider === 'vkvideo') {
-    // VK splits the id back into the two parameters its player takes, and `hd` asks for the
-    // best quality it has rather than the 360p it otherwise starts on.
+    // VK splits the id back into the two parameters its player takes, and `hd` asks for the best quality it
+    // has rather than the 360p it otherwise starts on.
     const [owner = '', id = ''] = media.id.split('_')
     return `https://vkvideo.ru/video_ext.php?oid=${encodeURIComponent(owner)}&id=${encodeURIComponent(id)}&hd=4`
   }

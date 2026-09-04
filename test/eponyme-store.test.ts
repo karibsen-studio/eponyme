@@ -1190,7 +1190,7 @@ describe('EponymeService', () => {
       link: { href: 'contact', type: 'internal', openInNewTab: false },
     })).toEqual({
       email: ['Must be a valid email address.'],
-      link: ['Internal links must start with / or #.'],
+      link: ['An internal link must stay on this site: start it with / or #.'],
     })
     expect(validateEponymeData(schema, {
       email: 'hello@example.com',

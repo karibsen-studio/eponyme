@@ -8,10 +8,8 @@ export interface ResolvedRedirect {
 }
 
 /**
- * A login sends the visitor back where they came from, but an entry can be renamed or dropped
- * while a bookmark still points at it - so an unknown target lands on the dashboard root
- * rather than on a 404. The detail route is a catch-all, so matching it is not enough: its
- * name still has to be declared in the config.
+ * A login sends the visitor back where they came from, but an entry can be renamed or dropped while a
+ * bookmark still points at it - so an unknown target lands on the dashboard root rather than on a 404.
  */
 export function resolveLoginRedirect(
   redirect: unknown,

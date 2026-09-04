@@ -16,8 +16,8 @@ export function errorsAt(errors: ValidationErrors | undefined, path: string) {
 }
 
 /**
- * Errors of everything nested under `path`, re-keyed relative to it, so a container can
- * hand its children exactly what concerns them without knowing its own depth.
+ * Errors of everything nested under `path`, re-keyed relative to it, so a container can hand its children
+ * exactly what concerns them without knowing its own depth.
  */
 export function childErrors(errors: ValidationErrors | undefined, path: string): ValidationErrors {
   if (!errors) return {}

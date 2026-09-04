@@ -9,15 +9,8 @@ import { normalizeEponymeDateTime } from './datetime'
 import { getEponymeCustomFieldType } from './eponyme-custom-field'
 
 /**
- * Rewrites every value that has a canonical form – a phone in E.164, a tag list deduplicated,
- * rich text reduced to the HTML the editor can produce – wherever it sits in the schema.
- *
- * Applied on the server before a write, which is what makes a stored format a guarantee rather
- * than a convention: the API accepts any JSON, so a client normalising on its own could always
- * be bypassed. A value that cannot be understood is left as sent, for validation to reject.
- *
- * One walk for every field type that needs one. A second walker would mean a second place to
- * forget a container when a field type is added.
+ * Rewrites every value that has a canonical form - a phone in E.164, a tag list deduplicated, rich text
+ * reduced to the HTML the editor can produce - wherever it sits in the schema.
  */
 export function normalizeEponymeValues(schema: EponymeSchema, data: Record<string, unknown>): Record<string, unknown> {
   const result: Record<string, unknown> = { ...data }
@@ -29,8 +22,8 @@ export function normalizeEponymeValues(schema: EponymeSchema, data: Record<strin
 }
 
 /**
- * Slugs, and nothing else: blanks are dropped and a list is deduplicated, so "the same entry
- * twice" cannot be stored and then read back as two.
+ * Slugs, and nothing else: blanks are dropped and a list is deduplicated, so "the same entry twice" cannot
+ * be stored and then read back as two.
  */
 function normalizeEponymeRelation(value: unknown, multiple: boolean | undefined): unknown {
   if (multiple) {

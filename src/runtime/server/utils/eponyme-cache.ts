@@ -12,21 +12,11 @@ function setCacheTags(event: H3Event, tags: string[]) {
   if (!tags.length) return
   const value = tags.join(',')
   // Vercel reads its own header; `Cache-Tag` is what Cloudflare and Fastly-style CDNs read.
-  // Both are set so the same deployment can move between them without a code change.
   setResponseHeader(event, 'Vercel-Cache-Tag', value)
   setResponseHeader(event, 'Cache-Tag', value)
 }
 
-/**
- * Published content is identical for every visitor, so both the browser and the CDN may
- * hold on to it. The two windows are deliberately different:
- *
- * - `s-maxage` is the CDN's, and a CDN can be purged. Publication, unpublication and
- *   schedule hooks are the places to do it from, so this one can afford to be long. A due
- *   transition that is never materialized can only reach a CDN once this window expires.
- * - `max-age` is the browser's, and a browser cache cannot be purged by anyone. Whatever
- *   it holds is served until it expires, publication or not, which is why it stays short.
- */
+/** Published content is identical for every visitor, so both the browser and the CDN may hold on to it. */
 export function setEponymePublicCache(event: H3Event, tags: string[] = []) {
   const config = useRuntimeConfig().eponymeContent
   const browser = Math.max(0, Math.trunc(config.browserCacheSeconds))
@@ -43,10 +33,7 @@ export function setEponymePublicCache(event: H3Event, tags: string[] = []) {
   setCacheTags(event, tags)
 }
 
-/**
- * Drafts and historical versions are unreleased material. `no-store` rather than
- * `no-cache`: nothing may keep a copy at all, not even one it promises to revalidate.
- */
+/** Drafts and historical versions are unreleased material. */
 export function setEponymePrivateCache(event: H3Event) {
   setResponseHeader(event, 'Cache-Control', 'no-store')
 }

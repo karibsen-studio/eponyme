@@ -68,8 +68,8 @@ export function getEponymeRoleRegistry(): EponymeRoleDefinitions {
 }
 
 /**
- * The rules are handed straight to `/api/eponyme-auth/session`, so a caller must not be able to
- * widen its own permissions by pushing onto the array it was given.
+ * The rules are handed straight to `/api/eponyme-auth/session`, so a caller must not be able to widen its
+ * own permissions by pushing onto the array it was given.
  */
 function deepFreeze(roles: EponymeRoleDefinitions): EponymeRoleDefinitions {
   for (const definition of Object.values(roles)) {

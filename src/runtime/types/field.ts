@@ -118,27 +118,16 @@ export interface EmailFieldDefinition {
   options: EmailFieldOptions
 }
 
-/**
- * Countries a phone field accepts, as ISO 3166-1 alpha-2 codes. Re-exported so declaring a
- * field autocompletes them without importing from `libphonenumber-js` in application code.
- */
+/** Countries a phone field accepts, as ISO 3166-1 alpha-2 codes. */
 export type PhoneCountry = CountryCode
 
 export interface PhoneFieldOptions extends DefaultFieldOptions<string> {
   placeholder?: string
-  /**
-   * Countries whose numbers are accepted. A number resolving to any other country is refused.
-   * Omitted, every country is accepted.
-   */
   countries?: PhoneCountry[]
-  /**
-   * Country a number typed without an international prefix belongs to. Without it, only
-   * `+…` numbers can be understood.
-   */
+  /** Country a number typed without an international prefix belongs to. */
   defaultCountry?: PhoneCountry
   /**
    * Whether a number may be written in national form and resolved against `defaultCountry`.
-   * `false` requires the international `+…` form, so the country is never guessed.
    *
    * @default true
    */
@@ -161,20 +150,13 @@ export interface UrlValue {
   download?: boolean
 }
 
-/**
- * Scheme of an external link, without the trailing colon. The common ones are suggested, and
- * any other scheme is still accepted – `bitcoin`, `matrix` or an application scheme are valid
- * choices this list has no business refusing.
- */
+/** Scheme of an external link, without the trailing colon. */
 export type UrlProtocol = 'http' | 'https' | 'mailto' | 'tel' | 'sms' | 'ftp' | (string & {})
 
 export interface UrlFieldOptions extends DefaultFieldOptions<UrlValue> {
   placeholder?: string
   /**
-   * Schemes an external link may use. `['https']` refuses plain `http`, and adding `mailto`
-   * or `tel` is what makes a contact link possible.
-   *
-   * Internal links are unaffected: they still have to start with `/` or `#`.
+   * Schemes an external link may use.
    *
    * @default ['http', 'https']
    */
@@ -186,10 +168,6 @@ export interface UrlFieldDefinition {
   options: UrlFieldOptions
 }
 
-/**
- * Where a video comes from. `YouTube` and `vimeo` are embedded in an iframe; `url` is a file
- * the browser plays directly in a `<video>` element.
- */
 export type MediaPlayerProvider = 'youtube' | 'vimeo' | 'vkvideo' | 'url'
 
 export interface MediaPlayerValue {
@@ -204,8 +182,7 @@ export interface MediaPlayerValue {
 export interface MediaPlayerFieldOptions extends DefaultFieldOptions<MediaPlayerValue> {
   placeholder?: string
   /**
-   * Sources this field accepts. A video from any other one is refused rather than stored as
-   * an address nothing can play.
+   * Sources this field accepts.
    *
    * @default ['youtube', 'vimeo', 'vkvideo', 'url']
    */
@@ -244,16 +221,12 @@ export interface FileFieldOptions extends DefaultFieldOptions<string> {
   description?: string
   placeholder?: string
   /**
-   * Media types this field accepts, narrowing the module-wide `storage.accept`. `image/*` style
-   * wildcards are understood.
+   * Media types this field accepts, narrowing the module-wide `storage.accept`.
    *
    * @example ['application/pdf']
    */
   accept?: string[]
-  /**
-   * Largest accepted upload for this field, in bytes. Cannot raise the module-wide
-   * `storage.maxSize`, only lower it.
-   */
+  /** Largest accepted upload for this field, in bytes. */
   maxSize?: number
 }
 
@@ -262,18 +235,12 @@ export interface FileFieldDefinition {
   options: FileFieldOptions
 }
 
-/**
- * `image` is `file` with `accept` preset and a picture preview. It keeps its own `type` rather
- * than becoming `field.file({ accept: ['image/*'] })` outright: the type is part of what an
- * entry's schema fingerprint is built from, so collapsing the two would mark every stored entry
- * as changed.
- */
+/** `image` is `file` with `accept` preset and a picture preview. */
 export type ImageSource = 'absolute' | 'relative' | 'upload'
 
 export interface ImageFieldOptions extends FileFieldOptions {
   /**
-   * Origins this image may use. An uploaded image is stored under Eponyme's media route, so it
-   * stays distinguishable from an address entered by hand.
+   * Origins this image may use.
    *
    * @default ['absolute', 'relative', 'upload']
    */
@@ -335,15 +302,8 @@ export interface TagsFieldOptions<T extends string = string> extends DefaultFiel
 }
 
 /**
- * Values a tags field may hold, read from the options as they were written: the suggestions
- * themselves while the list is closed, any string once `allowCustom` opens it. A tag list is
- * therefore never a mix of types.
- *
- * Read from the object rather than from a type parameter on purpose. A parameter carrying
- * `allowCustom` is re-inferred as `boolean` when the config is checked against `EponymeConfig`,
- * and a conditional on `boolean` distributes over `true | false`, collapsing the union of
- * suggestions to plain `string`. The shape of the object survives that check – which is also
- * how `field.select()` and `field.checkboxGroup()` keep their literals.
+ * Values a tags field may hold, read from the options as they were written: the suggestions themselves
+ * while the list is closed, any string once `allowCustom` opens it.
  */
 export type TagsValueOf<O> = O extends { allowCustom: true }
   ? string
@@ -431,12 +391,7 @@ export interface RelationFieldOptions<Multiple extends boolean = boolean>
   placeholder?: string
 }
 
-/**
- * Points at an entry of a collection, by slug.
- *
- * A slug is fixed at creation – Eponyme refuses to change one afterward – so it identifies
- * an entry as stably as an opaque id would, while staying readable in an export.
- */
+/** Points at an entry of a collection, by slug. */
 export interface RelationFieldDefinition<Multiple extends boolean = boolean> {
   type: 'relation'
   options: RelationFieldOptions<Multiple>
@@ -488,12 +443,7 @@ export interface ArrayFieldOptions<T extends ArrayItemDefinition> extends Defaul
   addLabel?: string
 
   /**
-   * Heading of each item. `$i` is its position, and `$<field>` the value that field holds in
-   * that item – so a title follows what is being written rather than repeating the index.
-   * `$value` is the item itself, for an array of plain values.
-   *
-   * An item whose interpolation resolves to nothing falls back to `Item $i`, which is what a
-   * row that has only just been added always does.
+   * Heading of each item.
    *
    * @default 'Item $i'
    * @example
@@ -516,8 +466,8 @@ export interface ArrayFieldDefinition<T extends ArrayItemDefinition = ArrayItemD
 }
 
 /**
- * A section holds sections, which is what lets a `defineBlock()` sit inside a tab: a tab is a
- * section under the hood. Arrays stay one level deep – an array item is still a plain field.
+ * A section holds sections, which is what lets a `defineBlock()` sit inside a tab: a tab is a section under
+ * the hood.
  */
 export type SectionItemFieldDefinition = ArrayItemFieldDefinition | ArrayFieldDefinition | SectionFieldDefinition
 export type SectionSchema = Record<string, SectionItemFieldDefinition>

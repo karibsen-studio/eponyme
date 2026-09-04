@@ -21,12 +21,7 @@ export interface NormalizedPhone {
   pending?: boolean
 }
 
-/**
- * What a phone field accepts, with the parser handed in rather than imported.
- *
- * The metadata is a third of a megabyte, so who pays for it is a per-environment decision: the
- * server takes it up front, the browser only once a phone value actually goes through here.
- */
+/** What a phone field accepts, with the parser handed in rather than imported. */
 export function normalizePhoneWith(
   parse: PhoneParser,
   value: unknown,
@@ -35,8 +30,7 @@ export function normalizePhoneWith(
   const raw = typeof value === 'string' ? value.trim() : ''
   if (!raw) return { valid: true }
 
-  // Without `detectCountry`, a national number would be resolved against `defaultCountry`
-  // silently. Requiring `+` keeps the country the author's decision rather than a guess.
+  // Without `detectCountry`, a national number would be resolved against `defaultCountry` silently.
   const international = raw.startsWith('+')
   if (options.detectCountry === false && !international) return { valid: false }
 
@@ -51,8 +45,8 @@ export function normalizePhoneWith(
 }
 
 /**
- * The value to store: E.164 whenever the number is understood, and the input untouched when it
- * is not, so validation can report it and the editor can still see what was typed.
+ * The value to store: E.164 whenever the number is understood, and the input untouched when it is not, so
+ * validation can report it and the editor can still see what was typed.
  */
 export function toPhoneValueWith(
   parse: PhoneParser,

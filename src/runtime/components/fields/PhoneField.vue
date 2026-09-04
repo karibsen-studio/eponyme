@@ -28,8 +28,7 @@ const options = computed<PhoneFieldOptions>(() => ({
   defaultCountry: props.defaultCountry,
   detectCountry: props.detectCountry,
 }))
-// Rendering this field is the signal that the metadata is worth fetching. `ready` is what makes
-// the first answer, given before it arrived, get recomputed once it has.
+// Rendering this field is the signal that the metadata is worth fetching.
 const ready = ref(false)
 void ensureEponymePhoneParser().then(() => (ready.value = true))
 const parsed = computed(() => {
@@ -37,10 +36,7 @@ const parsed = computed(() => {
   return normalizeEponymePhone(value.value, options.value)
 })
 
-/**
- * Stored in E.164, so what leaves this field is canonical. Done on blur rather than on every
- * keystroke: rewriting the input mid-typing moves the caret and fights the person using it.
- */
+/** Stored in E.164, so what leaves this field is canonical. */
 function normalize() {
   const next = parsed.value.e164
   if (next && next !== value.value) emit('update:modelValue', next)

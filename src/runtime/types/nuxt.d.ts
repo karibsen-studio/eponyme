@@ -16,6 +16,8 @@ declare module '@nuxt/schema' {
     eponymeAudit: {
       retentionDays: number
       pruneIntervalHours: number
+      /** From `EPONYME_CRON_SECRET`. Empty means the retention route refuses every caller. */
+      cronSecret: string
     }
     eponymeRateLimits: {
       loginPerIp: number

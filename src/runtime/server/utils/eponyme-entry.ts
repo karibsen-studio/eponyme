@@ -1,8 +1,8 @@
 import type { EponymeService } from '../services/eponyme-store'
 
 /**
- * Splits `<collection>/<slug>` when the name belongs to a configured collection, so
- * hook listeners can branch on the collection without re-parsing the name themselves.
+ * Splits `<collection>/<slug>` when the name belongs to a configured collection, so hook listeners can
+ * branch on the collection without re-parsing the name themselves.
  */
 export function splitEponymeCollectionEntry(
   service: EponymeService,

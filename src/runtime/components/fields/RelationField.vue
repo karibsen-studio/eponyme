@@ -47,11 +47,7 @@ const entries = ref<EponymeCollectionEntry[]>([])
 const total = ref(0)
 const hasMore = computed(() => entries.value.length < total.value)
 
-/**
- * Titles of what is already selected, which the current page of the picker rarely contains.
- * Missing from the map means "not loaded yet", never "does not exist" – a target that is gone
- * is refused on save rather than guessed at here.
- */
+/** Titles of what is already selected, which the current page of the picker rarely contains. */
 const titles = ref(new Map<string, string>())
 
 function titleOf(slug: string) {

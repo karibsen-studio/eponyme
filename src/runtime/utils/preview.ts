@@ -2,9 +2,8 @@
 type PreviewVersion = 'draft' | 'published' | number
 
 /**
- * Single source of truth for `previewPaths` semantics, shared by the dashboard
- * preview panel and the server-side sitemap builder so both resolve an entry to
- * the exact same public URL.
+ * Single source of truth for `previewPaths` semantics, shared by the dashboard preview panel and the
+ * server-side sitemap builder so both resolve an entry to the exact same public URL.
  */
 
 /** The slug is URL-encoded. */
@@ -12,10 +11,7 @@ export function applyPreviewSlug(path: string, slug: string): string {
   return path.replace(/:slug\b/g, encodeURIComponent(slug))
 }
 
-/**
- * Splits `<collection>/<slug>` against the configured collection names.
- * Collection entries are one level deep, so a slug containing `/` never matches.
- */
+/** Splits `<collection>/<slug>` against the configured collection names. */
 export function splitCollectionEntry(collectionNames: string[], name: string): { collection: string, slug: string } | undefined {
   for (const collection of collectionNames) {
     const prefix = `${collection}/`
@@ -26,8 +22,8 @@ export function splitCollectionEntry(collectionNames: string[], name: string): {
 }
 
 /**
- * An exact key (a singleton) returns its path unchanged; `<collection>/<slug>`
- * returns `previewPaths[collection]` with `:slug` filled in.
+ * An exact key (a singleton) returns its path unchanged; `<collection>/<slug>` returns
+ * `previewPaths[collection]` with `:slug` filled in.
  */
 export function resolvePreviewPath(
   previewPaths: Record<string, string>,
@@ -44,13 +40,7 @@ export function resolvePreviewPath(
   return applyPreviewSlug(pattern, entry.slug)
 }
 
-/**
- * The query parameters that turn a public route into a preview.
- *
- * Named here because three places have to agree on them: the panel that builds the URL,
- * the composables that read it, and the middleware that keeps such a response out of
- * every cache. A typo in any one of them fails silently, in the direction of leaking.
- */
+/** The query parameters that turn a public route into a preview. */
 export const EPONYME_PREVIEW_QUERY = '__eponyme_preview'
 export const EPONYME_PREVIEW_VERSION_QUERY = '__eponyme_preview_version'
 export const EPONYME_PREVIEW_TOKEN_QUERY = '__eponyme_preview_token'

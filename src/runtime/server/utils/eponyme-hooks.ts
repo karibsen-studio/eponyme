@@ -7,8 +7,8 @@ type HookName = keyof EponymeHooks
 type HookContext<Name extends HookName> = Parameters<EponymeHooks[Name]>[0]
 
 /**
- * `NitroRuntimeHooks` is augmented for host applications in `types/nuxt.d.ts`, but
- * that augmentation is not in scope while type-checking the module itself.
+ * `NitroRuntimeHooks` is augmented for host applications in `types/nuxt.d.ts`, but that augmentation is not
+ * in scope while type-checking the module itself.
  */
 function hooks() {
   return useNitroApp().hooks as unknown as {
@@ -16,11 +16,7 @@ function hooks() {
   }
 }
 
-/**
- * Notification hooks. The write already happened, so a listener that throws is
- * logged and swallowed: a failing webhook must not report a successful save as an
- * error the editor cannot act on.
- */
+/** Notification hooks. */
 export async function callEponymeHook<Name extends Exclude<HookName, `${string}before${string}`>>(
   name: Name,
   context: HookContext<Name>,
@@ -33,11 +29,7 @@ export async function callEponymeHook<Name extends Exclude<HookName, `${string}b
   }
 }
 
-/**
- * Blocking hooks, run before the write. A listener may mutate `context.data` to amend
- * the payload, or throw to reject the operation – the error surfaces as a 422 so the
- * message reaches the editor.
- */
+/** Blocking hooks, run before the write. */
 export async function callEponymeBlockingHook<Name extends Extract<HookName, `${string}before${string}`>>(
   name: Name,
   context: HookContext<Name>,

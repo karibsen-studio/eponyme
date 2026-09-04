@@ -20,8 +20,8 @@ export function matchesEponymeResource(
   target: EponymePermissionTarget,
   resource: EponymeResource,
 ): boolean {
-  // `all` and `folder` both describe content, so a system feature is only ever granted by
-  // naming it: a content folder called `media` cannot open the media library.
+  // `all` and `folder` both describe content, so a system feature is only ever granted by naming it: a
+  // content folder called `media` cannot open the media library.
   if (resource.kind === 'system' && target.kind !== 'system') return false
   if (target.kind === 'all') return true
   if (target.kind === 'folder') {

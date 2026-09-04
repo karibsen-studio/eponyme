@@ -30,10 +30,11 @@ export async function requireEponymeUser(
   return user
 }
 
+// `strict` rather than `lax`: nothing outside the dashboard links into an authenticated view.
 export function setEponymeSessionCookie(event: H3Event, token: string, expiresAt: Date): void {
   setCookie(event, EPONYME_SESSION_COOKIE, token, {
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: 'strict',
     secure: process.env.NODE_ENV === 'production',
     path: '/',
     expires: expiresAt,
@@ -44,10 +45,22 @@ export function clearEponymeSessionCookie(event: H3Event): void {
   deleteCookie(event, EPONYME_SESSION_COOKIE, { path: '/' })
 }
 
+/**
+ * A browser sends `Origin` on every mutation, so an absent one is either a client that is not a browser or
+ * a request built to skip the check. It stays allowed while no session rides on it - a public form post, a
+ * machine calling the API with no cookie - and is refused as soon as the request carries the session
+ * cookie, since that is the only case a forged one could use.
+ */
 export function assertEponymeMutationOrigin(event: H3Event): void {
   const origin = getHeader(event, 'origin')
-  if (!origin) return
-  const requestUrl = getRequestURL(event)
-  if (origin !== requestUrl.origin)
+  if (origin) {
+    if (origin !== getRequestURL(event).origin)
+      throw createError({ status: 403, message: t('server.badOrigin') })
+    return
+  }
+
+  // Sent by browsers that omit `Origin` on a same-origin request, and unforgeable from a page.
+  if (getHeader(event, 'sec-fetch-site') === 'same-origin') return
+  if (getCookie(event, EPONYME_SESSION_COOKIE))
     throw createError({ status: 403, message: t('server.badOrigin') })
 }

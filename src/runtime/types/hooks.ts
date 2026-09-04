@@ -41,17 +41,10 @@ export interface EponymeFormSubmissionContext {
 }
 
 export interface EponymeHooks {
-  /**
-   * Runs before the write. Throwing rejects it with a 422, so an application can
-   * enforce a rule the schema cannot express. Mutating `data` amends the payload.
-   */
   'eponyme:entry:beforeSave': (context: EponymeEntryBeforeSaveContext) => void | Promise<void>
   /** After a draft save, and after an import wrote an entry that is not published. */
   'eponyme:entry:saved': (context: EponymeEntryContext) => void | Promise<void>
-  /**
-   * After a publication: the usual place to purge a cache or ping a webhook. An import fires
-   * it once per published entry it wrote, so a purge covers imported content too.
-   */
+  /** After a publication: the usual place to purge a cache or ping a webhook. */
   'eponyme:entry:published': (context: EponymeEntryContext) => void | Promise<void>
   /** After a publication was removed while retaining its published content. */
   'eponyme:entry:unpublished': (context: EponymeEntryContext) => void | Promise<void>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { field } from '../src/runtime/fields'
 import type { EponymeSchema } from '../src/runtime/types'
+import { eponymeRichTextContainer } from '../src/runtime/utils/rich-text-container'
 import { eponymeRichTextWasStripped, sanitizeEponymeRichText } from '../src/runtime/utils/sanitize-rich-text'
 import { interpolateEponymeEntryData } from '../src/runtime/utils/variables'
 
@@ -22,6 +23,8 @@ const TIPTAP_OUTPUT = [
   '<img src="https://example.com/y.png" alt="a" title="t" class="eponyme-rich-text-image" />',
   '<p>a &amp; b &lt; c – é</p>',
   '<p>{{ currentYear }}</p>',
+  '<table style="min-width:75px"><colgroup><col style="min-width:25px" /><col style="min-width:25px" /><col style="min-width:25px" /></colgroup><tbody><tr><th colspan="1" rowspan="1"><p>Head</p></th><td colspan="2" rowspan="1"><p>Cell</p></td></tr></tbody></table>',
+  '<table style="min-width:50px"><tbody><tr><td colspan="1" rowspan="1" style="text-align:center"><p>x</p></td></tr></tbody></table>',
 ]
 
 describe('rich text sanitisation', () => {
@@ -57,6 +60,26 @@ describe('rich text sanitisation', () => {
     ['a colour that is not a colour', '<p><span style="color: url(javascript:alert(1))">x</span></p>', '<p><span>x</span></p>'],
   ])('drops %s', (_, html, expected) => {
     expect(sanitizeEponymeRichText(html)).toBe(expected)
+  })
+
+  it.each([
+    ['a handler on a table', '<table onclick="steal()"><tbody><tr><td>x</td></tr></tbody></table>'],
+    ['a width that is not a width', '<table style="min-width:expression(x)"><tbody><tr><td>x</td></tr></tbody></table>'],
+    ['a cell alignment the extension cannot produce', '<table><tbody><tr><td style="text-align:justify">x</td></tr></tbody></table>'],
+    ['a caption, which the toolbar has no way to add', '<table><caption>c</caption><tbody><tr><td>x</td></tr></tbody></table>'],
+  ])('refuses %s inside a table', (_, html) => {
+    expect(eponymeRichTextWasStripped(html)).toBe(true)
+  })
+
+  it.each(['_top', '_parent', 'evil'])('refuses target=%s, which reaches the framing document', (target) => {
+    const html = `<p><a href="https://example.com" target="${target}">x</a></p>`
+    expect(sanitizeEponymeRichText(html)).toBe('<p><a href="https://example.com">x</a></p>')
+    // Removed rather than rewritten, so a payload carrying one is refused instead of silently changed.
+    expect(eponymeRichTextWasStripped(html)).toBe(true)
+  })
+
+  it.each(['_self', '_blank'])('keeps target=%s, which the editor writes', (target) => {
+    expect(eponymeRichTextWasStripped(`<p><a href="https://example.com" target="${target}">x</a></p>`)).toBe(false)
   })
 
   it('accepts the empty download attribute the link extension writes', () => {
@@ -122,5 +145,15 @@ describe('variables resolved into rich text', () => {
   it('falls back to the plain walk when no schema tells rich text apart', () => {
     expect(interpolateEponymeEntryData(undefined, { body: '<p>{{ amp }}</p>' }, variables))
       .toEqual({ body: '<p>Ben & Co</p>' })
+  })
+})
+
+describe('EponymeRichText container', () => {
+  it('renders the inert containers a page may ask for', () => {
+    for (const tag of ['div', 'section', 'article', 'aside', 'main', 'span']) expect(eponymeRichTextContainer(tag)).toBe(tag)
+  })
+
+  it('falls back to a div rather than placing sanitized markup in an active context', () => {
+    for (const tag of ['script', 'style', 'iframe', 'object']) expect(eponymeRichTextContainer(tag)).toBe('div')
   })
 })

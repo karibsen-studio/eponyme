@@ -29,13 +29,7 @@ export interface EponymeResult {
   publishedAt: string | null
   scheduledPublishAt: string | null
   scheduledUnpublishAt: string | null
-  /**
-   * The optimistic lock token, sent back with the next write of this entry.
-   *
-   * Only set where it can be trusted: a private read straight from the database. A published
-   * read is served from the row cache, whose `updatedAt` may lag, and a version read describes
-   * a point in history rather than the row a writer would lock on - both answer `null`.
-   */
+  /** The optimistic lock token, sent back with the next write of this entry. */
   revision: string | null
 }
 export interface EponymeVersionAuthor {
@@ -115,10 +109,6 @@ export interface EponymeImportedEntry extends EponymeResult {
   wasPublished: boolean
 }
 
-/**
- * What the store hands back. `written` stays on the server: the route reads it to emit its
- * hooks and answers with the counts alone, which is all the dashboard shows.
- */
 export interface EponymeImportOutcome extends EponymeImportResult {
   written: EponymeImportedEntry[]
 }
@@ -147,10 +137,7 @@ export interface EponymeFilterOperators extends EponymeFilterRange {
   contains?: string
 }
 
-/**
- * One condition of a `where`. A list means "any of these", so the values of one key are
- * ORed together while the keys themselves are ANDed.
- */
+/** One condition of a `where`. */
 export type EponymeFilterCondition = string | string[] | EponymeFilterOperators
 
 export interface EponymeCollectionQuery {
@@ -160,10 +147,7 @@ export interface EponymeCollectionQuery {
   order?: EponymeSortDirection
   /** Keyed by field name. Only the keys `collectionFilterKeys` reports can be used. */
   where?: Record<string, EponymeFilterCondition>
-  /**
-   * Substring of the title or of the slug. Titles live in the JSON payload, so a search
-   * reads the matching set the way sorting by title already does.
-   */
+  /** Substring of the title or of the slug. */
   search?: string
 }
 
@@ -178,17 +162,8 @@ export type EponymeCollectionEntryMeta = Omit<EponymeCollectionEntry, 'data'>
 
 export const COLLECTION_METADATA_KEYS = ['updatedAt', 'publishedAt', 'title', 'slug'] as const
 
-/**
- * How long an import may hold its transaction. The route caps the body at 5 MB, so this
- * bounds the work rather than guessing at it, and it stays well under a proxy timeout.
- */
 const IMPORT_TRANSACTION_MS = 120_000
 
-/**
- * A content row. Everything but the name is optional because a query narrows what it reads –
- * a public listing selects `published` and never `draft` – and a narrowed row has to satisfy
- * this type as it is, without an overload per shape.
- */
 export type PrismaEponymeRow = {
   name: string
   draft?: unknown
@@ -241,8 +216,8 @@ export type PrismaEponymeQuery = {
 }
 
 /**
- * `nulls` appears on `publishedAt` alone: Prisma refuses it on a column that cannot be null,
- * and `updatedAt` never is. A test double cannot catch that – only the real client does.
+ * `nulls` appears on `publishedAt` alone: Prisma refuses it on a column that cannot be null, and
+ * `updatedAt` never is.
  */
 export type PrismaEponymeOrderBy
   = | { name: 'asc' }
@@ -261,11 +236,7 @@ export type PrismaEponymeVersionRow = {
   userId?: string | null
   user?: { id: string, username: string } | null
 }
-/**
- * The model delegates, which a transaction exposes just like the client does.
- * They are named on their own because Prisma hands an interactive transaction a client
- * stripped of `$transaction`, so the callback cannot be typed as the full client.
- */
+/** The model delegates, which a transaction exposes just like the client does. */
 export type PrismaEponymeDelegates = {
   eponyme: {
     upsert(args: { where: { name: string }, create: EponymeRowWrite & { name: string }, update: Partial<EponymeRowWrite> }): Promise<PrismaEponymeRow>
@@ -278,8 +249,8 @@ export type PrismaEponymeDelegates = {
     create(args: { data: EponymeRowWrite & { name: string } }): Promise<PrismaEponymeRow>
     findUnique(args: { where: { name: string } }): Promise<PrismaEponymeRow | null>
     /**
-     * One signature rather than an overload per `select`: every column of
-     * `PrismaEponymeRow` but `name` is optional, so a narrowed row satisfies it as it is.
+     * One signature rather than an overload per `select`: every column of `PrismaEponymeRow` but `name` is
+     * optional, so a narrowed row satisfies it as it is.
      */
     findMany(args: PrismaEponymeQuery & { select?: PrismaEponymeSelect }): Promise<PrismaEponymeRow[]>
     count(args: PrismaEponymeQuery): Promise<number>
@@ -319,11 +290,6 @@ export type PrismaEponymeDelegates = {
   }
 }
 
-/**
- * What one condition asks the index for. Text order is the point: a range only makes sense
- * because every indexed value is stored in a form whose alphabetical order is its natural
- * one – see `buildEponymeIndexRows`.
- */
 export type PrismaStringFilter = string | {
   in?: string[]
   /** Substring match. A leading wildcard cannot use the index's ordering, so this scans. */
@@ -335,12 +301,6 @@ export type PrismaStringFilter = string | {
 }
 
 export type PrismaEponymeClient = PrismaEponymeDelegates & {
-  /**
-   * Prisma's interactive transaction. Writes that only make sense together – an entry and
-   * its history version, an import and every version it writes – run inside one, so a
-   * failure between the two rolls back instead of leaving the history disagreeing with
-   * the content it describes.
-   */
   $transaction<T>(
     fn: (tx: PrismaEponymeDelegates) => Promise<T>,
     options?: { maxWait?: number, timeout?: number },
@@ -367,10 +327,8 @@ export class EponymeService {
   /** `<name>\n<revision>` a heal superseded, mapped to the revision it wrote in its place. */
   private readonly healedRevisions = new Map<string, string>()
   /**
-   * Read-path cache of normalized rows, so a page that reads the same entry from a
-   * singleton, a listing and a layout pays one round trip instead of one per read.
-   * Writers never read from it, so the `updatedAt` they lock on always comes from the
-   * database and a stale key can never turn into a spurious conflict.
+   * Read-path cache of normalized rows, so a page that reads the same entry from a singleton, a listing and
+   * a layout pays one round trip instead of one per read.
    */
   private readonly cache: EponymeCache
 
@@ -399,27 +357,20 @@ export class EponymeService {
   }
 
   /**
-   * Drops what a write to `name` invalidates: the entry itself, and the listing of the
-   * collection that contains it, whose row set just changed.
+   * Drops what a write to `name` invalidates: the entry itself, and the listing of the collection that
+   * contains it, whose row set just changed.
    */
   private async invalidate(name: string) {
     const collection = this.getCollectionEntry(name)?.name
     await Promise.all([
       this.cache.drop(`row:${name}`),
-      // A prefix rather than an exact key: a listing is cached per version, and after the
-      // column split per selected shape, so one write has to drop all of them.
+      // A prefix rather than an exact key: a listing is cached per version, and after the column split per
+      // selected shape, so one write has to drop all of them.
       collection ? this.cache.dropPrefix(`rows:${collection}`) : undefined,
     ])
   }
 
-  /**
-   * Replaces an entry's filterable values, in the same transaction as the write that
-   * changed them.
-   *
-   * Deleting before inserting rather than diffing: an entry carries a handful of rows, the
-   * two statements are cheap, and a diff is one more place for the index to drift from the
-   * content it describes – a failure mode that returns wrong listings without erroring.
-   */
+  /** Replaces an entry's filterable values, in the same transaction as the write that changed them. */
   private async reindexEntry(db: PrismaEponymeDelegates, name: string, state: StoredEponymeState): Promise<void> {
     const schema = this.getSchema(name)
     if (!schema) return
@@ -457,9 +408,8 @@ export class EponymeService {
   }
 
   /**
-   * One transaction per entry rather than one for the whole collection: a collection has no
-   * bound, and a single transaction over it would exceed Prisma's timeout on anything real.
-   * The unit that has to be atomic is the entry, and it is.
+   * One transaction per entry rather than one for the whole collection: a collection has no bound, and a
+   * single transaction over it would exceed Prisma's timeout on anything real.
    */
   private async reindexName(name: string): Promise<number> {
     const definition = this.collections[name]
@@ -485,10 +435,7 @@ export class EponymeService {
     return [...Object.keys(this.schemas), ...Object.keys(this.collections)]
   }
 
-  /**
-   * The unconditional rebuild, for a first backfill or a manual repair. It refreshes the
-   * recorded fingerprints too, so a repair does not leave the next boot with work to redo.
-   */
+  /** The unconditional rebuild, for a first backfill or a manual repair. */
   async reindexAll(): Promise<{ entries: number }> {
     let entries = 0
     for (const name of this.indexedNames()) {
@@ -498,16 +445,7 @@ export class EponymeService {
     return { entries }
   }
 
-  /**
-   * Rebuilds only what a configuration change invalidated, and nothing when nothing changed.
-   *
-   * This is what makes the index self-maintaining. Ordinary writes keep it current, but a
-   * newly filterable field leaves the entries already stored without any row for that key –
-   * and a filter on them then answers "none" rather than failing, which is the worst way for
-   * this to break.
-   *
-   * Unchanged configuration costs one read of a table with one row per collection.
-   */
+  /** Rebuilds only what a configuration change invalidated, and nothing when nothing changed. */
   async syncIndexState(): Promise<{ reindexed: string[] }> {
     const recorded = new Map((await this.client.eponymeIndexState.findMany()).map(row => [row.name, row.fingerprint]))
     const reindexed: string[] = []
@@ -515,14 +453,12 @@ export class EponymeService {
     for (const name of this.indexedNames()) {
       if (recorded.get(name) === this.indexFingerprint(name)) continue
       await this.reindexName(name)
-      // Written only once the whole name succeeded. A crash partway leaves it absent, so the
-      // next boot retries; every individual entry was still rebuilt atomically.
+      // Written only once the whole name succeeded.
       await this.writeIndexState(name)
       reindexed.push(name)
     }
 
-    // A collection removed from the config keeps neither rows nor a fingerprint. Its content
-    // is untouched – only the record of an index that no longer describes anything.
+    // A collection removed from the config keeps neither rows nor a fingerprint.
     const stale = [...recorded.keys()].filter(name => !this.schemas[name] && !this.collections[name])
     if (stale.length) await this.client.eponymeIndexState.deleteMany({ where: { name: { in: stale } } })
 
@@ -543,15 +479,7 @@ export class EponymeService {
     })
   }
 
-  /**
-   * Runs writes that have to land together, then drops what they invalidated.
-   *
-   * The callback reports the entries it touched rather than invalidating them itself:
-   * inside the transaction the write has not landed yet, and a read racing an
-   * uncommitted change would re-cache the old row and hold it for the whole TTL. The
-   * drop is deliberate on a rollback too – losing a cache entry costs one query, while
-   * keeping a wrong one costs the TTL.
-   */
+  /** Runs writes that have to land together, then drops what they invalidated. */
   private async transaction<T>(
     fn: (tx: PrismaEponymeDelegates, invalidate: (name: string) => void) => Promise<T>,
     options?: { maxWait?: number, timeout?: number },
@@ -561,8 +489,8 @@ export class EponymeService {
       return await this.client.$transaction(tx => fn(tx, name => touched.add(name)), options)
     }
     finally {
-      // Awaited, so the shared tier has actually dropped the keys before the caller, and the
-      // response it is about to send, lets a reader repopulate them.
+      // Awaited, so the shared tier has actually dropped the keys before the caller, and the response it is
+      // about to send, lets a reader repopulate them.
       await Promise.all([...touched].map(name => this.invalidate(name)))
     }
   }
@@ -598,21 +526,16 @@ export class EponymeService {
         if (!slug || slug.includes('/')) continue
         const state = this.rowToState(definition.fields, row)
         if (sameRow(state, row)) continue
-        // The walk is as long as the collection, and the application is already serving
-        // writes while it runs: an entry saved mid-walk keeps its save.
+        // The walk is as long as the collection, and the application is already serving writes while it
+        // runs: an entry saved mid-walk keeps its save.
         await this.healRow(row.name, state, row.updatedAt)
       }
     }
   }
 
   /**
-   * Brings a stored document back in line with the schema: keys the schema no longer declares
-   * are dropped, and a key it declares but the document lacks takes its default.
-   *
-   * Recursive, because a field added inside a section, a tab or an array item is otherwise
-   * never filled in: the container it lives in already exists and is still valid, so a
-   * top-level pass keeps it untouched and the new field reads as missing forever. That was
-   * silent – `defaultValue` simply did nothing for anything but a root field.
+   * Brings a stored document back in line with the schema: keys the schema no longer declares are dropped,
+   * and a key it declares but the document lacks takes its default.
    */
   private reconcile(schema: EponymeSchema, value: unknown, mode: ValidationMode): Record<string, unknown> {
     const persisted = isPlainObject(value) ? value : {}
@@ -622,8 +545,8 @@ export class EponymeService {
       const candidate = Object.hasOwn(persisted, key)
         ? this.reconcileField(definition, persisted[key], mode)
         : defaults[key]
-      // Errors are keyed by path, so a nested failure shows up as `key.sub` – any key at all
-      // means this value is unusable and must fall back to the default.
+      // Errors are keyed by path, so a nested failure shows up as `key.sub` - any key at all means this
+      // value is unusable and must fall back to the default.
       const errors = validateEponymeData({ [key]: definition }, { [key]: candidate }, mode)
       return [key, Object.keys(errors).length ? defaults[key] : candidate]
     }))
@@ -667,17 +590,12 @@ export class EponymeService {
     }
   }
 
-  /**
-   * Reads a state out of an envelope. Live content is in columns now, so this serves the two
-   * places an envelope still exists: a history row, which deliberately keeps the old shape so
-   * that versions written before this change stay restorable, and an import, which rebuilds
-   * one from the portable file.
-   */
+  /** Reads a state out of an envelope. */
   private normalizeState(schema: EponymeSchema, value: unknown): StoredEponymeState {
     const stored = getStoredState(value)
     if (!stored) return this.createState(schema, value)
-    // Normalised as well as reconciled: an import and a restore write content this server
-    // never validated on the way in, and they must land under the same rules as a save.
+    // Normalised as well as reconciled: an import and a restore write content this server never validated
+    // on the way in, and they must land under the same rules as a save.
     return {
       __eponyme: {
         version: 1,
@@ -709,11 +627,7 @@ export class EponymeService {
     }
   }
 
-  /**
-   * A singleton row is created on first read, but only when it is genuinely missing.
-   * An `upsert` would send a write on every read instead, and each one costs a database
-   * round trip on the critical path of a public page.
-   */
+  /** A singleton row is created on first read, but only when it is genuinely missing. */
   private async loadSingletonRow(name: string, schema: EponymeSchema): Promise<PrismaEponymeRow | null> {
     const row = await this.client.eponyme.findUnique({ where: { name } })
     if (row) return row
@@ -727,16 +641,7 @@ export class EponymeService {
     }
   }
 
-  /**
-   * Reads the stored state along with the `updatedAt` it was read at, used as the optimistic lock token.
-   *
-   * `heal` persists the normalized state when it differs from what is stored. It has to stay on for
-   * writers, because healing moves `updatedAt` and so decides the lock token they are about to compare.
-   *
-   * `cache` is only ever set for published content. Draft reads serve the preview panel, which has to
-   * show a save immediately, and they come from the dashboard rather than from a public page – so
-   * there is nothing to gain by caching them and a stale preview to lose.
-   */
+  /** Reads the stored state along with the `updatedAt` it was read at, used as the optimistic lock token. */
   private async loadRow(
     name: string,
     { heal = false, cache = false }: { heal?: boolean, cache?: boolean } = {},
@@ -751,22 +656,19 @@ export class EponymeService {
     const row = this.getCollectionEntry(name)
       ? await this.client.eponyme.findUnique({ where: { name } })
       : await this.loadSingletonRow(name, schema)
-    // A trashed entry reads as missing everywhere: this is the single gate every
-    // reader goes through, so nothing has to remember to filter it out.
+    // A trashed entry reads as missing everywhere: this is the single gate every reader goes through, so
+    // nothing has to remember to filter it out.
     if (!row || row.deletedAt) return undefined
     const state = this.rowToState(schema, row)
     if (sameRow(state, row)) return { state, updatedAt: row.updatedAt }
-    // The stored shape drifted from the configured one – a storage-envelope migration, or a
-    // field that no longer validates. Persisting it converges, so a reader does it once per
-    // process: the migration still lands on first read, but a drift that never converges
-    // cannot turn every later read of a public page into a write.
+    // The stored shape drifted from the configured one - a storage-envelope migration, or a field that no
+    // longer validates.
     if (!heal && this.healedByRead.has(name)) return { state, updatedAt: row.updatedAt }
     const healed = await this.healRow(name, state, row.updatedAt)
-    // Answering with the token that was read, not a fresh one: a writer that lost this race
-    // has to see the conflict rather than write over the content that won it.
+    // Answering with the token that was read, not a fresh one: a writer that lost this race has to see the
+    // conflict rather than write over the content that won it.
     if (!healed) return { state, updatedAt: row.updatedAt }
-    // Marked once the write landed, so a heal that lost a race is retried rather than
-    // remembered as done.
+    // Marked once the write landed, so a heal that lost a race is retried rather than remembered as done.
     this.healedByRead.add(name)
     return { state, updatedAt: healed.updatedAt ?? row.updatedAt }
   }
@@ -775,15 +677,7 @@ export class EponymeService {
     return (await this.loadRow(name, options))?.state
   }
 
-  /**
-   * Persists the normalized shape of a row, but only if it is still the row that was
-   * normalized.
-   *
-   * Unguarded, this write replaced whatever a concurrent editor had just committed with the
-   * normalization of the row it read a moment earlier: a save lost to a background migration,
-   * silently, with the timeline showing it as saved. Losing the race is not an error - the
-   * row already holds someone's newer content, and the drift is picked up on the next read.
-   */
+  /** Persists the normalized shape of a row, but only if it is still the row that was normalized. */
   private async healRow(
     name: string,
     state: StoredEponymeState,
@@ -796,17 +690,7 @@ export class EponymeService {
     return written
   }
 
-  /**
-   * Records that a heal replaced one revision with another.
-   *
-   * A heal rewrites a row with the normalization of what it already held, so it changes
-   * nothing any reader ever saw - but it does move `updatedAt`, and without this every editor
-   * with the entry open would be told they conflict with a change nobody made. Following the
-   * chain lets those saves through; a real write in the middle breaks it and still conflicts.
-   *
-   * In-process, like `healedByRead`: a heal performed by another instance is unknown here and
-   * falls back to reporting the conflict, which is the safe direction to be wrong in.
-   */
+  /** Records that a heal replaced one revision with another. */
   private rememberHeal(name: string, from: Date | string | undefined, to: Date | string | undefined): void {
     const before = eponymeRevision(from)
     const after = eponymeRevision(to)
@@ -814,17 +698,7 @@ export class EponymeService {
     this.healedRevisions.set(`${name}\n${before}`, after)
   }
 
-  /**
-   * Writes a new state only if the row still carries the `updatedAt` we read.
-   * Returns undefined when a concurrent editor won the race, so the caller can report a
-   * conflict instead of silently discarding their changes.
-   *
-   * On success it answers with the row's new `updatedAt`: that is the token the editor has to
-   * hold from now on, and without it a second save would conflict against its own first one.
-   *
-   * Dropping the cached row is left to `transaction`, which does it once the write has
-   * actually committed rather than while it is still in flight.
-   */
+  /** Writes a new state only if the row still carries the `updatedAt` we read. */
   private async writeState(
     name: string,
     next: StoredEponymeState,
@@ -842,15 +716,7 @@ export class EponymeService {
     return { updatedAt: row?.updatedAt }
   }
 
-  /**
-   * Whether the token a client is writing against still describes the row.
-   *
-   * An absent token means the caller opted out of the check, which is what a public read or a
-   * server-side write does: those never held a revision to begin with.
-   *
-   * A token only superseded by heals is not stale: those rewrote the row with the shape it
-   * already read as, so the client is writing against exactly the content that is stored.
-   */
+  /** Whether the token a client is writing against still describes the row. */
   private isStaleRevision(name: string, expected: string | undefined, updatedAt: Date | string | undefined): boolean {
     if (expected === undefined) return false
     const current = eponymeRevision(updatedAt)
@@ -861,11 +727,7 @@ export class EponymeService {
     return revision !== current
   }
 
-  /**
-   * Every live row of a collection, payload included. The reindex needs both versions of the
-   * content, so this is the one read that still selects everything; a listing goes through
-   * `collectionRows` with a narrower select.
-   */
+  /** Every live row of a collection, payload included. */
   private async liveCollectionRows(name: string): Promise<PrismaEponymeRow[]> {
     return await this.client.eponyme.findMany({
       where: { name: { startsWith: `${name}/` }, deletedAt: null },
@@ -876,14 +738,7 @@ export class EponymeService {
     })
   }
 
-  /**
-   * The names a `where` keeps, resolved from the index table before a single row of content
-   * is read. This is the point of the index: a filtered listing loads and normalizes the
-   * entries it returns, not the whole collection.
-   *
-   * One query per key, intersected: the values of a key are ORed by the query itself, and
-   * the keys are ANDed by narrowing the set. An empty set short-circuits the whole listing.
-   */
+  /** The names a `where` keeps, resolved from the index table before a single row of content is read. */
   private async resolveFilter(
     name: string,
     version: EponymeVersion,
@@ -899,17 +754,14 @@ export class EponymeService {
         matching = matching === undefined ? names : new Set([...matching].filter(entry => names.has(entry)))
         if (!matching.size) return matching
       }
-      // A negation cannot be looked up: the index records what an entry has, never what it
-      // lacks, and an entry with no value at all for the key has no row to find. So the
-      // values it excludes are resolved positively and then subtracted.
+      // A negation cannot be looked up: the index records what an entry has, never what it lacks, and an
+      // entry with no value at all for the key has no row to find.
       if (negative) {
         for (const entry of await this.indexNames(name, version, key, negative)) excluded.add(entry)
       }
     }
 
-    // Only negations: there is nothing to narrow, so the collection itself is the starting
-    // set. This is the one query the index cannot save, and it reads names rather than
-    // content – the payload of every entry still stays out of it.
+    // Only negations: there is nothing to narrow, so the collection itself is the starting set.
     const result = matching ?? await this.collectionEntryNames(name)
     for (const entry of excluded) result.delete(entry)
     return result
@@ -940,10 +792,6 @@ export class EponymeService {
     }))
   }
 
-  /**
-   * The rows a filter selected. Never cached: the shared `rows:` key holds the whole
-   * collection, and one key per filter combination would evict it for no reuse.
-   */
   private async filteredCollectionRows(names: Set<string>): Promise<PrismaEponymeRow[]> {
     return await this.client.eponyme.findMany({
       // The index knows nothing about the trash, so the live filter still has to apply.
@@ -973,8 +821,8 @@ export class EponymeService {
       publishedAt: state.__eponyme.publishedAt,
       scheduledPublishAt: state.__eponyme.scheduledPublishAt,
       scheduledUnpublishAt: state.__eponyme.scheduledUnpublishAt,
-      // A cached row's `updatedAt` may lag behind the database, and a token that lags turns
-      // an honest save into a conflict. Only the uncached draft read hands one out.
+      // A cached row's `updatedAt` may lag behind the database, and a token that lags turns an honest save
+      // into a conflict.
       revision: cache ? null : eponymeRevision(row.updatedAt),
     }
   }
@@ -1008,8 +856,8 @@ export class EponymeService {
   collectionSortKeys(name: string): string[] | undefined {
     const definition = this.collections[name]
     if (!definition) return undefined
-    // A field named `title` or `slug` collides with the metadata key of the same
-    // name; both resolve to the same value, so one entry is enough.
+    // A field named `title` or `slug` collides with the metadata key of the same name; both resolve to the
+    // same value, so one entry is enough.
     return [...new Set([...COLLECTION_METADATA_KEYS, ...Object.keys(definition.fields)])]
   }
 
@@ -1021,8 +869,8 @@ export class EponymeService {
     const definition = this.collections[name]
     if (!definition) return undefined
 
-    // A filter is resolved from the index first, so what follows only ever touches the rows
-    // that already matched rather than the whole collection.
+    // A filter is resolved from the index first, so what follows only ever touches the rows that already
+    // matched rather than the whole collection.
     let names: Set<string> | undefined
     if (query.where && Object.keys(query.where).length) {
       names = await this.resolveFilter(name, version, query.where)
@@ -1034,14 +882,14 @@ export class EponymeService {
       deletedAt: null,
       ...(version === 'published' ? eponymeLiveWhere(new Date()) : {}),
     }
-    // Draft content is never read for a public listing – not filtered out of the response,
-    // simply not selected.
+    // Draft content is never read for a public listing - not filtered out of the response, simply not
+    // selected.
     const select: PrismaEponymeSelect = version === 'published'
       ? { name: true, published: true, status: true, publishedAt: true, scheduledPublishAt: true, scheduledUnpublishAt: true, updatedAt: true }
       : { name: true, draft: true, status: true, publishedAt: true, scheduledPublishAt: true, scheduledUnpublishAt: true, updatedAt: true }
 
-    // A search compares titles, which are not a column – so it takes the same path as sorting
-    // by one rather than paginating in SQL over rows it cannot judge.
+    // A search compares titles, which are not a column - so it takes the same path as sorting by one rather
+    // than paginating in SQL over rows it cannot judge.
     const search = query.search?.trim().toLocaleLowerCase()
     const pushdown = search ? undefined : pushdownOrderBy(query.orderBy, query.order ?? 'desc')
     if (pushdown) {
@@ -1056,12 +904,11 @@ export class EponymeService {
         this.client.eponyme.count({ where }),
       ])
       // `toCollectionEntries` still drops nested names, which `startsWith` cannot exclude.
-      // Such a row costs a short page, never a wrong entry.
       return { entries: this.toCollectionEntries(name, definition, version, rows), total }
     }
 
-    // Sorting by `title` or by a content field: those live in the JSON payload, so the whole
-    // matching set still has to be read and ordered here.
+    // Sorting by `title` or by a content field: those live in the JSON payload, so the whole matching set
+    // still has to be read and ordered here.
     const rows = await this.collectionRows(name, version, where, select, names === undefined)
     const all = this.toCollectionEntries(name, definition, version, rows)
     const entries = search
@@ -1078,9 +925,8 @@ export class EponymeService {
   }
 
   /**
-   * The unpaginated read, still cached: an unfiltered listing of one collection is what a
-   * page hits repeatedly, and the key carries the version so a draft view cannot answer a
-   * public one.
+   * The unpaginated read, still cached: an unfiltered listing of one collection is what a page hits
+   * repeatedly, and the key carries the version so a draft view cannot answer a public one.
    */
   private async collectionRows(
     name: string,
@@ -1098,8 +944,8 @@ export class EponymeService {
   }
 
   /**
-   * `findMany` already carries every payload, so the state is built here rather than re-read
-   * one entry at a time: a listing costs one query, not N+1.
+   * `findMany` already carries every payload, so the state is built here rather than re-read one entry at a
+   * time: a listing costs one query, not N+1.
    */
   private toCollectionEntries(
     name: string,
@@ -1124,11 +970,7 @@ export class EponymeService {
     })
   }
 
-  /**
-   * Builds the public URL list configured by `previewPaths`.
-   * Collections are resolved directly from their stored rows so this performs
-   * one query per collection rather than one query per entry.
-   */
+  /** Builds the public URL list configured by `previewPaths`. */
   async getSitemapEntries(previewPaths: Record<string, string>): Promise<EponymeSitemapEntry[]> {
     const groups = await Promise.all(Object.entries(previewPaths).map(async ([name, path]) => {
       const collection = this.collections[name]
@@ -1141,11 +983,7 @@ export class EponymeService {
       if (!path.includes(':slug'))
         throw new Error(`[Eponyme] previewPaths.${name} must include ":slug" to generate collection sitemap URLs.`)
 
-      // A sitemap needs a URL and a date, never content. Both are columns now, so this
-      // reads neither the draft nor the published payload of a single entry.
-      //
-      // Its own cache key rather than the listing's: the two select different columns, so
-      // they cannot share a result. The `rows:<collection>:` prefix is what a write drops.
+      // A sitemap needs a URL and a date, never content.
       const rows = await this.cached(`rows:${name}:sitemap`, () => this.client.eponyme.findMany({
         where: { name: { startsWith: `${name}/` }, deletedAt: null, ...eponymeLiveWhere(new Date()) },
         orderBy: [{ name: 'asc' }],
@@ -1164,10 +1002,7 @@ export class EponymeService {
     return [...entries.values()]
   }
 
-  /**
-   * Every singleton and every live collection entry, as a portable file.
-   * Collections are read with one query each rather than one per entry.
-   */
+  /** Every singleton and every live collection entry, as a portable file. */
   async exportContent(): Promise<EponymeExportFile> {
     const schemas: Record<string, string> = {}
     const entries: EponymeExportEntry[] = []
@@ -1201,13 +1036,8 @@ export class EponymeService {
   }
 
   /**
-   * Applies an export file on top of the current content: every entry it carries is
-   * upserted, everything else is left alone. Nothing is ever deleted.
-   *
-   * The schema check runs first and refuses the whole file, so an import can never
-   * land half of its entries into a configuration that no longer matches. The writes then
-   * run in one transaction, so a failure partway through leaves nothing behind either –
-   * an interrupted import can simply be replayed.
+   * Applies an export file on top of the current content: every entry it carries is upserted, everything
+   * else is left alone.
    */
   async importContent(
     file: unknown,
@@ -1221,8 +1051,8 @@ export class EponymeService {
       const local = this.schemas[name] ?? this.collections[name]?.fields
       return !local || schemaFingerprint(local) !== declared[name]
     })
-    // An entry whose schema the file never described cannot be checked at all, which
-    // is the same risk as a divergent fingerprint.
+    // An entry whose schema the file never described cannot be checked at all, which is the same risk as a
+    // divergent fingerprint.
     for (const entry of parsed.entries) {
       const owner = entry.collection ?? this.getCollectionEntry(entry.name)?.name ?? entry.name
       if (!Object.hasOwn(declared, owner) && !mismatch.includes(owner)) mismatch.push(owner)
@@ -1237,26 +1067,18 @@ export class EponymeService {
     const danglingRelations = await this.importRelationErrors(parsed)
     if (danglingRelations.length) return { errors: danglingRelations }
 
-    // A dry run only reads, so it stays outside a transaction: opening one would hold a
-    // connection for the length of the file to protect writes that never happen.
+    // A dry run only reads, so it stays outside a transaction: opening one would hold a connection for the
+    // length of the file to protect writes that never happen.
     if (options.dryRun) return await this.applyImport(parsed, options, this.client, () => {})
     return await this.transaction(
       (tx, invalidate) => this.applyImport(parsed, options, tx, invalidate),
-      // An import is one unit, so its transaction lasts as long as the file it carries –
-      // well past the five seconds Prisma allows by default.
+      // An import is one unit, so its transaction lasts as long as the file it carries - well past the five
+      // seconds Prisma allows by default.
       { maxWait: IMPORT_TRANSACTION_MS, timeout: IMPORT_TRANSACTION_MS },
     )
   }
 
-  /**
-   * Relations an export points at that nothing would satisfy. A normal save runs the same
-   * check through `relationRejections()`, which an import bypassed: an old or hand-edited
-   * file could store a reference to an entry that does not exist.
-   *
-   * Entries the file itself carries count as present, so a whole-site export stays importable
-   * whatever order its entries are in. Runs before any write, like the schema check, so the
-   * file is refused as a whole rather than half applied.
-   */
+  /** Relations an export points at that nothing would satisfy. */
   private async importRelationErrors(parsed: EponymeExportFile): Promise<string[]> {
     const references: Array<{ entry: string, entryName: string }> = []
     for (const entry of parsed.entries) {
@@ -1292,8 +1114,8 @@ export class EponymeService {
   }
 
   /**
-   * The body of an import, over whichever client it was handed: the live one for a dry
-   * run, a transaction for the real thing.
+   * The body of an import, over whichever client it was handed: the live one for a dry run, a transaction
+   * for the real thing.
    */
   private async applyImport(
     parsed: EponymeExportFile,
@@ -1316,8 +1138,7 @@ export class EponymeService {
         continue
       }
 
-      // Same gate as a read: an unusable value falls back to its default instead of
-      // being stored as is.
+      // Same gate as a read: an unusable value falls back to its default instead of being stored as is.
       const state = this.normalizeState(schema, {
         __eponyme: {
           version: 1,
@@ -1331,8 +1152,8 @@ export class EponymeService {
       })
       if (collectionEntry) {
         const { slugField } = collectionEntry.definition
-        // The name is authoritative: a mismatched slug in the payload would break the
-        // immutable-slug invariant every other write relies on.
+        // The name is authoritative: a mismatched slug in the payload would break the immutable-slug
+        // invariant every other write relies on.
         if (slugField in state.__eponyme.draft) state.__eponyme.draft[slugField] = collectionEntry.slug
         if (slugField in state.__eponyme.published) state.__eponyme.published[slugField] = collectionEntry.slug
       }
@@ -1419,8 +1240,8 @@ export class EponymeService {
     const stored = state as unknown as Record<string, unknown>
     const columns = stateToColumns(state)
     try {
-      // The entry and its first version are created together: an entry that exists with an
-      // empty timeline reads as if it had never been edited, which nothing can repair later.
+      // The entry and its first version are created together: an entry that exists with an empty timeline
+      // reads as if it had never been edited, which nothing can repair later.
       await this.transaction(async (tx, invalidate) => {
         invalidate(entryName)
         await tx.eponyme.create({ data: { name: entryName, ...columns } })
@@ -1439,8 +1260,8 @@ export class EponymeService {
   }
 
   /**
-   * A trashed entry keeps its row, so it keeps its slug: reusing one has to be
-   * refused with an error the editor can act on rather than the generic message.
+   * A trashed entry keeps its row, so it keeps its slug: reusing one has to be refused with an error the
+   * editor can act on rather than the generic message.
    */
   private async slugTakenError(
     definition: EponymeCollectionDefinitionBase,
@@ -1457,13 +1278,7 @@ export class EponymeService {
     }
   }
 
-  /**
-   * Live entries still pointing at this one, draft or published.
-   *
-   * Read from the index rather than from the payloads: a relation is recorded there at every
-   * depth, so a reference buried in an array of items is found by the same lookup as one at
-   * the root. A trashed referrer is left out – it is visible nowhere, so it holds nothing back.
-   */
+  /** Live entries still pointing at this one, draft or published. */
   async findEponymeReferrers(entryName: string): Promise<string[]> {
     const rows = await this.client.eponymeEntryIndex.findMany({
       where: { key: EPONYME_RELATION_INDEX_KEY, value: foldEponymeIndexValue(entryName) },
@@ -1479,26 +1294,21 @@ export class EponymeService {
     return live.map(row => row.name)
   }
 
-  /**
-   * Moves an entry to the trash. Its history is kept, so it stays restorable.
-   *
-   * Refused while another entry points at it: a reference is only worth having if it cannot
-   * quietly stop resolving, and the editor is told which entries to detach first.
-   */
+  /** Moves an entry to the trash. */
   async deleteCollectionEntry(
     name: string,
     actor?: string | EponymeActor,
     expectedRevision?: string,
   ): Promise<{ deleted: true } | { referencedBy: string[] } | EponymeConflict | undefined> {
     if (!this.getCollectionEntry(name)) return undefined
-    // Read straight from the row rather than through `loadRow`: this is the same token the
-    // listing handed out, and healing here would move it under the caller's feet.
+    // Read straight from the row rather than through `loadRow`: this is the same token the listing handed
+    // out, and healing here would move it under the caller's feet.
     const row = await this.client.eponyme.findUnique({ where: { name } })
     if (this.isStaleRevision(name, expectedRevision, row?.updatedAt)) return { conflict: true }
     const referencedBy = await this.findEponymeReferrers(name)
     if (referencedBy.length) return { referencedBy }
-    // Guarding on `deletedAt: null` makes a second delete a no-op rather than
-    // moving the deletion date forward.
+    // Guarding on `deletedAt: null` makes a second delete a no-op rather than moving the deletion date
+    // forward.
     const count = await this.transaction(async (tx, invalidate) => {
       invalidate(name)
       const updated = await tx.eponyme.updateMany({
@@ -1512,9 +1322,8 @@ export class EponymeService {
   }
 
   /**
-   * Names every relation of a payload whose target is missing, so a reference can never be
-   * stored pointing at nothing. Asked of the database, which is why it cannot live in
-   * `validateEponymeData` beside the rules that are pure.
+   * Names every relation of a payload whose target is missing, so a reference can never be stored pointing
+   * at nothing.
    */
   private async relationRejections(schema: EponymeSchema, data: Record<string, unknown>): Promise<ValidationErrors> {
     const references = collectEponymeRelations(schema, data)
@@ -1522,8 +1331,8 @@ export class EponymeService {
 
     const errors: ValidationErrors = {}
     const missing = new Map<string, string[]>()
-    // A relation to a collection that is not declared is a configuration mistake rather than
-    // a content one, and reads as such.
+    // A relation to a collection that is not declared is a configuration mistake rather than a content one,
+    // and reads as such.
     for (const reference of references) {
       if (this.collections[reference.collection]) continue
       errors[reference.path] = [t('server.relationUnknownCollection', { collection: reference.collection })]
@@ -1632,8 +1441,8 @@ export class EponymeService {
     const row = await this.loadRow(name, { heal: true })
     if (!row) return undefined
     const { state, updatedAt } = row
-    // Checked before validating: an editor writing against a version that no longer exists
-    // should be told so, not handed errors computed against content they never saw.
+    // Checked before validating: an editor writing against a version that no longer exists should be told
+    // so, not handed errors computed against content they never saw.
     if (this.isStaleRevision(name, expectedRevision, updatedAt)) return { conflict: true }
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return { errors: { _form: ['Body must be an object.'] } }
 
@@ -1644,16 +1453,16 @@ export class EponymeService {
         return { errors: { [collectionEntry.definition.slugField]: ['The slug cannot be changed after creation.'] } }
     }
 
-    // Normalised before validation, so both the errors and the stored value are computed on
-    // the canonical form rather than on whatever the client happened to send.
+    // Normalised before validation, so both the errors and the stored value are computed on the canonical
+    // form rather than on whatever the client happened to send.
     const data = normalizeEponymeValues(schema, { ...state.__eponyme.draft, ...(payload as Record<string, unknown>) })
     const validationMode: ValidationMode = action === 'publish' || action === 'schedule' ? 'publish' : 'draft'
     const patchErrors = validateEponymePatch(schema, normalizeEponymeValues(schema, payload as Record<string, unknown>), data, validationMode)
-    // Read from the payload, not from `data`: the normalisation above has already removed
-    // whatever there was to complain about.
+    // Read from the payload, not from `data`: the normalisation above has already removed whatever there
+    // was to complain about.
     const stripped = eponymeRichTextRejections(schema, payload as Record<string, unknown>)
-    // Checked against what is being written rather than against the whole entry: a reference
-    // stored before its target was trashed is not this save's fault to answer for.
+    // Checked against what is being written rather than against the whole entry: a reference stored before
+    // its target was trashed is not this save's fault to answer for.
     const danglingRelations = await this.relationRejections(schema, normalizeEponymeValues(schema, payload as Record<string, unknown>))
     const errors = validationMode === 'publish'
       ? mergeErrors(patchErrors, stripped, danglingRelations, validateEponymeData(schema, data, 'publish'))
@@ -1664,8 +1473,8 @@ export class EponymeService {
     if (Object.keys(errors).length) return { errors }
 
     const next = applyEponymeAction(state, data, action, parsedSchedule ?? {}, new Date())
-    // The entry and the version it produces land as a unit, so the timeline can never
-    // gain an entry the content never took, nor miss one it did.
+    // The entry and the version it produces land as a unit, so the timeline can never gain an entry the
+    // content never took, nor miss one it did.
     const written = await this.transaction(async (tx, invalidate) => {
       invalidate(name)
       const write = await this.writeState(name, next, updatedAt, tx)
@@ -1694,10 +1503,7 @@ export class EponymeService {
     return toResult(next, next.__eponyme.draft, eponymeRevision(written.updatedAt))
   }
 
-  /**
-   * Materializes due dates for history, hooks and cache/CDN invalidation. Public reads do not
-   * depend on this method: `isEponymeLive` and `eponymeLiveWhere` remain authoritative.
-   */
+  /** Materializes due dates for history, hooks and cache/CDN invalidation. */
   async runSchedule(now = new Date()): Promise<EponymeScheduleTransition[]> {
     const dueRows = await this.client.eponyme.findMany({
       where: {
@@ -1882,17 +1688,16 @@ function isEmptyPlainObject(value: unknown): value is Record<string, never> {
 }
 
 /**
- * An entry that has never been published keeps an empty public version rather than a copy of
- * its draft, so `revertToDraft` stays distinguishable from "published, then emptied".
+ * An entry that has never been published keeps an empty public version rather than a copy of its draft, so
+ * `revertToDraft` stays distinguishable from "published, then emptied".
  */
 function shouldKeepEmptyPublished(state: StoredEponymeState['__eponyme']): boolean {
   return state.status === 'draft' && state.publishedAt === null && isEmptyPlainObject(state.published)
 }
 
 /**
- * Describes the shape of a schema – field names and types, nested containers included –
- * while ignoring labels, placeholders and validators. Renaming a label must not block
- * an import; adding or retyping a field must.
+ * Describes the shape of a schema - field names and types, nested containers included - while ignoring
+ * labels, placeholders and validators.
  */
 function describeSchema(schema: object): string {
   const fields = schema as Record<string, unknown>
@@ -1918,8 +1723,8 @@ function describeField(field: unknown): string {
   }
   if (field.type === 'custom')
     return `custom(${typeof field.name === 'string' ? field.name : 'unknown'})`
-  // The collection pointed at and the arity decide what the stored value means, so a change
-  // to either has to read as a different schema.
+  // The collection pointed at and the arity decide what the stored value means, so a change to either has
+  // to read as a different schema.
   if (field.type === 'relation')
     return `relation(${typeof options.to === 'string' ? options.to : 'unknown'},${options.multiple ? 'many' : 'one'})`
   return field.type
@@ -2099,14 +1904,7 @@ function toResult(state: StoredEponymeState, data: Record<string, unknown>, revi
   }
 }
 
-/**
- * The lock token an entry is read at: its `updatedAt`, as an ISO string.
- *
- * A string rather than the raw column, because it travels to the browser and back. It is only
- * ever compared to another token here, never turned back into a date to query on: the write
- * still locks on the value it read from the row, so a store whose `updatedAt` is not a `Date`
- * compares the same way the database does.
- */
+/** The lock token an entry is read at: its `updatedAt`, as an ISO string. */
 export function eponymeRevision(updatedAt: Date | string | undefined): string | null {
   if (!updatedAt) return null
   const date = new Date(updatedAt)
@@ -2132,12 +1930,8 @@ function toIsoOrNull(value: Date | string | null | undefined): string | null {
 }
 
 /**
- * Whether a reconciled state already matches what the row holds – the test that decides
- * whether a read has to heal.
- *
- * `publishedAt` is reduced to an ISO string on both sides on purpose. The column comes back
- * as a `Date` and the state carries a string; comparing them directly would never match, and
- * every public read would turn into a write.
+ * Whether a reconciled state already matches what the row holds - the test that decides whether a read has
+ * to heal.
  */
 function sameRow(state: StoredEponymeState, row: PrismaEponymeRow): boolean {
   const stored = state.__eponyme
@@ -2150,11 +1944,8 @@ function sameRow(state: StoredEponymeState, row: PrismaEponymeRow): boolean {
 }
 
 /**
- * Turns one condition into what the index table can answer: the part that selects rows, and
- * the part the caller has to subtract.
- *
- * Every value goes through the same folding as the write path, so a filter never has to know
- * which spelling of a tag happened to be stored first.
+ * Turns one condition into what the index table can answer: the part that selects rows, and the part the
+ * caller has to subtract.
  */
 function splitCondition(condition: EponymeFilterCondition): { positive?: PrismaStringFilter, negative?: PrismaStringFilter } {
   if (typeof condition === 'string') return { positive: foldEponymeIndexValue(condition) }
@@ -2168,8 +1959,8 @@ function splitCondition(condition: EponymeFilterCondition): { positive?: PrismaS
     if (value !== undefined) positive[bound] = foldEponymeIndexValue(value)
   }
   return {
-    // An operator object carrying only `not` has no positive part, and an empty one filters
-    // nothing at all rather than matching nothing.
+    // An operator object carrying only `not` has no positive part, and an empty one filters nothing at all
+    // rather than matching nothing.
     positive: Object.keys(positive).length ? positive : undefined,
     negative: condition.not?.length ? { in: condition.not.map(foldEponymeIndexValue) } : undefined,
   }
@@ -2186,19 +1977,7 @@ function isEmptyValue(value: unknown): boolean {
   return value === undefined || value === null || value === ''
 }
 
-/**
- * The SQL ordering for a sort key, or `undefined` when the key can only be compared in
- * memory.
- *
- * Only real columns qualify. `title` and every content field live inside the JSON payload,
- * and `slug` is left out deliberately even though it is derivable from `name`: Postgres
- * collation does not reproduce `localeCompare(..., { numeric: true })`, so pushing it down
- * would quietly change an order that already ships.
- *
- * `nulls: 'last'` is not decoration. Postgres puts NULLs first in `DESC`, while
- * `sortCollectionEntries` sinks empty values to the bottom in both directions – without it,
- * the two modes would disagree on where an unpublished entry belongs.
- */
+/** The SQL ordering for a sort key, or `undefined` when the key can only be compared in memory. */
 function pushdownOrderBy(orderBy: string | undefined, order: EponymeSortDirection): PrismaEponymeOrderBy[] | undefined {
   if (orderBy === undefined) return [{ updatedAt: 'desc' }, { name: 'asc' }]
   if (orderBy === 'updatedAt') return [{ updatedAt: order }, { name: 'asc' }]
@@ -2216,8 +1995,8 @@ function sortCollectionEntries(
     const a = sortValue(left, key)
     const b = sortValue(right, key)
 
-    // Missing values sink to the bottom in both directions, so an article with no
-    // date never leads the list just because it sorts as an empty string.
+    // Missing values sink to the bottom in both directions, so an article with no date never leads the list
+    // just because it sorts as an empty string.
     if (isEmptyValue(a) || isEmptyValue(b)) {
       if (isEmptyValue(a) && isEmptyValue(b)) return left.slug.localeCompare(right.slug)
       return isEmptyValue(a) ? 1 : -1

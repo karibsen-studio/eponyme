@@ -43,9 +43,8 @@ const progress = ref(-1)
 const addressOpen = ref(false)
 const addressInput = ref<{ $el?: HTMLInputElement }>()
 /**
- * A field that takes no uploaded image has no reason to show an uploader or the library, and one
- * that takes only uploads has no reason to offer a text box. The API refuses the same values, so
- * what is hidden here is a control that could only ever have produced an error.
+ * A field that takes no uploaded image has no reason to show an uploader or the library, and one that takes
+ * only uploads has no reason to offer a text box.
  */
 const allows = (source: ImageSource) => !props.sources?.length || props.sources.includes(source)
 const allowsUpload = computed(() => allows('upload'))

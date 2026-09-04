@@ -11,16 +11,7 @@ export const EPONYME_NAVIGATION_PAGE_SIZE = 30
 /** Matches shown per collection while the sidebar search is active. */
 const SEARCH_PAGE_SIZE = 20
 
-/**
- * What the sidebar renders: publication statuses and collection entries. The state is shared
- * so a write made anywhere in the dashboard can refresh the menu, and `load()` is what any
- * page calls after changing content in bulk - an import, for instance.
- *
- * A collection is read one page at a time rather than whole: a few thousand entries would
- * otherwise be fetched, parsed and rendered before the dashboard shows anything. `loadMore`
- * appends the next page, and `search` asks the server instead, since what has not been
- * loaded cannot be found locally.
- */
+/** What the sidebar renders: publication statuses and collection entries. */
 export function useEponymeNavigation() {
   const config = useEponymeConfig()
   const auth = useEponymeAuth()
@@ -71,8 +62,8 @@ export function useEponymeNavigation() {
     try {
       const loaded = collectionEntries.value[name] ?? []
       const page = await fetchPage(name, { take: EPONYME_NAVIGATION_PAGE_SIZE, skip: loaded.length })
-      // An entry created or removed since the first page shifts the window, so the same slug
-      // can come back twice. Keeping the first copy leaves the list stable under the cursor.
+      // An entry created or removed since the first page shifts the window, so the same slug can come back
+      // twice.
       const seen = new Set(loaded.map(entry => entry.slug))
       const added = page.entries.filter(entry => !seen.has(entry.slug))
       collectionEntries.value = { ...collectionEntries.value, [name]: [...loaded, ...added] }
@@ -89,8 +80,8 @@ export function useEponymeNavigation() {
   }
 
   /**
-   * The sidebar search runs on the server: with one page loaded per collection, filtering
-   * what is in memory would only ever find the entries already scrolled past.
+   * The sidebar search runs on the server: with one page loaded per collection, filtering what is in memory
+   * would only ever find the entries already scrolled past.
    */
   async function search(query: string) {
     const term = query.trim()
@@ -108,8 +99,8 @@ export function useEponymeNavigation() {
   }
 
   /**
-   * What the menu lists for a collection: the loaded pages, plus the search matches that are
-   * not among them, so a result stays visible without losing the reader's place in the list.
+   * What the menu lists for a collection: the loaded pages, plus the search matches that are not among
+   * them, so a result stays visible without losing the reader's place in the list.
    */
   function entriesOf(name: string): EponymeCollectionEntryMeta[] {
     const loaded = collectionEntries.value[name] ?? []

@@ -1,10 +1,4 @@
-/**
- * The storage contract, declared here rather than imported from `@eponyme/storage`.
- *
- * Eponyme does not depend on that package: a host installs it – or writes its own factory –
- * and the two meet structurally. Keeping the shape here is what lets storage be optional at
- * all, and it is the same shape `@eponyme/storage` exports.
- */
+/** The storage contract, declared here rather than imported from `@eponyme/storage`. */
 
 export interface EponymeStoragePutMeta {
   contentType: string

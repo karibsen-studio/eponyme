@@ -18,13 +18,7 @@ export function hasEponymeStorage(): boolean {
   return typeof factory === 'function'
 }
 
-/**
- * The configured driver, built once.
- *
- * The factory is called with whatever credentials the deployment carries, and given none when
- * it carries none – which is the normal case for a driver that needs no third party, such as
- * the local one.
- */
+/** The configured driver, built once. */
 export function useEponymeStorage(): Promise<EponymeStorageDriver> {
   if (driver) return Promise.resolve(driver)
   if (!hasEponymeStorage()) {

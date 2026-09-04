@@ -6,12 +6,8 @@ import type { NormalizedPhone, PhoneParser } from './phone-rules'
 export type { NormalizedPhone } from './phone-rules'
 
 /**
- * The eager half of `#eponyme/phone`, and what Nitro resolves it to: the API is the authority on
- * what gets stored, so it never validates a number without the metadata in hand.
- *
- * The `min` bundle is deliberate: a fraction of the size of the full one, and it parses and
- * formats every country. The trade is precision - it accepts a few numbers the full metadata
- * would reject as impossible for their region.
+ * The eager half of `#eponyme/phone`, and what Nitro resolves it to: the API is the authority on what gets
+ * stored, so it never validates a number without the metadata in hand.
  *
  * @see https://gitlab.com/catamphetamine/libphonenumber-js#min-vs-max-vs-mobile-vs-core
  */

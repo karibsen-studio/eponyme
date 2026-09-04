@@ -8,14 +8,7 @@ import {
   TagsInputRoot,
 } from 'reka-ui'
 
-/**
- * Chips plus a row of suggestion buttons, knowing nothing about Eponyme.
- *
- * The suggestions the developer configured are not a filtered autocomplete list: they're
- * rendered as standing buttons below the input so an editor can see and click them directly,
- * with no typing or listbox navigation required. `TagsInputRoot` still owns the chips, their
- * keyboard handling and the delete buttons.
- */
+/** Chips plus a row of suggestion buttons, knowing nothing about Eponyme. */
 const props = withDefaults(defineProps<{
   modelValue?: string[]
   /** Rendered as clickable buttons below the input, minus the ones already picked. */

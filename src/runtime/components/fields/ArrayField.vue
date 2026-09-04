@@ -32,10 +32,7 @@ const objectFields = computed(() => isSimple.value ? [] : Object.entries(props.d
 const basePath = computed(() => props.path || props.fieldName)
 const sortableRoot = ref<HTMLElement | null>(null)
 const query = ref('')
-/**
- * Which items are unfolded, by index. An index the map does not hold is at the default the
- * schema asked for – which is what lets `collapsed` apply to data that arrives after mount.
- */
+/** Which items are unfolded, by index. */
 const openItems = ref(new Map<number, boolean>())
 const sortableItems = computed<unknown[]>({
   get: () => items.value,
@@ -63,8 +60,8 @@ const sortable = useSortable(sortableRoot, sortableItems, {
   handle: '.eponyme-drag-handle',
   ghostClass: 'eponyme-sortable-ghost',
   chosenClass: 'eponyme-sortable-chosen',
-  // Sortable moves the value by index, so the folded state has to follow the same move or it
-  // would stay behind on whatever item lands there.
+  // Sortable moves the value by index, so the folded state has to follow the same move or it would stay
+  // behind on whatever item lands there.
   onEnd: ({ oldIndex, newIndex }) => {
     if (oldIndex === undefined || newIndex === undefined || oldIndex === newIndex) return
     remapOpenItems(index => moveIndex(index, oldIndex, newIndex))
@@ -83,9 +80,8 @@ function searchableText(value: unknown): string {
 }
 
 /**
- * `$i` is the position and `$<field>` what the item holds under that name, so a heading reads
- * as the content rather than as a row number. A template that resolves to nothing – a row
- * added a second ago – falls back to the numbered form.
+ * `$i` is the position and `$<field>` what the item holds under that name, so a heading reads as the
+ * content rather than as a row number.
  */
 function itemLabel(index: number) {
   const template = props.definition.options.itemLabel
@@ -102,8 +98,8 @@ function itemLabel(index: number) {
 }
 
 /**
- * One key per shape rather than fragments glued in the template: `3 / 5 items · min 1` is a
- * sentence, and nothing guarantees another language keeps that order.
+ * One key per shape rather than fragments glued in the template: `3 / 5 items · min 1` is a sentence, and
+ * nothing guarantees another language keeps that order.
  */
 const counter = computed(() => {
   const { minItems, maxItems } = props.definition.options

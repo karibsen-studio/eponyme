@@ -1,13 +1,9 @@
-/**
- * Dotted paths of every leaf that differs between two documents – `hero.title`,
- * `items.0.title`. Used to tell which fields the user actually edited, so inline
- * validation only flags those.
- */
+/** Dotted paths of every leaf that differs between two documents - `hero.title`, `items.0.title`. */
 export function changedPaths(next: unknown, previous: unknown, prefix = ''): string[] {
   if (next === previous) return []
 
-  // A container that appears or disappears is still walked down to its leaves, so the
-  // reported paths line up with the error keys the validator produces.
+  // A container that appears or disappears is still walked down to its leaves, so the reported paths line
+  // up with the error keys the validator produces.
   const nextRecord = isRecord(next) ? next : undefined
   const previousRecord = isRecord(previous) ? previous : undefined
   if ((nextRecord && (previousRecord || previous === undefined)) || (previousRecord && next === undefined)) {

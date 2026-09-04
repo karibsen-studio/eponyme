@@ -6,11 +6,7 @@ import { callEponymeBlockingHook, callEponymeHook } from '../../utils/eponyme-ho
 import { readEponymeRawBody } from '../../utils/body'
 import { assertEponymeFormRateLimit } from '../../utils/eponyme-form'
 
-/**
- * The only unauthenticated write route in the module. Order matters: reject an
- * oversized body before parsing it, and answer a normal success to a triggered
- * honeypot so a bot learns nothing from the response.
- */
+/** The only unauthenticated write route in the module. */
 export default defineEventHandler(async (event) => {
   const route = readEponymeFormRoute(event)
   const service = useEponymeFormService()

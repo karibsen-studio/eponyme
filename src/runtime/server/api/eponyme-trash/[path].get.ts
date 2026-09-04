@@ -1,10 +1,11 @@
 import { t } from '#eponyme/locale'
-import { createError, defineEventHandler, getRequestURL } from 'h3'
+import { createError, defineEventHandler } from 'h3'
 import { useEponymeService } from '../../services/eponyme-service'
 import { requireEponymePermission } from '../../utils/eponyme-permissions'
+import { readEponymeRoutePath } from '../../utils/route-path'
 
 export default defineEventHandler(async (event) => {
-  const name = decodeURIComponent(getRequestURL(event).pathname.replace(/^\/api\/eponyme-trash\//, ''))
+  const name = readEponymeRoutePath(event, /^\/api\/eponyme-trash\//)
   if (!name) throw createError({ status: 404, message: t('server.collectionNotFound') })
   await requireEponymePermission(event, 'content.restore', { kind: 'collection', name })
 

@@ -12,10 +12,7 @@ export interface SeoFieldOptions {
   image?: boolean
   /** Emits the Open Graph overrides and the switch that mirrors the page values. Defaults to `true`. */
   social?: boolean
-  /**
-   * Constants for the whole site rather than per-entry fields, so they are not stored on every
-   * entry. They travel on the definition and `resolveEponymeSeo` reads them back.
-   */
+  /** Constants for the whole site rather than per-entry fields, so they are not stored on every entry. */
   siteName?: string
   themeColor?: string
 }
@@ -39,14 +36,8 @@ const TITLE_MAX_LENGTH = 60
 const DESCRIPTION_MAX_LENGTH = 160
 
 /**
- * A `field.section()` carrying the usual SEO fields, the way `money` is a `field.number()`
- * carrying a currency: a preset, not a type of its own. The stored value stays a plain
- * section, so validation, storage and the schema fingerprint an import is checked against
- * are unchanged.
- *
- * `siteName` and `themeColor` ride on the definition instead of being fields, because they
- * are the same on every entry. The fingerprint only reads field names and types, so carrying
- * them there never invalidates an export.
+ * A `field.section()` carrying the usual SEO fields, the way `money` is a `field.number()` carrying a
+ * currency: a preset, not a type of its own.
  */
 export function seo(options: SeoFieldOptions = {}): EponymeSeoDefinition {
   const { label = 'seo.label', description, image: withImage = true, social = true, siteName, themeColor } = options
@@ -56,14 +47,13 @@ export function seo(options: SeoFieldOptions = {}): EponymeSeoDefinition {
       label,
       description,
       fields: {
-        // Message keys, not text: this file is evaluated by Node when the application config
-        // is read, where `#eponyme/locale` does not resolve. `humanizeLabel` translates them
-        // when the dashboard renders, which is also the only moment the locale is known.
+        // Message keys, not text: this file is evaluated by Node when the application config is read, where
+        // `#eponyme/locale` does not resolve.
         title: string({ label: 'seo.title', maxLength: TITLE_MAX_LENGTH, showCounter: true }),
         description: textarea({ label: 'seo.description', maxLength: DESCRIPTION_MAX_LENGTH, showCounter: true }),
         ...withImage ? { image: image({ label: 'seo.image' }) } : {},
-        // The switch reads as an opt-out: an author who never opens this section shares the
-        // page's own title and description, which is the right default.
+        // The switch reads as an opt-out: an author who never opens this section shares the page's own
+        // title and description, which is the right default.
         ...social
           ? {
               shareSameAsPage: boolean({ label: 'seo.shareSameAsPage', defaultValue: true }),
@@ -77,13 +67,7 @@ export function seo(options: SeoFieldOptions = {}): EponymeSeoDefinition {
   }
 }
 
-/**
- * The values to render, with the sharing ones filled in.
- *
- * Nothing is copied at save time: mirroring the title into `ogTitle` would freeze a duplicate
- * that drifts the moment the title changes. The fallback is applied on read instead, so the
- * two can never disagree.
- */
+/** The values to render, with the sharing ones filled in. */
 export function resolveEponymeSeo(
   value: EponymeSeoValue | null | undefined,
   definition?: Pick<EponymeSeoDefinition, 'seo'>,

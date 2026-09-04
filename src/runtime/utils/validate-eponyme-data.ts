@@ -11,9 +11,8 @@ import { normalizeEponymeDateTime } from './datetime'
 import { getEponymeCustomFieldType } from './eponyme-custom-field'
 
 /**
- * Errors are keyed by the path of the field they belong to – `title`, `hero.title`,
- * `items.0.title` – so the editor can show each message on the field that produced it.
- * `_form` carries errors about the payload as a whole.
+ * Errors are keyed by the path of the field they belong to - `title`, `hero.title`, `items.0.title` - so
+ * the editor can show each message on the field that produced it.
  */
 export type ValidationErrors = Record<string, string[]>
 export type ValidationMode = 'draft' | 'publish'
@@ -138,8 +137,8 @@ function validateFieldRules(
     if (mode === 'publish' && options.required && tags.length === 0) addError(errors, name, t('field.required'))
     if (mode === 'publish' && definition.options.minItems !== undefined && tags.length < definition.options.minItems) addError(errors, name, t('field.minItems', { min: definition.options.minItems }))
     if (definition.options.maxItems !== undefined && tags.length > definition.options.maxItems) addError(errors, name, t('field.maxItems', { max: definition.options.maxItems }))
-    // Counted on the raw value: a non-string or a blank entry is a bad payload, and normalising
-    // silently drops it, so the check has to happen before the dropping is taken as truth.
+    // Counted on the raw value: a non-string or a blank entry is a bad payload, and normalising silently
+    // drops it, so the check has to happen before the dropping is taken as truth.
     if (value.some(item => typeof item !== 'string' || !item.trim())) addError(errors, name, t('field.tagsNotEmpty'))
     const suggestions = definition.options.suggestions
     if (!definition.options.allowCustom && suggestions?.length && tags.some(tag => !suggestions.includes(tag)))
@@ -160,8 +159,8 @@ function validateFieldRules(
     return
   }
 
-  // Only the shape is checked here: whether the target exists is a question for the database,
-  // answered on write by `eponymeRelationRejections`.
+  // Only the shape is checked here: whether the target exists is a question for the database, answered on
+  // write by `eponymeRelationRejections`.
   if (definition.type === 'relation') {
     if (definition.options.multiple) {
       if (!Array.isArray(value)) {
@@ -258,7 +257,7 @@ function validateFieldRules(
         ? t('field.linkHttp')
         : t('field.linkProtocols', { protocols: listDisjunction(allowed.map(protocol => `${protocol}:`)) }))
     }
-    if (link.type === 'internal' && !href.startsWith('/') && !href.startsWith('#')) addError(errors, name, t('field.linkInternal'))
+    if (link.type === 'internal' && !isInternalHref(href)) addError(errors, name, t('field.linkInternal'))
     return
   }
 
@@ -279,8 +278,8 @@ function validateFieldRules(
     const address = media.url.trim()
     if (mode === 'publish' && options.required && !address) addError(errors, name, t('field.required'))
     if (!address) return
-    // Read from the address rather than from what the payload claims: the provider is
-    // detected, so a value naming one the URL does not match is not a value at all.
+    // Read from the address rather than from what the payload claims: the provider is detected, so a value
+    // naming one the URL does not match is not a value at all.
     const parsed = parseEponymeMediaUrl(address, definition.options)
     if (!parsed.provider) addError(errors, name, mediaPlayerError(definition.options))
     return
@@ -300,8 +299,8 @@ function validateFieldRules(
       addError(errors, name, t(definition.type === 'image' ? 'field.image' : 'field.file'))
       return
     }
-    // An address that parses can still be one this field does not take: a picture restricted to
-    // the media library must refuse a link to somebody else's server.
+    // An address that parses can still be one this field does not take: a picture restricted to the media
+    // library must refuse a link to somebody else's server.
     const sources = definition.type === 'image' ? definition.options.sources : undefined
     if (normalized && !isEponymeImageSourceAllowed(normalized, sources) && sources)
       addError(errors, name, eponymeImageSourceError(sources))
@@ -365,10 +364,32 @@ function validateFieldRules(
   }
 
   if (mode === 'publish' && definition.options.minLength !== undefined && value.length < definition.options.minLength) addError(errors, name, t('field.minLength', { min: definition.options.minLength }))
-  if (definition.options.maxLength !== undefined && value.length > definition.options.maxLength) addError(errors, name, t('field.maxLength', { max: definition.options.maxLength }))
-  if (definition.options.regex && !definition.options.regex.test(value)) addError(errors, name, t('field.pattern'))
+  const tooLong = definition.options.maxLength !== undefined && value.length > definition.options.maxLength
+  if (tooLong) addError(errors, name, t('field.maxLength', { max: definition.options.maxLength }))
+  // A pattern runs only on a value the length rule already accepted: an expression that backtracks needs a
+  // long string to become expensive, and the value is rejected either way.
+  if (!tooLong && definition.options.regex && !definition.options.regex.test(value)) addError(errors, name, t('field.pattern'))
   const [localPart, domain, ...extraParts] = normalized.split('@')
   if (definition.type === 'email' && normalized && (!localPart || !domain?.includes('.') || extraParts.length)) addError(errors, name, t('field.email'))
+}
+
+/**
+ * Resolved against a host that cannot exist, so any value reaching another origin is one the browser would
+ * have sent off site: `//host`, `/\host` and their variants all start with `/` yet leave the origin.
+ */
+const INTERNAL_BASE = 'https://internal.invalid'
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARACTERS = /[\u0000-\u001F\u007F]/
+
+function isInternalHref(href: string): boolean {
+  if (!href.startsWith('/') && !href.startsWith('#')) return false
+  if (CONTROL_CHARACTERS.test(href) || href.includes('\\')) return false
+  try {
+    return new URL(href, INTERNAL_BASE).origin === INTERNAL_BASE
+  }
+  catch {
+    return false
+  }
 }
 
 const DEFAULT_URL_PROTOCOLS = ['http', 'https']
@@ -397,8 +418,8 @@ const MEDIA_PLAYER_LABELS: Record<MediaPlayerProvider, EponymeMessageKey> = {
 }
 
 /**
- * "a, b or c" – the joining word belongs to the language, not to the message, so it comes
- * from `Intl` rather than from a hardcoded ` or `.
+ * "a, b or c" - the joining word belongs to the language, not to the message, so it comes from `Intl`
+ * rather than from a hardcoded ` or `.
  */
 function listDisjunction(items: string[]): string {
   return new Intl.ListFormat(locale.code, { type: 'disjunction' }).format(items)

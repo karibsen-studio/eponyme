@@ -2,10 +2,7 @@ export const EPONYME_DEFAULT_ROLES = ['viewer', 'editor', 'owner'] as const
 
 export type EponymeDefaultRole = typeof EPONYME_DEFAULT_ROLES[number]
 
-/**
- * Applications may store their own role names. The configured registry remains the runtime
- * authority, so a name that disappeared from `eponyme/roles.ts` cannot open a session.
- */
+/** Applications may store their own role names. */
 export type EponymeRole = EponymeDefaultRole | (string & {})
 
 export const EPONYME_PERMISSION_ACTIONS = [
