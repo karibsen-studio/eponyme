@@ -19,15 +19,13 @@ function collect(nodes: EponymeNavigationNode[], items: SearchItem[]) {
   }
 }
 
-// Rebuilding the index on every keystroke would be wasted work: the tree only changes
-// when the configuration or the loaded collection entries do.
+// Rebuilding the index on every keystroke would be wasted work: the tree only changes when the
+// configuration or the loaded collection entries do.
 const indexes = new WeakMap<EponymeNavigationNode[], Fuse<SearchItem>>()
 
 /**
- * Fuse is the sidebar's search engine and nothing else's, so it is fetched when a search
- * actually happens rather than shipped with the dashboard. Until it lands, `matches()` below
- * falls back to a substring test: the first keystroke answers a little more literally, then
- * typo tolerance arrives and stays.
+ * Fuse is the sidebar's search engine and nothing else's, so it is fetched when a search actually happens
+ * rather than shipped with the dashboard.
  */
 type FuseConstructor = typeof Fuse
 let FuseCtor: FuseConstructor | undefined
@@ -52,11 +50,7 @@ function indexOf(nodes: EponymeNavigationNode[], Ctor: FuseConstructor) {
   return fuse
 }
 
-/**
- * Keeps the nodes matching `query`, along with every ancestor needed to reach them.
- * A node matched on its own label keeps all of its children, so selecting a folder
- * shows what it holds. An empty query returns the tree untouched.
- */
+/** Keeps the nodes matching `query`, along with every ancestor needed to reach them. */
 export function filterEponymeNavigationTree(
   nodes: EponymeNavigationNode[],
   query: string,

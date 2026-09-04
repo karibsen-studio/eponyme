@@ -12,8 +12,8 @@ import { getEponymeErrorMessage } from '../../utils/eponyme-error'
 import { EPONYME_REVISION_HEADER } from '../../utils/eponyme-revision'
 
 const props = withDefaults(
-  // `revision` is the version the editor is looking at: restoring replaces the whole entry,
-  // so it is refused when someone else has saved since.
+  // `revision` is the version the editor is looking at: restoring replaces the whole entry, so it is
+  // refused when someone else has saved since.
   defineProps<{ open: boolean, name: string, revision: string | null, canRestore?: boolean }>(),
   { canRestore: false },
 )

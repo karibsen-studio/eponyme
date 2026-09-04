@@ -118,8 +118,8 @@ async function confirmImport() {
   try {
     const result = await request<EponymeImportResult>('/api/eponyme-import', { method: 'POST', body: pendingFile.value })
     closePreview()
-    // The menu holds the entries and their statuses in shared state, which the import just
-    // changed: without this reload a new entry stays missing from it until a full refresh.
+    // The menu holds the entries and their statuses in shared state, which the import just changed: without
+    // this reload a new entry stays missing from it until a full refresh.
     await Promise.all([refreshNuxtData(), loadNavigation()])
     await showToast(
       'success',

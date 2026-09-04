@@ -1,5 +1,5 @@
 import { t } from '#eponyme/locale'
-import { createError, defineEventHandler, getQuery, getRequestURL, setResponseStatus } from 'h3'
+import { createError, defineEventHandler, getQuery, setResponseStatus } from 'h3'
 import { useRuntimeConfig } from 'nitropack/runtime'
 import { useEponymeService } from '../../services/eponyme-service'
 import { assertEponymeMutationOrigin } from '../../utils/auth'
@@ -9,6 +9,7 @@ import { readEponymeBody } from '../../utils/body'
 import { readEponymeRevision } from '../../utils/eponyme-revision'
 import { splitEponymeCollectionEntry } from '../../utils/eponyme-entry'
 import { isEponymePublicationEnabled } from '../../../utils/eponyme-publication'
+import { readEponymeRoutePath } from '../../utils/route-path'
 import type { EponymePublicationOption } from '../../../utils/eponyme-publication'
 import type { EponymeAction } from '../../services/eponyme-store'
 
@@ -34,7 +35,7 @@ const permissionByAction = {
 
 export default defineEventHandler(async (event) => {
   assertEponymeMutationOrigin(event)
-  const name = decodeURIComponent(getRequestURL(event).pathname.replace(/^\/api\/eponyme\//, ''))
+  const name = readEponymeRoutePath(event, /^\/api\/eponyme\//)
   if (!name) throw createError({ status: 404, message: t('server.entryNotFound') })
 
   const requestedAction = getQuery(event).action
@@ -65,13 +66,13 @@ export default defineEventHandler(async (event) => {
   const current = action === 'draft' ? undefined : await service.getResult(name, 'draft')
   const data = action === 'draft' ? body : current?.data
   if (!data) throw createError({ status: 404, message: t('server.entryNotFound') })
-  // Listeners may amend `data` here, so the hook runs on the payload that will be
-  // written rather than on a copy of it.
+  // Listeners may amend `data` here, so the hook runs on the payload that will be written rather than on a
+  // copy of it.
   const beforeSave = { name, collection, action, data: data as Record<string, unknown>, userId: user.id }
   await callEponymeBlockingHook('eponyme:entry:beforeSave', beforeSave)
 
   // Optional: a caller that never read a revision - a public read, a script - keeps writing
-  // last-write-wins. The dashboard always sends one, so it always gets the guard.
+  // last-write-wins.
   const result = await service.patch(name, action === 'draft' ? beforeSave.data : {}, action, user, {
     scheduledPublishAt: typeof scheduleBody?.scheduledPublishAt === 'string' ? scheduleBody.scheduledPublishAt : null,
     scheduledUnpublishAt: typeof scheduleBody?.scheduledUnpublishAt === 'string' ? scheduleBody.scheduledUnpublishAt : null,

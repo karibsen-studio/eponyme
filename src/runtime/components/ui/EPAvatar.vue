@@ -12,13 +12,8 @@ const props = withDefaults(defineProps<{ src?: string, alt?: string, username?: 
 const seed = computed(() => (props.username || props.fallback).trim() || '?')
 
 /**
- * DiceBear draws the seeded placeholder, and costs more than every other dependency of this
- * component put together for something purely decorative. It is fetched after mount instead of
- * being bundled into the page, which leaves the initials below showing until it arrives.
- *
- * Nothing is lost by waiting: `AvatarFallback` already renders those initials, so the avatar
- * has a complete visual state from the first paint and simply gains its gradient a moment
- * later. A caller passing `src` never triggers the fetch at all.
+ * DiceBear draws the seeded placeholder, and costs more than every other dependency of this component put
+ * together for something purely decorative.
  */
 const generated = ref('')
 const resolvedSrc = computed(() => props.src || generated.value)
@@ -27,8 +22,7 @@ let generate: ((seed: string) => string) | undefined
 
 async function loadGenerator() {
   if (generate) return generate
-  // No `with { type: 'json' }`: the bundler turns the JSON into a JS module, which the
-  // browser then rejects for not being served as `application/json`.
+
   const [{ Avatar, Style }, { default: glass }] = await Promise.all([
     import('@dicebear/core'),
     import('@dicebear/styles/glass.json'),

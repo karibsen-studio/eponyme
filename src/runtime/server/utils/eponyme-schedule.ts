@@ -2,10 +2,7 @@ import { useEponymeService } from '../services/eponyme-service'
 import { splitEponymeCollectionEntry } from './eponyme-entry'
 import { callEponymeHook } from './eponyme-hooks'
 
-/**
- * Materializes due publication dates so history, hooks and cache purges happen. Public
- * visibility itself is computed lazily and remains correct even when this is never called.
- */
+/** Materializes due publication dates so history, hooks and cache purges happen. */
 export async function runEponymeSchedule(now = new Date()): Promise<{ processed: number }> {
   const service = useEponymeService()
   const transitions = await service.runSchedule(now)

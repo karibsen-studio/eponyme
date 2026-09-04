@@ -7,8 +7,8 @@ import type { PrismaEponymeClient } from './eponyme-store'
 
 export { EponymeService } from './eponyme-store'
 
-// Built on first use rather than on import: `useRuntimeConfig()` is only available
-// once Nitro is running, and the service needs its cache duration from there.
+// Built on first use rather than on import: `useRuntimeConfig()` is only available once Nitro is running,
+// and the service needs its cache duration from there.
 let eponymeService: EponymeService | undefined
 
 export function useEponymeService(): EponymeService {

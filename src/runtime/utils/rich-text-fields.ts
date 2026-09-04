@@ -3,14 +3,8 @@ import type { ArrayItemDefinition, FieldDefinition } from '../types/field'
 import { isArrayItemFieldDefinition } from './get-field-default-value'
 
 /**
- * Applies `map` to every `field.richText()` value of an entry, wherever the schema puts it –
- * inside a section, a tab, an array of items or an array of rich text.
- *
- * Rich text is the one field type whose value is markup rather than data, so both the policy
- * that cleans it and the variable resolution that must not reopen it need to find exactly
- * those values. One walk, so a container added later is forgotten in one place rather than two.
- *
- * Values are shared, not copied, wherever `map` returns the string it was given.
+ * Applies `map` to every `field.richText()` value of an entry, wherever the schema puts it - inside a
+ * section, a tab, an array of items or an array of rich text.
  */
 export function mapEponymeRichText(
   schema: EponymeSchema,

@@ -13,12 +13,8 @@ export interface EponymeRelationReference {
 }
 
 /**
- * Every entry a payload points at, wherever the schema puts the relation – at the root, in a
- * section, in a tab, in an array of items or in an array of relations.
- *
- * One walk for the three questions that need it: do these targets exist (on write), what does
- * this entry point at (for the index), and who points at this entry (for the trash guard).
- * A container added to the schema language is then forgotten in one place rather than three.
+ * Every entry a payload points at, wherever the schema puts the relation - at the root, in a section, in a
+ * tab, in an array of items or in an array of relations.
  */
 export function collectEponymeRelations(schema: EponymeSchema, data: unknown): EponymeRelationReference[] {
   const references: EponymeRelationReference[] = []

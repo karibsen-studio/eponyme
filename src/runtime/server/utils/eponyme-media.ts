@@ -9,9 +9,8 @@ export interface EponymeMediaSettings {
 }
 
 /**
- * Keys are validated here as well as in the driver: a key arrives from the browser on every
- * media route, and a route that hands an unchecked one to a driver is trusting the client to
- * stay inside the prefix.
+ * Keys are validated here as well as in the driver: a key arrives from the browser on every media route,
+ * and a route that hands an unchecked one to a driver is trusting the client to stay inside the prefix.
  */
 export function assertEponymeMediaKey(key: unknown, settings: EponymeMediaSettings): string {
   const invalid = typeof key !== 'string'
@@ -21,8 +20,8 @@ export function assertEponymeMediaKey(key: unknown, settings: EponymeMediaSettin
     || key.includes('\\')
     || key.split('/').some(segment => segment === '.' || segment === '..')
   if (invalid) throw createError({ status: 400, message: t('server.mediaInvalidKey') })
-  // Confining every route to the configured prefix is what keeps them from reaching the rest
-  // of a bucket the application may well be sharing with something else.
+  // Confining every route to the configured prefix is what keeps them from reaching the rest of a bucket
+  // the application may well be sharing with something else.
   if (settings.prefix && !(key as string).startsWith(`${settings.prefix}/`)) {
     throw createError({ status: 400, message: t('server.mediaInvalidKey') })
   }
@@ -40,8 +39,8 @@ export function assertEponymeUpload(
   size: number,
   settings: EponymeMediaSettings,
 ): void {
-  // A strict media type, not a permissive one: the value is signed into an upload URL and sent
-  // back as a response header, so anything unusual in it would travel a long way.
+  // A strict media type, not a permissive one: the value is signed into an upload URL and sent back as a
+  // response header, so anything unusual in it would travel a long way.
   if (!contentType || !/^[\w.+-]+\/[\w.+-]+$/.test(contentType)) {
     throw createError({ status: 400, message: t('server.mediaInvalidType') })
   }
@@ -68,9 +67,9 @@ export function formatBytes(bytes: number): string {
 }
 
 /**
- * A stored key derived from the uploaded name: dated folders so a bucket stays browsable, a
- * slug so it stays readable, and a random suffix so two uploads of `photo.jpg` never collide –
- * an overwrite would silently change an image already published somewhere else.
+ * A stored key derived from the uploaded name: dated folders so a bucket stays browsable, a slug so it
+ * stays readable, and a random suffix so two uploads of `photo.jpg` never collide - an overwrite would
+ * silently change an image already published somewhere else.
  */
 export function buildEponymeMediaKey(fileName: string, settings: EponymeMediaSettings): string {
   const cleaned = String(fileName ?? '').split(/[/\\]/).pop() ?? ''
@@ -95,14 +94,7 @@ export function eponymeRawUrl(key: string): string {
   return `/api/eponyme-media/raw/${key.split('/').map(encodeURIComponent).join('/')}`
 }
 
-/**
- * An address that will still resolve in a year, which is the only kind worth saving into an entry.
- *
- * A driver with a public origin – `publicUrl` on the S3 family – returns one directly. A private
- * bucket cannot: `url()` answers with a presigned GET that dies in fifteen minutes, and storing
- * that would publish a link that stops working over lunch. The signature in the query is what
- * gives it away, and the fallback is Eponyme's own read route, which reads the object per request.
- */
+/** An address that will still resolve in a year, which is the only kind worth saving into an entry. */
 export async function eponymePublicUrl(driver: EponymeStorageDriver, key: string): Promise<string> {
   const address = await driver.url(key)
   return isPresigned(address) ? eponymeRawUrl(key) : address
@@ -112,12 +104,7 @@ function isPresigned(address: string): boolean {
   return /[?&](?:X-Amz-Signature|X-Goog-Signature)=/i.test(address)
 }
 
-/**
- * The same decision for a whole page of a listing, taken once.
- *
- * Whether a driver's addresses expire is a property of the driver, not of the object, so asking
- * per key would mean signing sixty URLs to throw sixty away.
- */
+/** The same decision for a whole page of a listing, taken once. */
 export async function toEponymeMediaItems(
   driver: EponymeStorageDriver,
   objects: EponymeStorageObject[],
@@ -152,8 +139,8 @@ const EXTENSION_TYPES: Record<string, string> = {
 }
 
 /**
- * Read from the key rather than asked of the provider: a listing returns hundreds of objects,
- * and a `stat` each would be hundreds of round trips for a label.
+ * Read from the key rather than asked of the provider: a listing returns hundreds of objects, and a `stat`
+ * each would be hundreds of round trips for a label.
  */
 export function guessContentType(key: string): string {
   const extension = key.slice(key.lastIndexOf('.') + 1).toLowerCase()

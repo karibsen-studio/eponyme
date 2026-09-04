@@ -34,10 +34,12 @@ describe('ssr', async () => {
     rootDir: fileURLToPath(new URL('./fixtures/basic', import.meta.url)),
   })
   let authCookie = ''
-  const authenticated = () => ({ headers: { cookie: authCookie } })
+  // A browser sends `Origin` on every mutation, and a session-carrying request without one is refused.
+  const origin = () => new URL(url('/')).origin
+  const authenticated = () => ({ headers: { cookie: authCookie, origin: origin() } })
   // Trashing, untrashing and restoring a version lock on the version the caller last read,
   // so each helper fetches it first rather than writing blind.
-  const revised = (revision: string) => ({ headers: { 'cookie': authCookie, 'x-eponyme-revision': revision } })
+  const revised = (revision: string) => ({ headers: { 'cookie': authCookie, 'origin': origin(), 'x-eponyme-revision': revision } })
   const draftRevision = async (name: string) => {
     const entry = await $fetch<{ revision: string | null }>(`/api/eponyme/${name}?version=draft`, authenticated())
     return entry.revision ?? ''
@@ -91,6 +93,21 @@ describe('ssr', async () => {
     // Transferring content between environments is only offered from this overview.
     expect(html).toContain('Export')
     expect(html).toContain('Import')
+  })
+
+  it('refuses to let its own routes be framed, and leaves the host application alone', async () => {
+    // An administration panel inside someone else's iframe is a clickjacking target, and
+    // only Eponyme knows which paths are its own.
+    for (const path of ['/__eponyme', '/api/eponyme-statuses']) {
+      const response = await fetch(url(path), authenticated())
+      expect(response.headers.get('content-security-policy')).toBe('frame-ancestors \'none\'')
+      expect(response.headers.get('x-frame-options')).toBe('DENY')
+      expect(response.headers.get('x-content-type-options')).toBe('nosniff')
+      expect(response.headers.get('referrer-policy')).toBe('same-origin')
+    }
+
+    const host = await fetch(url('/'))
+    expect(host.headers.get('x-frame-options')).toBeNull()
   })
 
   it('keeps the host layout out of the dashboard', async () => {
@@ -970,7 +987,7 @@ describe('ssr', async () => {
     // A POST without the `/reset-password` suffix used to fall through to the reset handler.
     const strayPost = await fetch(url(`/api/eponyme-users/${created.user.id}`), {
       method: 'POST',
-      headers: { cookie: authCookie },
+      headers: { cookie: authCookie, origin: origin() },
     })
     expect(strayPost.status).toBeGreaterThanOrEqual(400)
     const afterStrayPost = await fetch(url('/api/eponyme-auth/login'), {
@@ -989,7 +1006,7 @@ describe('ssr', async () => {
     const temporaryCookie = loginResponse.headers.get('set-cookie')?.split(';')[0] ?? ''
     const changeResponse = await fetch(url('/api/eponyme-auth/change-password'), {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'cookie': temporaryCookie },
+      headers: { 'content-type': 'application/json', 'cookie': temporaryCookie, 'origin': origin() },
       body: JSON.stringify({ currentPassword: reset.temporaryPassword, newPassword: 'Viewer password 123!' }),
     })
     const viewerCookie = changeResponse.headers.get('set-cookie')?.split(';')[0] ?? ''
@@ -1000,7 +1017,7 @@ describe('ssr', async () => {
     })).resolves.toMatchObject({ data: { title: 'Welcome' } })
     const forbidden = await fetch(url('/api/eponyme/pages/homepage?action=unpublish'), {
       method: 'PATCH',
-      headers: { 'content-type': 'application/json', 'cookie': viewerCookie },
+      headers: { 'content-type': 'application/json', 'cookie': viewerCookie, 'origin': origin() },
       body: JSON.stringify({ title: 'Forbidden edit' }),
     })
     expect(forbidden.status).toBe(403)
@@ -1051,7 +1068,7 @@ describe('ssr', async () => {
       const temporaryCookie = login.headers.get('set-cookie')?.split(';')[0] ?? ''
       const changed = await fetch(url('/api/eponyme-auth/change-password'), {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'cookie': temporaryCookie },
+        headers: { 'content-type': 'application/json', 'cookie': temporaryCookie, 'origin': origin() },
         body: JSON.stringify({ currentPassword: created.temporaryPassword, newPassword: password }),
       })
       return changed.headers.get('set-cookie')?.split(';')[0] ?? ''
@@ -1059,8 +1076,8 @@ describe('ssr', async () => {
 
     const contributorCookie = await createSession('WorkflowContributor', 'contributor', 'Contributor password 123!')
     const publisherCookie = await createSession('WorkflowPublisher', 'publisher', 'Publisher password 123!')
-    const contributor = { headers: { cookie: contributorCookie } }
-    const publisher = { headers: { cookie: publisherCookie } }
+    const contributor = { headers: { cookie: contributorCookie, origin: origin() } }
+    const publisher = { headers: { cookie: publisherCookie, origin: origin() } }
 
     await $fetch('/api/eponyme-collections/articles', {
       method: 'POST',
@@ -1134,17 +1151,17 @@ describe('ssr', async () => {
       const temporaryCookie = login.headers.get('set-cookie')?.split(';')[0] ?? ''
       const changed = await fetch(url('/api/eponyme-auth/change-password'), {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'cookie': temporaryCookie },
+        headers: { 'content-type': 'application/json', 'cookie': temporaryCookie, 'origin': origin() },
         body: JSON.stringify({
           currentPassword: created.temporaryPassword,
           newPassword: `Button matrix password ${index}!`,
         }),
       })
       expect(changed.status).toBe(200)
-      return { headers: { cookie: changed.headers.get('set-cookie')?.split(';')[0] ?? '' } }
+      return { headers: { cookie: changed.headers.get('set-cookie')?.split(';')[0] ?? '', origin: origin() } }
     }
 
-    const sessions = new Map<typeof configuredRoles[number], { headers: { cookie: string } }>()
+    const sessions = new Map<typeof configuredRoles[number], { headers: { cookie: string, origin: string } }>()
     for (const [index, role] of configuredRoles.entries())
       sessions.set(role, await createSession(role, index + 1))
 
@@ -1236,7 +1253,7 @@ describe('ssr', async () => {
     for (const action of ['schedule', 'unpublish', 'revertToDraft']) {
       const refused = await fetch(url(`/api/eponyme/releases/cut?action=${action}`), {
         method: 'PATCH',
-        headers: { 'content-type': 'application/json', 'cookie': authCookie },
+        headers: { 'content-type': 'application/json', 'cookie': authCookie, 'origin': origin() },
         body: JSON.stringify({ data: { title: 'Cut', slug: 'cut' }, scheduledUnpublishAt: '2099-01-01T00:00:00.000Z' }),
       })
       expect(refused.status).toBe(422)
@@ -1268,7 +1285,7 @@ describe('ssr', async () => {
     for (const action of ['schedule', 'unpublish', 'revertToDraft']) {
       const refused = await fetch(url(`/api/eponyme/pages/frozen?action=${action}`), {
         method: 'PATCH',
-        headers: { 'content-type': 'application/json', 'cookie': authCookie },
+        headers: { 'content-type': 'application/json', 'cookie': authCookie, 'origin': origin() },
         body: JSON.stringify({ data: { title: 'Frozen' }, scheduledUnpublishAt: '2099-01-01T00:00:00.000Z' }),
       })
       expect(refused.status).toBe(422)
@@ -1337,7 +1354,7 @@ describe('ssr', async () => {
     for (const body of [{ active: false }, { role: 'viewer' }]) {
       const refused = await fetch(url(`/api/eponyme-users/${self.id}`), {
         method: 'PATCH',
-        headers: { 'content-type': 'application/json', 'cookie': authCookie },
+        headers: { 'content-type': 'application/json', 'cookie': authCookie, 'origin': origin() },
         body: JSON.stringify(body),
       })
       expect(refused.status).toBe(422)
@@ -1396,6 +1413,14 @@ describe('ssr', async () => {
 
     const html = String(await $fetch('/__eponyme/audit', authenticated()))
     expect(html).toContain('Audit log')
+  })
+
+  it('keeps the retention route shut while no cron secret is configured', async () => {
+    // An owner session is not a key here either.
+    for (const method of ['GET', 'POST'] as const) {
+      await expect($fetch('/api/eponyme-audit/prune', { method, ...authenticated() }))
+        .rejects.toMatchObject({ status: 503 })
+    }
   })
 
   it('exports the content and imports it back, with import reserved to owners', async () => {
@@ -1460,16 +1485,16 @@ describe('ssr', async () => {
     const temporaryCookie = editorLogin.headers.get('set-cookie')?.split(';')[0] ?? ''
     const changed = await fetch(url('/api/eponyme-auth/change-password'), {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'cookie': temporaryCookie },
+      headers: { 'content-type': 'application/json', 'cookie': temporaryCookie, 'origin': origin() },
       body: JSON.stringify({ currentPassword: editor.temporaryPassword, newPassword: 'Editor password 123!' }),
     })
     const editorCookie = changed.headers.get('set-cookie')?.split(';')[0] ?? ''
 
-    await expect($fetch('/api/eponyme-export', { headers: { cookie: editorCookie } }))
+    await expect($fetch('/api/eponyme-export', { headers: { cookie: editorCookie, origin: origin() } }))
       .resolves.toMatchObject({ eponyme: { format: 1 } })
     const refused = await fetch(url('/api/eponyme-import'), {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'cookie': editorCookie },
+      headers: { 'content-type': 'application/json', 'cookie': editorCookie, 'origin': origin() },
       body: JSON.stringify(file),
     })
     expect(refused.status).toBe(403)
@@ -1538,11 +1563,42 @@ describe('ssr', async () => {
   it('rejects an unknown editorial action instead of publishing it', async () => {
     const response = await fetch(url('/api/eponyme/pages/homepage?action=not-an-action'), {
       method: 'PATCH',
-      headers: { 'content-type': 'application/json', 'cookie': authCookie },
+      headers: { 'content-type': 'application/json', 'cookie': authCookie, 'origin': origin() },
       body: JSON.stringify({ title: 'Must not be published' }),
     })
     expect(response.status).toBe(400)
     await expect($fetch('/api/eponyme/pages/homepage')).resolves.toMatchObject({ data: { title: 'Welcome' } })
+  })
+
+  it('answers a malformed percent encoding with a 400 rather than a crash', async () => {
+    // `decodeURIComponent()` throws on a lone `%`, which used to leave the handler as a 500.
+    const routes = [
+      '/api/eponyme/pages%2Fhomepage%',
+      '/api/eponyme-collections/articles%E0%A4%A',
+      '/api/eponyme-trash/articles%',
+      '/api/eponyme-history/articles%',
+      '/api/eponyme-forms/contact%',
+    ]
+    for (const route of routes) {
+      const response = await fetch(url(route), authenticated())
+      expect([route, response.status]).toEqual([route, 400])
+    }
+  })
+
+  it('refuses a session-carrying mutation that does not say where it comes from', async () => {
+    const patch = (headers: Record<string, string>) => fetch(url('/api/eponyme/pages/homepage?action=draft'), {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json', ...headers },
+      body: JSON.stringify({ title: 'Welcome' }),
+    })
+
+    expect((await patch({ cookie: authCookie })).status).toBe(403)
+    expect((await patch({ cookie: authCookie, origin: 'https://evil.example' })).status).toBe(403)
+    // What a browser that omits `Origin` on a same-origin request sends instead.
+    expect((await patch({ 'cookie': authCookie, 'sec-fetch-site': 'same-origin' })).status).toBe(200)
+    expect((await patch({ cookie: authCookie, origin: origin() })).status).toBe(200)
+    // A public form is not a session, so it keeps working without an origin.
+    await expect($fetch('/newsletter', { method: 'POST', body: { email: 'origin@example.com' } })).resolves.toBeTruthy()
   })
 
   it('keeps managed-form storage within its configured quota', async () => {
@@ -1562,7 +1618,7 @@ describe('ssr', async () => {
   describe('media routes', () => {
     const reserve = (body: unknown) => fetch(url('/api/eponyme-media/upload'), {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'cookie': authCookie },
+      headers: { 'content-type': 'application/json', 'cookie': authCookie, 'origin': origin() },
       body: JSON.stringify(body),
     })
 
@@ -1588,7 +1644,7 @@ describe('ssr', async () => {
 
       const uploaded = await fetch(url(ticket.url), {
         method: 'PUT',
-        headers: { 'content-type': 'text/plain', 'cookie': authCookie },
+        headers: { 'content-type': 'text/plain', 'cookie': authCookie, 'origin': origin() },
         body: 'hello',
       })
       expect(uploaded.status).toBe(200)
@@ -1605,7 +1661,7 @@ describe('ssr', async () => {
 
       const deleted = await fetch(url(`/api/eponyme-media/object?key=${encodeURIComponent(ticket.key)}`), {
         method: 'DELETE',
-        headers: { cookie: authCookie },
+        headers: { cookie: authCookie, origin: origin() },
       })
       expect(deleted.status).toBe(204)
       expect((await fetch(url(ticket.publicUrl))).status).toBe(404)
@@ -1624,7 +1680,7 @@ describe('ssr', async () => {
       const ticket = await (await reserve({ name: 'lie.txt', contentType: 'text/plain', size: 5 })).json()
       const rejected = await fetch(url(ticket.url), {
         method: 'PUT',
-        headers: { 'content-type': 'text/html', 'cookie': authCookie },
+        headers: { 'content-type': 'text/html', 'cookie': authCookie, 'origin': origin() },
         body: 'x',
       })
       expect(rejected.status).toBe(415)
@@ -1635,7 +1691,7 @@ describe('ssr', async () => {
       for (const key of ['../secret.txt', '/etc/passwd', 'elsewhere/file.txt']) {
         const response = await fetch(url(`/api/eponyme-media/object?key=${encodeURIComponent(key)}`), {
           method: 'DELETE',
-          headers: { cookie: authCookie },
+          headers: { cookie: authCookie, origin: origin() },
         })
         expect(response.status).toBe(400)
       }

@@ -1,11 +1,6 @@
 /**
- * Version of the persistence contract Eponyme expects, kept apart from the npm version: a
- * release that changes no table must not force anyone to migrate.
- *
- * Raise it in the same commit as the migration that changes the stored shape, and raise
- * `EPONYME_SCHEMA_VERSION` in `@eponyme/cli` to match, since that package ships the migration
- * that writes the number this one reads. The two are a contract with the same value written
- * twice, and a mismatch is what this check exists to surface.
+ * Version of the persistence contract Eponyme expects, kept apart from the npm version: a release that
+ * changes no table must not force anyone to migrate.
  */
 export const EPONYME_SCHEMA_VERSION = 3
 
@@ -27,14 +22,24 @@ export type EponymeSchemaVerification
     | { ok: false, reason: 'behind', version: number }
     /** Recorded above what this build expects: the database was migrated by a newer Eponyme. */
     | { ok: false, reason: 'ahead', version: number }
+    /** The read itself failed. Nothing is known about the schema, and `cause` says why. */
+    | { ok: false, reason: 'unknown', version?: never, cause: unknown }
 
-/**
- * Reads the version recorded in `_eponyme_schema` and compares it to this build's.
- *
- * Reports rather than throws, because the three failures do not deserve the same answer: a
- * database left behind cannot serve this code and has to stop the boot, while one already
- * ahead usually still works and only deserves a warning.
- */
+/** Prisma's code for a table that does not exist, and the Postgres code underneath it. */
+const MISSING_RELATION_CODES = new Set(['P2021', '42P01'])
+
+/** A missing table, as opposed to a database that could not be reached at all. */
+function isMissingRelation(error: unknown): boolean {
+  // A Prisma client generated before the model existed: the delegate itself is missing.
+  if (error instanceof TypeError) return true
+  if (!error || typeof error !== 'object') return false
+  const { code, meta, message } = error as { code?: unknown, meta?: { code?: unknown }, message?: unknown }
+  if (typeof code === 'string' && MISSING_RELATION_CODES.has(code)) return true
+  if (typeof meta?.code === 'string' && MISSING_RELATION_CODES.has(meta.code)) return true
+  return typeof message === 'string' && /does not exist|42P01/i.test(message)
+}
+
+/** Reads the version recorded in `_eponyme_schema` and compares it to this build's. */
 export class EponymeSchemaService {
   constructor(private readonly client: PrismaEponymeSchemaClient) {}
 
@@ -43,9 +48,9 @@ export class EponymeSchemaService {
     try {
       row = await this.client.eponymeSchema.findUnique({ where: { key: 'eponyme' } })
     }
-    catch {
-      // A missing table and a missing delegate both land here, and both mean the same thing
-      // to an operator: the migration that introduced them has not run.
+    catch (error) {
+      // A missing table and a missing delegate both mean the migration has not run.
+      if (!isMissingRelation(error)) return { ok: false, reason: 'unknown', cause: error }
       return { ok: false, reason: 'absent' }
     }
 

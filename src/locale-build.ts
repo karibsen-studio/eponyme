@@ -5,16 +5,7 @@ export interface ResolvedEponymeLocale extends EponymeLocaleDefinition {
   missing: string[]
 }
 
-/**
- * Merges a configured catalogue over English.
- *
- * The merge is what makes a partial catalogue usable: a key the locale does not carry reads in
- * English rather than showing its own name to an editor. `missing` is what stops that from being
- * silent – it is the price of keeping translations in a package released on its own schedule.
- *
- * Throws rather than warns on a malformed option: a locale that is not a locale means the
- * dashboard is in a language nobody chose, and the build is the right place to notice.
- */
+/** Merges a configured catalogue over English. */
 export function resolveEponymeLocale(locale: unknown, prefix = '[Eponyme]'): ResolvedEponymeLocale {
   if (locale === undefined || locale === null) return { ...EPONYME_DEFAULT_LOCALE, missing: [] }
 
@@ -41,14 +32,7 @@ export function resolveEponymeLocale(locale: unknown, prefix = '[Eponyme]'): Res
   }
 }
 
-/**
- * The generated `#eponyme/locale` module.
- *
- * Only the catalogue and the plural rule are serialised; the lookup itself is imported from the
- * runtime, so it stays lint-covered and testable instead of living inside a string. A locale's
- * `plural` is inlined with `Function.prototype.toString()`, which is why it has to stand alone –
- * a closure over anything outside it does not survive the crossing.
- */
+/** The generated `#eponyme/locale` module. */
 export function renderEponymeLocaleModule(locale: ResolvedEponymeLocale, translatorPath: string): string {
   return [
     `import { createEponymeTranslator } from ${JSON.stringify(translatorPath)}`,

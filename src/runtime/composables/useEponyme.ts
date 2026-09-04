@@ -26,15 +26,7 @@ export interface UseEponymeOptions {
   raw?: boolean
 }
 
-/**
- * Named, and annotated on the function below, rather than left to inference.
- *
- * An inferred return type has to be expanded when the declaration files are generated, and
- * the expansion loses `typeof eponymeConfig`: it came out as `EponymeDataByName<any, Name>`,
- * which collapses every field to the union of all possible field values. Source and
- * playground were unaffected – they read `src` – so only installed versions of the package
- * lost their types, on the one composable everything else goes through.
- */
+/** Named, and annotated on the function below, rather than left to inference. */
 export interface UseEponymeResult<Data extends Record<string, unknown>> {
   data: Ref<Data | undefined>
   status: ComputedRef<EponymeStatus>
@@ -42,9 +34,8 @@ export interface UseEponymeResult<Data extends Record<string, unknown>> {
   scheduledPublishAt: ComputedRef<string | null>
   scheduledUnpublishAt: ComputedRef<string | null>
   /**
-   * The version this data was read at, sent back with every write so a save made against
-   * content someone else has already replaced is refused rather than silently applied.
-   * Only a private read carries one - published content answers `null`.
+   * The version this data was read at, sent back with every write so a save made against content someone
+   * else has already replaced is refused rather than silently applied.
    */
   revision: ComputedRef<string | null>
   pending: ComputedRef<boolean>
@@ -55,13 +46,7 @@ export interface UseEponymeResult<Data extends Record<string, unknown>> {
   save: (patch?: Partial<Data>, action?: EponymeAction, schedule?: EponymeSchedule) => Promise<Data | undefined>
 }
 
-/**
- * What the composable hands back: the refs, and a promise resolving to them.
- *
- * Awaiting it blocks setup until the first read is done, the way `useAsyncData` does.
- * Without it a caller could only await something else first, which loses the component
- * instance and with it the server render of the data - hence a hydration mismatch.
- */
+/** What the composable hands back: the refs, and a promise resolving to them. */
 export type UseEponymeReturn<Data extends Record<string, unknown>>
   = UseEponymeResult<Data> & Promise<UseEponymeResult<Data>>
 
@@ -77,25 +62,14 @@ export function useEponyme<const Name extends ConfigEponymeName>(
   const errors = ref<ValidationErrors>({})
   const saving = ref(false)
   const requestFetch = useRequestFetch()
-  // Built once: publishing clears sibling keys by prefix and has to be able to
-  // recognise this exact one, `:raw` suffix included.
+  // Built once: publishing clears sibling keys by prefix and has to be able to recognise this exact one,
+  // `:raw` suffix included.
   const cacheKey = `eponyme:${name}:${version}${options.raw ? ':raw' : ''}`
-  // Published content answers with a public `Cache-Control`, so the browser cache is
-  // allowed to serve it and a client-side navigation costs no round trip. Everything
-  // else is unreleased material that must never be stored, whatever the server says.
-  //
+  // Published content answers with a public `Cache-Control`, so the browser cache is allowed to serve it
+  // and a client-side navigation costs no round trip.
   const isPublicContent = version === 'published' && !options.raw
   const fetchCache = isPublicContent ? undefined : 'no-store' as const
-  // A preview is the one case where a public route is asked for an unreleased version, by
-  // its own URL. Rendering it on the server would put draft text in that route's HTML, and
-  // a public route is the host's to cache: under `swr`/`isr` nitro stores the rendered
-  // response and overwrites the `Cache-Control` set below, so the draft would then be
-  // replayed to anonymous visitors without the session ever being re-checked. Fetching it
-  // from the browser instead keeps it out of every stored artefact, on any host.
-  //
-  // An explicit `options.version` is not a preview: that is the dashboard reading its own
-  // entry on its own routes, which are authenticated and never cacheable, and it keeps the
-  // editor server-rendered.
+  // A preview is the one case where a public route is asked for an unreleased version, by its own URL.
   const isPreviewRead = options.version === undefined && !isPublicContent
   const result = useAsyncData(
     cacheKey,
@@ -124,9 +98,8 @@ export function useEponyme<const Name extends ConfigEponymeName>(
       const next = await requestFetch<EponymeResponse<Name>>(`/api/eponyme/${name}`, {
         method: 'PATCH',
         query: { action },
-        // The response carries the revision the write landed on, and replacing `response`
-        // below adopts it - so a second save locks on the first one rather than on the
-        // version the page was opened at.
+        // The response carries the revision the write landed on, and replacing `response` below adopts it -
+        // so a second save locks on the first one rather than on the version the page was opened at.
         headers: revision.value ? { [EPONYME_REVISION_HEADER]: revision.value } : undefined,
         body: action === 'draft'
           ? patch ?? data.value

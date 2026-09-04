@@ -10,11 +10,7 @@ export interface EponymeNavigationTreeInput {
   collectionEntries?: Record<string, Array<{ slug: string, title: string }>>
 }
 
-/**
- * Turns the flat, slash-separated names of the configuration into the nested tree the
- * sidebar renders. Intermediate segments become folders, so `pages/homepage` yields a
- * `pages` folder even though nothing declares one.
- */
+/** Turns the flat, slash-separated names of the configuration into the nested tree the sidebar renders. */
 export function buildEponymeNavigationTree(input: EponymeNavigationTreeInput): EponymeNavigationNode[] {
   const root: EponymeNavigationNode[] = []
 

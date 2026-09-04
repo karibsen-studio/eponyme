@@ -1,11 +1,9 @@
-import { getRequestURL } from 'h3'
 import type { H3Event } from 'h3'
+import { readEponymeRoutePath } from './route-path'
 
 /**
- * Form names may contain slashes (a form nested in a folder), so the route is a
- * wildcard and the path is re-parsed here. The form name is everything before the
- * trailing `/submissions` segment, which is what removes the ambiguity between a
- * nested form and the route suffix.
+ * Form names may contain slashes (a form nested in a folder), so the route is a wildcard and the path is
+ * re-parsed here.
  */
 export interface EponymeFormRoute {
   name: string
@@ -15,7 +13,7 @@ export interface EponymeFormRoute {
 }
 
 export function readEponymeFormRoute(event: H3Event): EponymeFormRoute | undefined {
-  const path = decodeURIComponent(getRequestURL(event).pathname.replace(/^\/api\/eponyme-forms\/?/, ''))
+  const path = readEponymeRoutePath(event, /^\/api\/eponyme-forms\/?/)
   if (!path) return undefined
 
   const segments = path.split('/').filter(Boolean)

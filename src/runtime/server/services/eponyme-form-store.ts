@@ -29,13 +29,7 @@ export interface PrismaEponymeFormSubmissionRow {
   createdAt: DateValue
 }
 
-/**
- * One clause per searchable field, ORed together. `path` is the Postgres form, a key list.
- *
- * `mode` is not decoration: without it Postgres matches the JSON string case-sensitively, so
- * searching `grace` would miss `Grace Hopper` and no one would find an address they typed in
- * lower case. Verified against Postgres 16 rather than assumed.
- */
+/** One clause per searchable field, ORed together. */
 export interface EponymeSubmissionSearch {
   OR: Array<{ data: { path: string[], string_contains: string, mode: 'insensitive' } }>
 }
@@ -61,11 +55,7 @@ export type PrismaEponymeFormClient = {
   }
 }
 
-/**
- * Types whose stored value is free text a person would search for. `select`, `radio` and
- * `checkboxGroup` are left out on purpose: they store the option value, not the label an
- * editor reads in the table, so matching them would answer on a word nobody can see.
- */
+/** Types whose stored value is free text a person would search for. */
 const SEARCHABLE_TYPES = new Set(['string', 'textarea', 'email', 'phone', 'url'])
 
 const DEFAULT_PER_PAGE = 25
@@ -83,9 +73,8 @@ export class EponymeFormService {
   }
 
   /**
-   * Without this, a missing model surfaces as "Cannot read properties of
-   * undefined (reading 'create')", which tells the developer nothing about the
-   * two steps they actually skipped.
+   * Without this, a missing model surfaces as "Cannot read properties of undefined (reading 'create')",
+   * which tells the developer nothing about the two steps they actually skipped.
    */
   private submissions(): PrismaEponymeFormClient['eponymeFormSubmission'] {
     const delegate = this.client?.eponymeFormSubmission
@@ -99,8 +88,8 @@ export class EponymeFormService {
   }
 
   /**
-   * Runs the same rules as the dashboard, in `publish` mode: a public form has no
-   * draft state, so `required` and the minimum bounds always apply.
+   * Runs the same rules as the dashboard, in `publish` mode: a public form has no draft state, so
+   * `required` and the minimum bounds always apply.
    */
   validate(name: string, payload: unknown): { data: Record<string, unknown> } | { errors: ValidationErrors } | undefined {
     const definition = this.forms[name]
@@ -109,8 +98,8 @@ export class EponymeFormService {
       return { errors: { _form: ['Body must be an object.'] } }
 
     const input = payload as Record<string, unknown>
-    // The honeypot is transport, not content: it must not reach validation, which only
-    // knows about declared fields.
+    // The honeypot is transport, not content: it must not reach validation, which only knows about declared
+    // fields.
     const { [definition.honeypot || '']: _honeypot, ...submitted } = input
     const unknownKeys = Object.keys(submitted).filter(key => !Object.hasOwn(definition.fields, key))
     if (unknownKeys.length)
@@ -145,9 +134,8 @@ export class EponymeFormService {
   }
 
   /**
-   * The counterpart of `submit` for a `custom` form: the host route has already decided
-   * to accept the submission, so this only validates and writes. Returns `undefined`
-   * when the form does not collect submissions, which the caller reports as a mistake.
+   * The counterpart of `submit` for a `custom` form: the host route has already decided to accept the
+   * submission, so this only validates and writes.
    */
   async store(name: string, payload: unknown): Promise<{ submission: EponymeFormSubmission } | { errors: ValidationErrors } | undefined> {
     const definition = this.forms[name]
@@ -186,8 +174,8 @@ export class EponymeFormService {
   }
 
   /**
-   * An empty `OR` matches nothing in Prisma, so a form with no free-text field must fall
-   * back to the unfiltered clause rather than answer that it has no submissions.
+   * An empty `OR` matches nothing in Prisma, so a form with no free-text field must fall back to the
+   * unfiltered clause rather than answer that it has no submissions.
    */
   private submissionWhere(definition: EponymeFormDefinitionBase, name: string, search?: string): EponymeSubmissionWhere {
     const query = search?.trim()
@@ -217,8 +205,8 @@ export class EponymeFormService {
   }
 
   /**
-   * Scoped by form name as well as by id: the ids come from the client, and an opaque id
-   * alone would let one form's page delete another form's rows.
+   * Scoped by form name as well as by id: the ids come from the client, and an opaque id alone would let
+   * one form's page delete another form's rows.
    */
   async deleteSubmissions(name: string, ids: string[]): Promise<number | undefined> {
     const definition = this.forms[name]

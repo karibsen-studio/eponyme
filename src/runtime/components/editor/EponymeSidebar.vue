@@ -137,10 +137,7 @@ const openFolders = useState<string[]>(`eponyme:open-folders:${normalizedBasePat
   navigation.value.filter(item => item.kind === 'folder').map(item => item.path)
 ))
 
-/**
- * The flat list the tree renders. Only what is open is in it, which is what lets a
- * collection of a few thousand entries cost the rows actually on screen.
- */
+/** The flat list the tree renders. */
 const rows = computed(() => flattenEponymeNavigationTree(filteredTree.value, {
   openFolders: openFolders.value,
   forceOpen: isFiltering.value,

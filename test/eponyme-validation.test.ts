@@ -251,11 +251,28 @@ describe('validateEponymeData: per field type', () => {
     expect(validate(schema, { cta: { href: 'example.com', type: 'external', openInNewTab: true } }))
       .toEqual({ cta: ['External links must be HTTP(S) URLs.'] })
     expect(validate(schema, { cta: { href: 'about', type: 'internal', openInNewTab: false } }))
-      .toEqual({ cta: ['Internal links must start with / or #.'] })
+      .toEqual({ cta: ['An internal link must stay on this site: start it with / or #.'] })
     expect(validate(schema, { cta: { href: '', type: 'internal', openInNewTab: false } }))
       .toEqual({ cta: ['This field is required.'] })
     expect(validate(schema, { cta: { href: '/about', type: 'internal', openInNewTab: false } })).toEqual({})
     expect(validate(schema, { cta: { href: '/file.pdf', type: 'internal', openInNewTab: false, download: true } })).toEqual({})
+  })
+
+  it('refuses an internal link that resolves to another origin', () => {
+    const schema = { cta: field.url() } satisfies EponymeSchema
+    const internal = (href: string) => validate(schema, { cta: { href, type: 'internal', openInNewTab: false } })
+    // Each of these starts with `/`, and each of them leaves the site once a browser resolves it.
+    for (const href of ['//evil.example', '///evil.example', '/\\evil.example', '//evil.example/path', '/\t//evil.example'])
+      expect(internal(href)).toEqual({ cta: ['An internal link must stay on this site: start it with / or #.'] })
+    expect(internal('/a/b?c=1#d')).toEqual({})
+    expect(internal('#anchor')).toEqual({})
+  })
+
+  it('stops at the length limit rather than running the pattern on an oversized value', () => {
+    const schema = { ref: field.string({ maxLength: 10, regex: /^a+$/ }) } satisfies EponymeSchema
+    expect(validate(schema, { ref: 'b'.repeat(2000) })).toEqual({ ref: ['Must contain at most 10 characters.'] })
+    expect(validate(schema, { ref: 'bbb' })).toEqual({ ref: ['Has an invalid format.'] })
+    expect(validate(schema, { ref: 'aaa' })).toEqual({})
   })
 
   it('counts rich text length on the text content, not the markup', () => {

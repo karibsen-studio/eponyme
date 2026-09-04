@@ -1,15 +1,16 @@
 import { t } from '#eponyme/locale'
-import { createError, defineEventHandler, getRequestURL } from 'h3'
+import { createError, defineEventHandler } from 'h3'
 import { useEponymeService } from '../../services/eponyme-service'
 import { assertEponymeMutationOrigin } from '../../utils/auth'
 import { requireEponymePermission, resolveEponymeContentResource } from '../../utils/eponyme-permissions'
 import { callEponymeHook } from '../../utils/eponyme-hooks'
 import { splitEponymeCollectionEntry } from '../../utils/eponyme-entry'
 import { requireEponymeRevision } from '../../utils/eponyme-revision'
+import { readEponymeRoutePath } from '../../utils/route-path'
 
 export default defineEventHandler(async (event) => {
   assertEponymeMutationOrigin(event)
-  const path = decodeURIComponent(getRequestURL(event).pathname.replace(/^\/api\/eponyme-history\//, ''))
+  const path = readEponymeRoutePath(event, /^\/api\/eponyme-history\//)
   const match = path.match(/^(.+)\/(\d+)$/)
   if (!match) throw createError({ status: 400, message: t('server.versionIdRequired') })
   const [, name, rawVersionId] = match

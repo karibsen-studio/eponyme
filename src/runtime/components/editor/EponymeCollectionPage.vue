@@ -35,8 +35,8 @@ const errors = ref<Record<string, string[]>>({})
 const { load: loadNavigation } = useEponymeNavigation()
 const searchInput = ref('')
 /**
- * Page and search move together as one value: changing the search resets to the first page,
- * and a single source means a single refetch rather than one per part.
+ * Page and search move together as one value: changing the search resets to the first page, and a single
+ * source means a single refetch rather than one per part.
  */
 const listQuery = ref({ page: 1, search: '' })
 const endpoint = computed(() => `/api/eponyme-collections/${props.name}`)
@@ -80,10 +80,7 @@ const entries = computed(() => response.value?.entries ?? [])
 const total = computed(() => response.value?.total ?? 0)
 const pageCount = computed(() => Math.max(1, Math.ceil(total.value / PAGE_SIZE)))
 const isSearching = computed(() => listQuery.value.search.length > 0)
-/**
- * The page numbers to show: the first, the last, and the ones around the current page.
- * `null` is where a gap is drawn, so a collection of two hundred pages still fits.
- */
+/** The page numbers to show: the first, the last, and the ones around the current page. */
 const pageItems = computed<Array<number | null>>(() => {
   const last = pageCount.value
   const current = listQuery.value.page
@@ -141,8 +138,8 @@ function resetCreateForm() {
 }
 
 /**
- * Reuses the create dialog: a copy is a new entry that happens to start from another one's
- * draft, so it goes through the same endpoint, the same validation and the same slug rules.
+ * Reuses the create dialog: a copy is a new entry that happens to start from another one's draft, so it
+ * goes through the same endpoint, the same validation and the same slug rules.
  */
 function duplicateEntry(entry: EponymeCollectionEntryMeta) {
   duplicateOf.value = entry
@@ -169,8 +166,8 @@ async function createEntry() {
   creating.value = true
   errors.value = {}
   try {
-    // Read at submit rather than when the dialog opened, so a copy carries what the entry
-    // holds now – and only the draft, since that is what a new entry starts as.
+    // Read at submit rather than when the dialog opened, so a copy carries what the entry holds now - and
+    // only the draft, since that is what a new entry starts as.
     const source = duplicateOf.value
       ? (await requestFetch<{ data: Record<string, unknown> }>(`/api/eponyme/${props.name}/${encodeURIComponent(duplicateOf.value.slug)}`, {
           query: { version: 'draft', raw: 1 },
@@ -218,11 +215,7 @@ async function restoreEntry(entry: EponymeCollectionEntryMeta) {
   }
 }
 
-/**
- * The version the listing showed this entry at. Trashing and restoring both hide or bring
- * back content someone else may have edited since the list was loaded, so the server checks
- * it against the row before touching it.
- */
+/** The version the listing showed this entry at. */
 function revisionHeaders(entry: EponymeCollectionEntryMeta) {
   return entry.updatedAt ? { [EPONYME_REVISION_HEADER]: entry.updatedAt } : undefined
 }

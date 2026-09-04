@@ -138,8 +138,8 @@ const specificProps = computed<Record<string, unknown>>(() => {
       }
     case 'color':
       return { presets: field.options.presets, allowCustom: field.options.allowCustom }
-    // The picker reads `to` and `multiple` off the definition itself, which is also what
-    // tells it whether the value is a slug or a list of them.
+    // The picker reads `to` and `multiple` off the definition itself, which is also what tells it whether
+    // the value is a slug or a list of them.
     case 'relation':
       return { definition: field }
     case 'url':

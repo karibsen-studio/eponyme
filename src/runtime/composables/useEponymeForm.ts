@@ -47,8 +47,8 @@ export interface UseEponymeFormResult<Data extends Record<string, unknown>> {
 }
 
 /**
- * Renders nothing: the host application owns the markup, so a public page never
- * inherits the dashboard's styling or its editor dependencies.
+ * Renders nothing: the host application owns the markup, so a public page never inherits the dashboard's
+ * styling or its editor dependencies.
  */
 export function useEponymeForm<const Name extends ConfigFormName>(
   name: Name,
@@ -61,8 +61,8 @@ export function useEponymeForm<const Name extends ConfigFormName>(
   const pending = ref(false)
   const submitted = ref(false)
   const values = ref<Record<string, unknown>>(createDefaultEponymeData(definition.fields) as Record<string, unknown>)
-  // A public form has no previously saved state, so every edited field counts as
-  // touched and its message shows as soon as it becomes invalid.
+  // A public form has no previously saved state, so every edited field counts as touched and its message
+  // shows as soon as it becomes invalid.
   const validation = useEponymeValidation(definition.fields, values, ref({}), { serverErrors })
 
   const fields = computed<UseEponymeFormField[]>(() => Object.entries(definition.fields).map(([fieldName, fieldDefinition]) => ({
@@ -90,8 +90,8 @@ export function useEponymeForm<const Name extends ConfigFormName>(
 
     pending.value = true
     try {
-      // The configured mode decides, not the presence of a callback, so the
-      // behaviour stays readable from eponyme.config.ts alone.
+      // The configured mode decides, not the presence of a callback, so the behaviour stays readable from
+      // eponyme.config.ts alone.
       if (definition.submission.mode === 'custom') {
         if (!options.onSubmit)
           throw new Error(`[Eponyme] Form "${name}" uses the custom submission mode and needs an onSubmit handler. Switch it to submission: { mode: 'managed' } to let Eponyme store it instead.`)
@@ -100,8 +100,8 @@ export function useEponymeForm<const Name extends ConfigFormName>(
       else {
         if (options.onSubmit && import.meta.dev)
           console.warn(`[Eponyme] Form "${name}" is managed, so its onSubmit handler is ignored.`)
-        // The wildcard route is not in Nitro's generated route map, so its method
-        // cannot be inferred from the literal path.
+        // The wildcard route is not in Nitro's generated route map, so its method cannot be inferred from
+        // the literal path.
         await requestFetch(`/api/eponyme-forms/${name}` as string, {
           method: 'POST',
           body: values.value,
