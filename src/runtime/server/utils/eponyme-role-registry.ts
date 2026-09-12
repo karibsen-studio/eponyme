@@ -25,8 +25,10 @@ const sensitiveActions = new Set<EponymePermissionAction>([
   'audit.read',
 ])
 
+// Content only: form submissions carry the contact details visitors typed, which is not what "can read the
+// site's content" is understood to mean. A role that needs them declares it, per form.
 const readRules: EponymePermissionRule[] = [
-  allow(['content.read', 'submissions.read'], [{ kind: 'all' }]),
+  allow(['content.read'], [{ kind: 'all' }]),
 ]
 
 const defaultRoles: EponymeRoleDefinitions = {
@@ -46,9 +48,9 @@ const defaultRoles: EponymeRoleDefinitions = {
         'content.schedule',
         'content.trash',
         'content.restore',
+        'submissions.read',
         'submissions.delete',
       ], [{ kind: 'all' }]),
-      allow(['content.export'], [{ kind: 'system', name: 'content' }]),
       allow(['media.read', 'media.upload', 'media.delete'], [{ kind: 'system', name: 'media' }]),
     ],
   },
