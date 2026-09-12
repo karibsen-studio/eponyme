@@ -5,7 +5,7 @@ import type { ComputedRef, Ref } from 'vue'
 import type eponymeConfig from '#eponyme/config'
 import type { EponymeCollectionDataByName, EponymeCollectionFilter, EponymeCollectionName } from '../types'
 import type { EponymeCollectionEntry, EponymeSortDirection, EponymeStatus, EponymeVersionSelector } from '../server/services/eponyme-store'
-import { readPreviewQuery, readPreviewVersion } from '../utils/preview'
+import { isEponymePreviewRoute, readPreviewQuery, readPreviewVersion } from '../utils/preview'
 import { cacheForPublicRead } from '../utils/hydration-cache'
 import { serializeEponymeFilter } from '../utils/serialize-eponyme-filter'
 
@@ -65,6 +65,7 @@ export function useEponymeCollection<const Name extends ConfigCollectionName>(
   options: UseEponymeCollectionOptions<Name> = {},
 ): UseEponymeCollectionReturn<EponymeCollectionDataByName<typeof eponymeConfig, Name>> {
   type Data = EponymeCollectionDataByName<typeof eponymeConfig, Name>
+  const route = useRoute()
   const requestFetch = useRequestFetch()
   const filter = serializeEponymeFilter(options.where)
   const query = {
@@ -84,7 +85,9 @@ export function useEponymeCollection<const Name extends ConfigCollectionName>(
     { getCachedData: cacheForPublicRead(true) },
   )
   const entries = computed(() => result.data.value?.entries ?? [])
-  if (import.meta.client) useEventListener(window, 'focus', () => void result.refresh())
+  // Preview only: a public page is already purged on publication, so a refetch per tab focus buys nothing.
+  if (import.meta.client && isEponymePreviewRoute(route.query))
+    useEventListener(window, 'focus', () => void result.refresh())
 
   const api: UseEponymeCollectionResult<Data> = {
     entries,
@@ -121,7 +124,8 @@ export function useEponymeCollectionEntry<const Name extends ConfigCollectionNam
     }),
     { server: !isPreviewRead, getCachedData: cacheForPublicRead(isPublicContent) },
   )
-  if (import.meta.client) useEventListener(window, 'focus', () => void result.refresh())
+  if (import.meta.client && isEponymePreviewRoute(route.query))
+    useEventListener(window, 'focus', () => void result.refresh())
 
   const api: UseEponymeCollectionEntryResult<Data> = {
     data: result.data as Ref<{ data: Data } | undefined>,
