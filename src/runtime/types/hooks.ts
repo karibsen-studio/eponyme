@@ -40,6 +40,16 @@ export interface EponymeFormSubmissionContext {
   id?: string
 }
 
+/** Which access to the shared cache tier failed. */
+export type EponymeCacheOperation = 'read' | 'write' | 'invalidate'
+
+export interface EponymeCacheFailureContext {
+  operation: EponymeCacheOperation
+  /** The cache key, or the prefix an invalidation covered. */
+  key: string
+  error: unknown
+}
+
 export interface EponymeHooks {
   'eponyme:entry:beforeSave': (context: EponymeEntryBeforeSaveContext) => void | Promise<void>
   /** After a draft save, and after an import wrote an entry that is not published. */
@@ -65,4 +75,10 @@ export interface EponymeHooks {
   'eponyme:form:beforeSubmit': (context: EponymeFormSubmissionContext) => void | Promise<void>
   /** After a managed submission was stored, with its id. */
   'eponyme:form:submitted': (context: Required<EponymeFormSubmissionContext>) => void | Promise<void>
+
+  /**
+   * The shared cache tier could not be reached. Content is served all the same, from the database. Fires on
+   * every failure, where the log is throttled, so a listener that reports somewhere should throttle too.
+   */
+  'eponyme:cache:failed': (context: EponymeCacheFailureContext) => void | Promise<void>
 }

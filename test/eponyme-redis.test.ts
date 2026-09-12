@@ -117,7 +117,10 @@ describeRedis('Redis-backed cache and rate limiting', () => {
 
     await cache.dropPrefix('rows:blog')
 
-    expect((await probe!.keys(`${MOUNT}:*`)).sort()).toEqual([`${MOUNT}:rows:blogging:published`])
+    // The invalidation token sits beside the content, which is how another instance learns a read
+    // that started before this drop must not write what it holds.
+    const keys = (await probe!.keys(`${MOUNT}:*`)).sort()
+    expect(keys).toEqual([`${MOUNT}:invalidated`, `${MOUNT}:rows:blogging:published`])
   })
 
   it('confirms `clear()` would not have done it, which is why `getKeys()` is used', async () => {
