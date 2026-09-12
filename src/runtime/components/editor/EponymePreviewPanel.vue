@@ -112,10 +112,16 @@ watch(() => props.name, () => {
     <p class="ep:m-0 ep:px-3 ep:py-2 ep:text-[11px] ep:text-text-muted">
       {{ t('preview.hint') }}
     </p>
+    <!--
+      No `allow-same-origin`: the previewed page runs its scripts and forms, but stays a stranger to the
+      dashboard around it, so a compromised public page cannot reach the parent or call the API with the
+      editor's session.
+    -->
     <iframe
       :key="previewUrl"
       :src="previewUrl"
       :title="t('preview.frame')"
+      sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
       class="ep:min-h-0 ep:w-full ep:flex-1 ep:border-0 ep:bg-always-white"
     />
   </aside>
