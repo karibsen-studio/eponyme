@@ -3,7 +3,8 @@ import { getEponymeCacheTags, setEponymePublicCache } from '../utils/eponyme-cac
 import { getEponymeSitemapEntries } from '../utils/eponyme-sitemap'
 
 export default defineEventHandler(async (event) => {
-  // Published URLs only, identical for every caller: the same cache window as the content.
+  // Published URLs only, identical for every caller: the same cache window as the content. Purge tags
+  // rather than response tags: any publication changes this list.
   setEponymePublicCache(event, getEponymeCacheTags('sitemap'))
   return { entries: await getEponymeSitemapEntries() }
 })
