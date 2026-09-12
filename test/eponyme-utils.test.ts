@@ -13,7 +13,7 @@ import { isFieldVisible } from '../src/runtime/utils/is-field-visible'
 import { serializeEponymeFilter } from '../src/runtime/utils/serialize-eponyme-filter'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas, isEponymeForm, isEponymeSchema } from '../src/runtime/utils/get-eponyme-schemas'
 import { findEponymeVariableRanges, interpolateEponymeText, interpolateEponymeValue, resolveEponymeVariables, summariseEponymeVariables } from '../src/runtime/utils/variables'
-import { applyPreviewSlug, readPreviewQuery, readPreviewVersion, resolvePreviewPath } from '../src/runtime/utils/preview'
+import { applyPreviewSlug, isEponymePreviewRoute, readPreviewQuery, readPreviewVersion, resolvePreviewPath } from '../src/runtime/utils/preview'
 import { buildEponymeNavigationTree } from '../src/runtime/utils/build-navigation-tree'
 import { flattenEponymeNavigationTree } from '../src/runtime/utils/flatten-navigation-tree'
 import { filterEponymeNavigationTree, preloadEponymeNavigationSearch } from '../src/runtime/utils/filter-navigation-tree'
@@ -186,6 +186,16 @@ describe('readPreviewQuery', () => {
     expect(readPreviewQuery({ __eponyme_preview: ['articles/a', 'b'], __eponyme_preview_version: ['7'] }))
       .toEqual({ entry: 'articles/a', version: '7' })
     expect(readPreviewQuery({})).toEqual({ entry: undefined, version: undefined })
+  })
+})
+
+describe('isEponymePreviewRoute', () => {
+  it('answers on the preview parameter alone, whatever version it names', () => {
+    expect(isEponymePreviewRoute({ __eponyme_preview: 'articles/a' })).toBe(true)
+    expect(isEponymePreviewRoute({ __eponyme_preview: ['articles/a'], __eponyme_preview_version: ['7'] })).toBe(true)
+    // A public visit, which is what keeps a refresh on focus off a cached page.
+    expect(isEponymePreviewRoute({})).toBe(false)
+    expect(isEponymePreviewRoute({ page: '2' })).toBe(false)
   })
 })
 

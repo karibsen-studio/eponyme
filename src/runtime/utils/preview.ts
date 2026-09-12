@@ -60,3 +60,8 @@ export function readPreviewQuery(query: Record<string, unknown>): { entry: strin
   const version = Array.isArray(rawVersion) ? rawVersion[0] : rawVersion
   return { entry: entry === undefined || entry === null ? undefined : String(entry), version }
 }
+
+/** Whether the current route is being shown inside the dashboard preview panel. */
+export function isEponymePreviewRoute(query: Record<string, unknown>): boolean {
+  return readPreviewQuery(query).entry !== undefined
+}
