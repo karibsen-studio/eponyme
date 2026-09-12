@@ -7,6 +7,7 @@ import type { EponymeCollectionDataByName, EponymeCollectionFilter, EponymeColle
 import type { EponymeCollectionEntry, EponymeSortDirection, EponymeStatus, EponymeVersionSelector } from '../server/services/eponyme-store'
 import { readPreviewQuery, readPreviewVersion } from '../utils/preview'
 import { cacheForPublicRead } from '../utils/hydration-cache'
+import { serializeEponymeFilter } from '../utils/serialize-eponyme-filter'
 
 type ConfigCollectionName = EponymeCollectionName<typeof eponymeConfig>
 
@@ -59,46 +60,13 @@ export interface UseEponymeCollectionEntryResult<Data extends Record<string, unk
   refresh: () => Promise<void>
 }
 
-/**
- * The query and the cache key come from one sorted walk on purpose: a key that missed part of the filter
- * would let two listings share a cache entry, which reads as a filter that randomly stops working.
- */
-function serializeFilter(
-  where: Record<string, unknown> | undefined,
-): { query: Record<string, string | string[]>, key: string } {
-  const query: Record<string, string | string[]> = {}
-  const parts: string[] = []
-  const write = (name: string, values: string[]) => {
-    if (!values.length) return
-    query[name] = values
-    parts.push(`${name}=${values.join('|')}`)
-  }
-  // `String` rather than the raw value: a boolean field is filtered with `true`, and the index stores every
-  // value as text.
-  const list = (value: unknown) => (Array.isArray(value) ? value : [value]).map(String).filter(Boolean)
-
-  for (const key of Object.keys(where ?? {}).sort()) {
-    const condition = where![key]
-    if (condition === undefined || condition === null) continue
-    if (typeof condition !== 'object' || Array.isArray(condition)) {
-      write(`where[${key}]`, list(condition))
-      continue
-    }
-    // Sorted, so two filters that differ only in how they were written share a cache key.
-    for (const operator of Object.keys(condition).sort()) {
-      write(`where[${key}][${operator}]`, list((condition as Record<string, unknown>)[operator]))
-    }
-  }
-  return { query, key: parts.join(',') }
-}
-
 export function useEponymeCollection<const Name extends ConfigCollectionName>(
   name: Name,
   options: UseEponymeCollectionOptions<Name> = {},
 ): UseEponymeCollectionReturn<EponymeCollectionDataByName<typeof eponymeConfig, Name>> {
   type Data = EponymeCollectionDataByName<typeof eponymeConfig, Name>
   const requestFetch = useRequestFetch()
-  const filter = serializeFilter(options.where)
+  const filter = serializeEponymeFilter(options.where)
   const query = {
     take: options.take,
     skip: options.skip,
