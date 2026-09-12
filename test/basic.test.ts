@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'node:url'
-import { rm } from 'node:fs/promises'
+import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { afterAll, beforeAll, describe, it, expect } from 'vitest'
 import { setup, $fetch, url } from '@nuxt/test-utils/e2e'
 import { EPONYME_DATE_LOCALE } from '../src/runtime/utils/date-locale'
@@ -78,6 +78,47 @@ describe('ssr', async () => {
       body: JSON.stringify({ username: 'EponymeOwner', password: 'InitialPassword123!' }),
     })
     authCookie = response.headers.get('set-cookie')?.split(';')[0] ?? ''
+  })
+
+  // S07: the prefix binds the cookie to this exact origin over a secure connection, so a subdomain or a
+  // plain-HTTP page cannot write the session cookie the dashboard reads.
+  it('names the session cookie with the __Host- prefix in production', async () => {
+    const response = await fetch(url('/api/eponyme-auth/login'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ username: 'EponymeOwner', password: 'InitialPassword123!' }),
+    })
+    const cookie = response.headers.get('set-cookie') ?? ''
+    expect(cookie).toContain('__Host-eponyme_session=')
+    expect(cookie).toContain('Path=/')
+    expect(cookie).toContain('Secure')
+    expect(cookie).toContain('HttpOnly')
+    expect(cookie).toContain('SameSite=Strict')
+    expect(cookie).not.toContain('Domain=')
+  })
+
+  // B14: the `__Host-` prefix is only accepted with `Secure`, deletion included. Without it the browser
+  // refuses the clearing header and keeps sending a token the server has already revoked.
+  it('clears the prefixed cookie with the attributes the browser requires', async () => {
+    const login = await fetch(url('/api/eponyme-auth/login'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'origin': origin() },
+      body: JSON.stringify({ username: 'EponymeOwner', password: 'InitialPassword123!' }),
+    })
+    const session = login.headers.get('set-cookie')?.split(';')[0] ?? ''
+    const response = await fetch(url('/api/eponyme-auth/logout'), {
+      method: 'POST',
+      headers: { cookie: session, origin: origin() },
+    })
+    const cleared = response.headers.get('set-cookie') ?? ''
+    expect(cleared).toContain('__Host-eponyme_session=')
+    expect(cleared).toContain('Secure')
+    expect(cleared).toContain('Path=/')
+    expect(cleared).toContain('HttpOnly')
+    expect(cleared).not.toContain('Domain=')
+    expect(cleared).toContain('Max-Age=0')
+    // Both names: the prefixed one, and the one a session opened before this deployment still carries.
+    expect(cleared.match(/eponyme_session=/g)).toHaveLength(2)
   })
 
   it('renders the index page', async () => {
@@ -303,6 +344,22 @@ describe('ssr', async () => {
     })
   })
 
+  // S13: an effect the host never applied - a purge, a webhook - used to leave nothing behind but a log
+  // line on the server. The write still succeeds, and the failure is now readable from the dashboard.
+  it('records a failing notification hook in the audit log', async () => {
+    await $fetch('/api/eponyme/pages/homepage?action=draft', {
+      method: 'PATCH',
+      body: { title: 'Hook failure trace' },
+      ...authenticated(),
+    })
+
+    const audit = await $fetch<EponymeAuditPage>('/api/eponyme-audit', { query: { perPage: 20 }, ...authenticated() })
+    const failure = audit.events.find(entry => entry.action === 'hook.failed')
+    expect(failure).toMatchObject({ outcome: 'failure', resourceName: 'eponyme:entry:saved' })
+
+    await saveAndPublish('pages/homepage', { title: 'Welcome' })
+  })
+
   it('lets a blocking hook reject or amend a write', async () => {
     await expect($fetch('/api/eponyme/pages/homepage?action=draft', {
       method: 'PATCH',
@@ -323,6 +380,26 @@ describe('ssr', async () => {
       method: 'POST',
       body: { name: 'Ada', email: 'blocked@example.com', message: 'Should not pass.' },
     })).rejects.toMatchObject({ status: 422 })
+
+    await saveAndPublish('pages/homepage', { title: 'Welcome' })
+  })
+
+  // A publication sends no content of its own - it consumes the stored draft - so the amendment a
+  // listener makes to that draft has to reach the version that goes online.
+  it('carries a hook amendment through a publication', async () => {
+    await $fetch('/api/eponyme/pages/homepage?action=draft', {
+      method: 'PATCH',
+      body: { title: 'publish-amend-me' },
+      ...authenticated(),
+    })
+    await $fetch('/api/eponyme/pages/homepage?action=publish', {
+      method: 'PATCH',
+      body: {},
+      ...authenticated(),
+    })
+
+    await expect($fetch('/api/eponyme/pages/homepage?raw=1'))
+      .resolves.toMatchObject({ data: { title: 'amended at publish' } })
 
     await saveAndPublish('pages/homepage', { title: 'Welcome' })
   })
@@ -636,17 +713,20 @@ describe('ssr', async () => {
   it('tags the public routes that render an entry, so a purge drops the HTML too', async () => {
     // The fixture declares `previewPaths: { 'pages/homepage': '/', articles: '/articles/:slug' }`.
     const singleton = await fetch(url('/'))
-    expect(singleton.headers.get('cache-tag')).toBe('eponyme,eponyme:pages/homepage')
-    expect(singleton.headers.get('vercel-cache-tag')).toBe('eponyme,eponyme:pages/homepage')
+    expect(singleton.headers.get('cache-tag')).toBe('eponyme:pages/homepage')
+    expect(singleton.headers.get('vercel-cache-tag')).toBe('eponyme:pages/homepage')
 
     // A collection page cannot name a slug in a route rule, so it carries the collection tag,
     // which is one of the tags `getEponymeCacheTags` returns for any entry of that collection.
     const entry = await fetch(url('/articles/whatever'))
-    expect(entry.headers.get('cache-tag')).toBe('eponyme,eponyme:articles')
+    expect(entry.headers.get('cache-tag')).toBe('eponyme:articles')
 
     // The same tag the API response carries, so one purge invalidates both.
     const api = await fetch(url('/api/eponyme-collections/articles'))
-    expect(api.headers.get('cache-tag')).toBe('eponyme,eponyme:articles')
+    expect(api.headers.get('cache-tag')).toBe('eponyme:articles')
+
+    // Never the global tag: on every response it would make each publication purge the whole site.
+    expect(singleton.headers.get('cache-tag')?.split(',')).not.toContain('eponyme')
   })
 
   it('keeps a preview response out of every cache', async () => {
@@ -1022,6 +1102,14 @@ describe('ssr', async () => {
     })
     expect(forbidden.status).toBe(403)
     await expect($fetch('/api/eponyme/pages/homepage')).resolves.toMatchObject({ data: { title: 'Welcome' } })
+
+    // S10: reading the site's content is not reading what visitors typed into its forms.
+    const submissions = await fetch(url('/api/eponyme-forms/contact/submissions'), { headers: { cookie: viewerCookie } })
+    expect(submissions.status).toBe(403)
+
+    // S11: a refusal leaves a trace, with the permission that was missing.
+    const audit = await $fetch<EponymeAuditPage>('/api/eponyme-audit', { query: { perPage: 20 }, ...authenticated() })
+    expect(audit.events.some(entry => entry.action === 'permission.refused' && entry.outcome === 'failure')).toBe(true)
   })
 
   it('keeps the system features an owner needs out of reach of a content rule', async () => {
@@ -1112,6 +1200,110 @@ describe('ssr', async () => {
     await expect($fetch('/api/eponyme-audit', publisher)).rejects.toMatchObject({ status: 403 })
 
     await removeArticle('permission-workflow')
+  })
+
+  // S03: a role holding `content.restore` without `content.publish` must not reach the same result
+  // through the history or the trash that the publish button would have refused it.
+  it('refuses a restore that would publish to a role that may not publish', async () => {
+    const createSession = async (username: string, role: string, password: string) => {
+      const created = await $fetch<{ temporaryPassword: string }>('/api/eponyme-users', {
+        method: 'POST',
+        body: { username, role },
+        ...authenticated(),
+      })
+      const login = await fetch(url('/api/eponyme-auth/login'), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ username, password: created.temporaryPassword }),
+      })
+      const temporaryCookie = login.headers.get('set-cookie')?.split(';')[0] ?? ''
+      const changed = await fetch(url('/api/eponyme-auth/change-password'), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'cookie': temporaryCookie, 'origin': origin() },
+        body: JSON.stringify({ currentPassword: created.temporaryPassword, newPassword: password }),
+      })
+      return changed.headers.get('set-cookie')?.split(';')[0] ?? ''
+    }
+    const restorerCookie = await createSession('HistoryRestorer', 'history-restorer', 'Restorer password 123!')
+    const restorer = (revision: string) => ({
+      headers: { 'cookie': restorerCookie, 'origin': origin(), 'x-eponyme-revision': revision },
+    })
+
+    await $fetch('/api/eponyme-collections/articles', {
+      method: 'POST',
+      body: { title: 'Restore rights' },
+      ...authenticated(),
+    })
+    await saveAndPublish('articles/restore-rights', { title: 'Restore rights', slug: 'restore-rights', excerpt: 'Public.' })
+    await $fetch('/api/eponyme/articles/restore-rights?action=unpublish', { method: 'PATCH', body: {}, ...authenticated() })
+
+    const { history } = await $fetch<{ history: Array<{ id: number, action: string }> }>(
+      '/api/eponyme-history/articles/restore-rights',
+      authenticated(),
+    )
+    const published = history.find(version => version.action === 'publish')!
+
+    await expect($fetch(`/api/eponyme-history/articles/restore-rights/${published.id}`, {
+      method: 'PATCH',
+      ...restorer(await draftRevision('articles/restore-rights')),
+    })).rejects.toMatchObject({ status: 403 })
+    // The entry is still off the site, which is what the refusal was protecting.
+    await expect($fetch('/api/eponyme/articles/restore-rights')).rejects.toMatchObject({ status: 404 })
+
+    // The same door through the trash: an entry trashed while published comes back public.
+    await saveAndPublish('articles/restore-rights', { title: 'Restore rights', slug: 'restore-rights', excerpt: 'Public.' })
+    await trashEntry('articles/restore-rights')
+    await expect($fetch('/api/eponyme-trash/articles/restore-rights', {
+      method: 'PATCH',
+      ...restorer(await trashedRevision('articles', 'restore-rights')),
+    })).rejects.toMatchObject({ status: 403 })
+
+    // An owner still restores both, and a draft-only restore stays open to the restorer.
+    await untrashEntry('articles', 'restore-rights')
+    await $fetch('/api/eponyme/articles/restore-rights?action=unpublish', { method: 'PATCH', body: {}, ...authenticated() })
+    await $fetch('/api/eponyme/articles/restore-rights?action=draft', {
+      method: 'PATCH',
+      body: { title: 'Restore rights', slug: 'restore-rights', excerpt: 'Reworked.' },
+      ...authenticated(),
+    })
+    const { history: later } = await $fetch<{ history: Array<{ id: number, action: string, status: string }> }>(
+      '/api/eponyme-history/articles/restore-rights',
+      authenticated(),
+    )
+    const draftVersion = later.find(version => version.action === 'draft' && version.status === 'unpublished')!
+    await expect($fetch<{ data: { excerpt: string } }>(`/api/eponyme-history/articles/restore-rights/${draftVersion.id}`, {
+      method: 'PATCH',
+      ...restorer(await draftRevision('articles/restore-rights')),
+    })).resolves.toMatchObject({ status: 'unpublished' })
+
+    await removeArticle('restore-rights')
+  })
+
+  // S06: without `take` the listing used to answer with the whole collection, which is a scan any
+  // visitor could ask for.
+  it('answers a listing without take with one page, not the whole collection', async () => {
+    const slugs = ['page-cap-1', 'page-cap-2', 'page-cap-3']
+    for (const slug of slugs) {
+      await $fetch('/api/eponyme-collections/articles', {
+        method: 'POST',
+        body: { title: slug, slug },
+        ...authenticated(),
+      })
+    }
+
+    const page = await $fetch<{ entries: unknown[], total: number }>('/api/eponyme-collections/articles?version=draft', authenticated())
+    expect(page.entries.length).toBeLessThanOrEqual(200)
+    // The count still describes the whole collection, so a pager knows there is more.
+    expect(page.total).toBeGreaterThanOrEqual(slugs.length)
+
+    // An offset past the cap is refused as an offset, not answered with an expensive scan.
+    const far = await $fetch<{ entries: unknown[] }>(
+      '/api/eponyme-collections/articles?version=draft&skip=999999999',
+      authenticated(),
+    )
+    expect(far.entries).toEqual([])
+
+    for (const slug of slugs) await removeArticle(slug)
   })
 
   it('renders one coherent action set for every application role', async () => {
@@ -1471,7 +1663,7 @@ describe('ssr', async () => {
     await expect($fetch('/api/eponyme-import', { method: 'POST', body: tampered, ...authenticated() }))
       .rejects.toMatchObject({ status: 409, data: { data: { schemaMismatch: ['articles'] } } })
 
-    // An editor may export, but overwriting the whole site stays with owners.
+    // S10: taking the whole site out, like putting one back, stays with owners. An editor edits.
     const editor = await $fetch<{ user: { id: string }, temporaryPassword: string }>('/api/eponyme-users', {
       method: 'POST',
       body: { username: 'ImportEditor', role: 'editor' },
@@ -1490,8 +1682,13 @@ describe('ssr', async () => {
     })
     const editorCookie = changed.headers.get('set-cookie')?.split(';')[0] ?? ''
 
-    await expect($fetch('/api/eponyme-export', { headers: { cookie: editorCookie, origin: origin() } }))
-      .resolves.toMatchObject({ eponyme: { format: 1 } })
+    const refusedExport = await fetch(url('/api/eponyme-export'), { headers: { cookie: editorCookie, origin: origin() } })
+    expect(refusedExport.status).toBe(403)
+    // And a viewer no longer reads the contact details visitors typed into a form.
+    const refusedSubmissions = await fetch(url('/api/eponyme-forms/contact/submissions'), {
+      headers: { cookie: editorCookie, origin: origin() },
+    })
+    expect(refusedSubmissions.status).toBe(200)
     const refused = await fetch(url('/api/eponyme-import'), {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'cookie': editorCookie, 'origin': origin() },
@@ -1542,11 +1739,13 @@ describe('ssr', async () => {
       await $fetch('/api/eponyme-collections/articles', { method: 'POST', body: { title: 'Tagged entry' }, ...authenticated() })
       await saveAndPublish('articles/tagged-entry', { title: 'Tagged entry', slug: 'tagged-entry' })
 
-      expect(await tags('/api/eponyme/pages/homepage')).toBe('eponyme,eponyme:pages/homepage')
+      expect(await tags('/api/eponyme/pages/homepage')).toBe('eponyme:pages/homepage')
       // A collection entry also carries its collection, so publishing it drops the listing
       // that shows it and not only its own page.
-      expect(await tags('/api/eponyme/articles/tagged-entry')).toBe('eponyme,eponyme:articles/tagged-entry,eponyme:articles')
-      expect(await tags('/api/eponyme-collections/articles')).toBe('eponyme,eponyme:articles')
+      expect(await tags('/api/eponyme/articles/tagged-entry')).toBe('eponyme:articles/tagged-entry,eponyme:articles')
+      expect(await tags('/api/eponyme-collections/articles')).toBe('eponyme:articles')
+      // The sitemap is the one response every publication has to drop, so it keeps the global tag.
+      expect(await tags('/api/eponyme-sitemap')).toBe('eponyme,eponyme:sitemap')
       // Nothing uncacheable is tagged: there would be nothing to purge.
       expect(await tags('/api/eponyme-auth/session')).toBeNull()
 
@@ -1684,6 +1883,79 @@ describe('ssr', async () => {
         body: 'x',
       })
       expect(rejected.status).toBe(415)
+      expect((await fetch(url(ticket.publicUrl))).status).toBe(404)
+    })
+
+    // S01: a script inside an SVG runs with the site's own origin as soon as the document is opened, so
+    // the upload is refused whichever type the client declares, and the read route serves it inert.
+    it('refuses an SVG whatever type the client declares for it', async () => {
+      expect((await reserve({ name: 'drawing.svg', contentType: 'image/svg+xml', size: 20 })).status).toBe(415)
+      expect((await reserve({ name: 'drawing.svg', contentType: 'image/png', size: 20 })).status).toBe(415)
+
+      const direct = await fetch(url('/api/eponyme-media/object?key=uploads/active.svg'), {
+        method: 'PUT',
+        headers: { 'content-type': 'image/png', 'cookie': authCookie, 'origin': origin() },
+        body: '<svg xmlns="http://www.w3.org/2000/svg"><script>1</script></svg>',
+      })
+      expect(direct.status).toBe(415)
+      expect((await fetch(url('/api/eponyme-media/raw/uploads/active.svg'))).status).toBe(404)
+    })
+
+    // S02: `media.upload` alone must not be able to rewrite the bytes behind an address already published,
+    // so the route takes a key it issued itself and refuses one that already names an object.
+    it('refuses a key it did not issue, and refuses to overwrite one', async () => {
+      const chosen = await fetch(url('/api/eponyme-media/object?key=uploads/chosen.txt'), {
+        method: 'PUT',
+        headers: { 'content-type': 'text/plain', 'cookie': authCookie, 'origin': origin() },
+        body: 'first',
+      })
+      expect(chosen.status).toBe(400)
+
+      const ticket = await (await reserve({ name: 'once.txt', contentType: 'text/plain', size: 5 })).json()
+      const send = (body: string) => fetch(url(ticket.url), {
+        method: 'PUT',
+        headers: { 'content-type': 'text/plain', 'cookie': authCookie, 'origin': origin() },
+        body,
+      })
+
+      expect((await send('first')).status).toBe(200)
+      expect((await send('other')).status).toBe(409)
+      expect(await (await fetch(url(ticket.publicUrl))).text()).toBe('first')
+    })
+
+    it('refuses a name that disagrees with the declared type', async () => {
+      expect((await reserve({ name: 'photo.png', contentType: 'image/jpeg', size: 20 })).status).toBe(400)
+    })
+
+    it('serves an active object already in the bucket as a download', async () => {
+      // Written straight to the storage, the way an object stored before this rule would have been.
+      await mkdir('.eponyme/test-media/uploads', { recursive: true })
+      await writeFile('.eponyme/test-media/uploads/legacy.svg', '<svg xmlns="http://www.w3.org/2000/svg"></svg>')
+
+      const read = await fetch(url('/api/eponyme-media/raw/uploads/legacy.svg'))
+      expect(read.status).toBe(200)
+      expect(read.headers.get('content-type')).toBe('application/octet-stream')
+      expect(read.headers.get('content-disposition')).toBe('attachment')
+      expect(read.headers.get('content-security-policy')).toContain('sandbox')
+    })
+
+    // S17: a body with no announced length is refused before it reaches the driver, which reads a stream
+    // until it ends and counts nothing itself.
+    it('refuses an upload that announces no length at all', async () => {
+      const ticket = await (await reserve({ name: 'chunked.txt', contentType: 'text/plain', size: 5 })).json()
+      const chunked = await fetch(url(ticket.url), {
+        method: 'PUT',
+        headers: { 'content-type': 'text/plain', 'cookie': authCookie, 'origin': origin() },
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('x'.repeat(4096)))
+            controller.close()
+          },
+        }),
+        duplex: 'half',
+      } as RequestInit & { duplex: 'half' })
+
+      expect(chunked.status).toBe(400)
       expect((await fetch(url(ticket.publicUrl))).status).toBe(404)
     })
 

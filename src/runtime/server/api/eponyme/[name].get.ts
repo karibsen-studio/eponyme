@@ -2,7 +2,7 @@ import { t } from '#eponyme/locale'
 import { createError, defineEventHandler, getQuery } from 'h3'
 import { useEponymeService } from '../../services/eponyme-service'
 import { requireEponymePermission, resolveEponymeContentResource } from '../../utils/eponyme-permissions'
-import { getEponymeCacheTags, setEponymePublicCache } from '../../utils/eponyme-cache'
+import { getEponymeResponseTags, setEponymePublicCache } from '../../utils/eponyme-cache'
 import { splitEponymeCollectionEntry } from '../../utils/eponyme-entry'
 import { interpolateEponymeEntry } from '../../utils/eponyme-variables'
 import { readEponymeRoutePath } from '../../utils/route-path'
@@ -28,7 +28,7 @@ export default defineEventHandler(async (event) => {
   }
   // `raw` is the dashboard editor asking for the unresolved source text: the same published content, but
   // not what a public page renders, so it stays out of the shared cache.
-  else if (!raw) setEponymePublicCache(event, getEponymeCacheTags(name, splitEponymeCollectionEntry(useEponymeService(), name)?.name))
+  else if (!raw) setEponymePublicCache(event, getEponymeResponseTags(name, splitEponymeCollectionEntry(useEponymeService(), name)?.name))
   const result = name ? await useEponymeService().getResult(name, version) : undefined
   if (!result) throw createError({ status: 404, message: t('server.entryNotFound') })
   // `raw=1` is what the dashboard editor asks for: it must show `{{ currentYear }}` so the variable stays
