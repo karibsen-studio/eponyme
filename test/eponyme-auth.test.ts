@@ -79,9 +79,12 @@ function createAuthClient() {
       },
       async deleteMany({ where }) {
         let count = 0
+        const expiredBefore = (where.expiresAt as { lte?: Date } | undefined)?.lte
         for (const session of sessions.values()) {
           if (where.userId && session.userId !== where.userId) continue
           if (where.tokenHash && session.tokenHash !== where.tokenHash) continue
+          // The periodic sweep asks for expired rows only, and the double has to answer the same.
+          if (expiredBefore && new Date(session.expiresAt).getTime() > expiredBefore.getTime()) continue
           sessions.delete(session.id)
           count++
         }
@@ -144,6 +147,66 @@ describe('EponymeAuthService', () => {
     expect(changed.session?.user.mustChangePassword).toBe(false)
     await expect(service.login('EponymeOwner', temporaryPassword)).resolves.toMatchObject({ ok: false })
     await expect(service.login('EponymeOwner', 'A completely new password!')).resolves.toMatchObject({ ok: true })
+  })
+
+  // S08: the first password goes into whatever collects the logs, so it stops working on its own. An
+  // installation nobody signed into yet gets a new one at the next boot rather than becoming unreachable.
+  it('expires the bootstrap password and issues a new one at the next boot', async () => {
+    const { client, users } = createAuthClient()
+    const service = new EponymeAuthService(client)
+    const logs: string[] = []
+    await service.bootstrapOwner(message => logs.push(message))
+    const first = logs.find(line => line.includes('Temporary password:'))!.split(': ').at(-1)!
+
+    const owner = [...users.values()][0]!
+    owner.updatedAt = new Date(Date.now() - 25 * 60 * 60 * 1000)
+
+    await expect(service.login('EponymeOwner', first)).resolves.toMatchObject({ ok: false })
+
+    logs.length = 0
+    await expect(service.bootstrapOwner(message => logs.push(message))).resolves.toBe(true)
+    const reissued = logs.find(line => line.includes('Temporary password:'))!.split(': ').at(-1)!
+    expect(reissued).not.toBe(first)
+    expect(users.size).toBe(1)
+    await expect(service.login('EponymeOwner', reissued)).resolves.toMatchObject({ ok: true })
+    // The old one stays refused, and a boot right after a reissue does not print a third password.
+    await expect(service.login('EponymeOwner', first)).resolves.toMatchObject({ ok: false })
+    await expect(service.bootstrapOwner(() => {})).resolves.toBe(false)
+  })
+
+  // S09: the login bounds what reaches scrypt, and this route hashes a password too.
+  it('refuses an oversized current password instead of hashing it', async () => {
+    const { client } = createAuthClient()
+    const service = new EponymeAuthService(client)
+    const logs: string[] = []
+    await service.bootstrapOwner(message => logs.push(message))
+    const password = logs.find(line => line.includes('Temporary password:'))!.split(': ').at(-1)!
+    const login = await service.login('EponymeOwner', password)
+    if (!login.ok) throw new Error('Owner login failed')
+
+    await expect(service.changePassword(login.session.user.id, 'x'.repeat(200), 'Another good password!'))
+      .resolves.toMatchObject({ error: 'Current password is incorrect.' })
+  })
+
+  it('sweeps sessions nobody comes back for', async () => {
+    const { client, sessions } = createAuthClient()
+    const service = new EponymeAuthService(client)
+    const logs: string[] = []
+    await service.bootstrapOwner(message => logs.push(message))
+    const password = logs.find(line => line.includes('Temporary password:'))!.split(': ').at(-1)!
+    const login = await service.login('EponymeOwner', password)
+    if (!login.ok) throw new Error('Owner login failed')
+
+    // An expired row is only dropped when its own token comes back, which never happens for a session
+    // nobody reuses.
+    const expired = [...sessions.values()][0]!
+    sessions.set('stale', { ...expired, id: 'stale', tokenHash: 'stale-hash', expiresAt: new Date(Date.now() - 1000) })
+    expect(sessions.size).toBe(2)
+
+    await expect(service.getSession(login.session.token)).resolves.toBeDefined()
+    // The sweep runs beside the request rather than in its way.
+    await new Promise(resolve => setTimeout(resolve, 0))
+    expect([...sessions.keys()]).not.toContain('stale')
   })
 
   it('creates temporary accounts, revokes sessions and protects the last owner', async () => {

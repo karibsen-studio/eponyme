@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { SwitchRoot, SwitchThumb } from 'reka-ui'
+import { useFormFieldDescribedBy } from './form-field-context'
 
 defineProps<{ modelValue?: boolean, disabled?: boolean }>()
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
+const describedBy = useFormFieldDescribedBy()
 </script>
 
 <template>
   <SwitchRoot
+    :aria-describedby="describedBy"
     :model-value="modelValue"
     :disabled="disabled"
     class="eponyme-switch ep:relative ep:inline-flex ep:h-6 ep:w-11 ep:shrink-0 ep:cursor-pointer ep:items-center ep:rounded-full ep:border ep:border-border-default ep:bg-surface-input ep:p-0.5 ep:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-contrast/20 ep:data-[state=checked]:border-contrast ep:data-[state=checked]:bg-contrast ep:disabled:cursor-not-allowed ep:disabled:opacity-50"

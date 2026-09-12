@@ -1,8 +1,8 @@
 import { t } from '#eponyme/locale'
-import { createError, defineEventHandler } from 'h3'
+import { createError, defineEventHandler, setResponseStatus } from 'h3'
 import { useEponymeService } from '../../services/eponyme-service'
 import { assertEponymeMutationOrigin } from '../../utils/auth'
-import { requireEponymePermission, resolveEponymeContentResource } from '../../utils/eponyme-permissions'
+import { hasEponymePermission, requireEponymePermission, resolveEponymeContentResource } from '../../utils/eponyme-permissions'
 import { callEponymeHook } from '../../utils/eponyme-hooks'
 import { splitEponymeCollectionEntry } from '../../utils/eponyme-entry'
 import { requireEponymeRevision } from '../../utils/eponyme-revision'
@@ -20,10 +20,20 @@ export default defineEventHandler(async (event) => {
   if (!resource) throw createError({ status: 404, message: t('server.entryNotFound') })
   const user = await requireEponymePermission(event, 'content.restore', resource)
   const service = useEponymeService()
-  const result = await service.restore(name!, versionId, user, requireEponymeRevision(event))
+  // Restoring a published version puts content back on the site, so it asks for the rights that
+  // publishing it by hand would have asked for.
+  const result = await service.restore(name!, versionId, user, requireEponymeRevision(event), {
+    allows: action => hasEponymePermission(user.role, action, resource),
+  })
   if (!result) throw createError({ status: 404, message: t('server.versionNotFound') })
   if ('conflict' in result)
     throw createError({ status: 409, message: t('server.entryConflict') })
+  if ('forbidden' in result)
+    throw createError({ status: 403, message: t('server.forbidden') })
+  if ('errors' in result && result.errors) {
+    setResponseStatus(event, 422)
+    return { errors: result.errors }
+  }
 
   await callEponymeHook('eponyme:entry:restored', {
     name: name!,

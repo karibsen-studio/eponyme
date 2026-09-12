@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { t } from '#eponyme/locale'
 import { computed } from 'vue'
+import { useFormFieldDescribedBy } from './form-field-context'
 import { normalizeHexColor, sameHexColor } from '../../utils/normalize-hex-color'
 
 const props = withDefaults(defineProps<{
@@ -14,6 +15,7 @@ const props = withDefaults(defineProps<{
   invalid?: boolean
 }>(), { modelValue: '', presets: () => [], allowCustom: true })
 
+const describedBy = useFormFieldDescribedBy()
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
 const swatchClasses = 'ep:h-8 ep:w-8 ep:shrink-0 ep:cursor-pointer ep:rounded-lg ep:border ep:border-contrast/15 ep:transition ep:outline-none ep:focus-visible:ring-2 ep:focus-visible:ring-contrast/40 ep:disabled:cursor-not-allowed ep:disabled:opacity-50'
@@ -64,6 +66,7 @@ function select(value: string) {
         :value="pickerValue"
         :disabled="disabled"
         :aria-invalid="invalid || undefined"
+        :aria-describedby="describedBy"
         :aria-label="t('color.custom')"
         :title="t('color.custom')"
         class="ep:absolute ep:inset-0 ep:h-full ep:w-full ep:cursor-pointer ep:rounded-full ep:opacity-0 ep:disabled:cursor-not-allowed"

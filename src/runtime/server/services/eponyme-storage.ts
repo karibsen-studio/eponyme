@@ -7,8 +7,8 @@ import type { EponymeMediaSettings } from '../utils/eponyme-media'
 
 /** Lives here rather than beside the media helpers, which stay free of a runtime to be testable. */
 export function useEponymeMediaSettings(): EponymeMediaSettings {
-  const { prefix, maxSize, accept } = useRuntimeConfig().eponymeStorage
-  return { prefix, maxSize, accept }
+  const { prefix, maxSize, accept, private: isPrivate } = useRuntimeConfig().eponymeStorage
+  return { prefix, maxSize, accept, private: isPrivate === true }
 }
 
 let driver: EponymeStorageDriver | undefined

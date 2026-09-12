@@ -6,6 +6,14 @@ import { generateTemporaryPassword, hashPassword, validatePassword, verifyPasswo
 
 const OWNER_USERNAME = 'EponymeOwner'
 const PASSWORD_MAX_LENGTH = 128
+/**
+ * How long the password printed at first boot works. A log line lives longer than a first sign-in, so the
+ * secret in it stops being one; boot after this window issues a new password rather than locking the
+ * installation out.
+ */
+const BOOTSTRAP_PASSWORD_MS = 24 * 60 * 60 * 1000
+/** How often expired sessions are swept, so a token nobody reuses does not sit in the table for good. */
+const SESSION_CLEANUP_MS = 60 * 60 * 1000
 const USERNAME_PATTERN = /^[\w.-]{3,50}$/
 
 type DateValue = Date | string
@@ -70,6 +78,7 @@ const dummyPasswordHash = hashPassword('Eponyme timing-safe dummy password')
 
 export class EponymeAuthService {
   private readonly validRoles: Set<string>
+  private nextSessionCleanupAt = 0
 
   constructor(
     private readonly client: PrismaEponymeAuthClient,
@@ -80,7 +89,7 @@ export class EponymeAuthService {
   }
 
   async bootstrapOwner(log: (message: string) => void = console.log): Promise<boolean> {
-    if (await this.client.eponymeUser.count() > 0) return false
+    if (await this.client.eponymeUser.count() > 0) return await this.reissueBootstrapPassword(log)
 
     const temporaryPassword = generateTemporaryPassword()
     try {
@@ -105,7 +114,31 @@ export class EponymeAuthService {
     log('[Eponyme] Initial owner account created. These credentials are shown only once.')
     log(`[Eponyme] Username: ${OWNER_USERNAME}`)
     log(`[Eponyme] Temporary password: ${temporaryPassword}`)
-    log('[Eponyme] Sign in and change this password before using the dashboard.')
+    log(`[Eponyme] Sign in and change this password within ${BOOTSTRAP_PASSWORD_MS / (60 * 60 * 1000)} hours; after that it stops working and a new one is issued at boot.`)
+    return true
+  }
+
+  /**
+   * The first password is printed into whatever collects the logs, so it expires. An installation nobody
+   * signed into yet gets a fresh one at the next boot instead of becoming unreachable.
+   */
+  private async reissueBootstrapPassword(log: (message: string) => void): Promise<boolean> {
+    if (await this.client.eponymeUser.count() !== 1) return false
+    const owner = await this.client.eponymeUser.findUnique({ where: { usernameNormalized: normalizeUsername(OWNER_USERNAME) } })
+    if (!owner?.mustChangePassword || !isStaleBootstrap(owner)) return false
+
+    const temporaryPassword = generateTemporaryPassword()
+    await this.client.eponymeUser.update({
+      where: { id: owner.id },
+      data: {
+        passwordHash: await hashPassword(temporaryPassword),
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+      },
+    })
+    log('[Eponyme] The temporary owner password had expired and was replaced.')
+    log(`[Eponyme] Username: ${OWNER_USERNAME}`)
+    log(`[Eponyme] Temporary password: ${temporaryPassword}`)
     return true
   }
 
@@ -119,6 +152,9 @@ export class EponymeAuthService {
 
     const validPassword = await verifyPassword(submittedPassword, user?.passwordHash ?? await dummyPasswordHash)
     if (!user || !user.active || !validPassword) return { ok: false, reason: 'invalid' }
+    // A password that was written to the logs and never changed is refused once its window has passed. The
+    // next boot prints a new one.
+    if (user.mustChangePassword && isStaleBootstrap(user)) return { ok: false, reason: 'invalid' }
     // A session opened here would only last one request, since `getSession` drops it.
     if (!this.validRoles.has(user.role)) return { ok: false, reason: 'role' }
 
@@ -134,6 +170,7 @@ export class EponymeAuthService {
 
   async getSession(token: string | undefined): Promise<CreatedSession | undefined> {
     if (!token) return undefined
+    void this.sweepExpiredSessions()
     const tokenHash = hashToken(token)
     const session = await this.client.eponymeUserSession.findUnique({
       where: { tokenHash },
@@ -165,7 +202,9 @@ export class EponymeAuthService {
   ): Promise<{ session?: CreatedSession, error?: string }> {
     const user = await this.client.eponymeUser.findUnique({ where: { id: userId } })
     if (!user || !user.active) return { error: t('server.userUnavailable') }
-    if (typeof currentPassword !== 'string' || !(await verifyPassword(currentPassword, user.passwordHash)))
+    // Bounded before the KDF, like the login: a multi-megabyte string must never reach scrypt.
+    const submitted = typeof currentPassword === 'string' && currentPassword.length <= PASSWORD_MAX_LENGTH ? currentPassword : ''
+    if (!submitted || !(await verifyPassword(submitted, user.passwordHash)))
       return { error: t('server.currentPasswordWrong') }
     const passwordError = validatePassword(newPassword)
     if (passwordError) return { error: passwordError }
@@ -325,6 +364,17 @@ export class EponymeAuthService {
     })
   }
 
+  /**
+   * Expired rows are dropped when their own token comes back, which never happens for a session nobody
+   * reuses. This sweeps those, at most once an hour and never in the way of the request.
+   */
+  private async sweepExpiredSessions(now = Date.now()): Promise<void> {
+    if (now < this.nextSessionCleanupAt) return
+    this.nextSessionCleanupAt = now + SESSION_CLEANUP_MS
+    // Maintenance, never a reason to refuse a session that is otherwise valid.
+    await this.client.eponymeUserSession.deleteMany({ where: { expiresAt: { lte: new Date(now) } } }).catch(() => {})
+  }
+
   private async createSession(user: PrismaEponymeUserRow): Promise<CreatedSession> {
     const token = randomBytes(32).toString('base64url')
     const expiresAt = new Date(Date.now() + this.sessionDurationDays * 24 * 60 * 60 * 1000)
@@ -338,6 +388,11 @@ export class EponymeAuthService {
     })
     return { token, expiresAt, user: toAuthUser(user) }
   }
+}
+
+/** A temporary password is judged on the account's last write: creation, or the last reissue. */
+function isStaleBootstrap(user: PrismaEponymeUserRow, now = Date.now()): boolean {
+  return now - new Date(user.updatedAt).getTime() > BOOTSTRAP_PASSWORD_MS
 }
 
 export function normalizeUsername(username: string): string {

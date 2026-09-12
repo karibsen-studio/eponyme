@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
     limit: PAGE_SIZE,
     cursor,
   })
-  const items = await toEponymeMediaItems(driver, page.objects)
+  const items = await toEponymeMediaItems(driver, page.objects, settings)
 
   items.sort((a, b) => b.lastModified.localeCompare(a.lastModified))
   return { items, cursor: page.cursor ?? null }

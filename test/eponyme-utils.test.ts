@@ -10,6 +10,7 @@ import { field } from '../src/runtime/fields'
 import { resolveEponymeSeo } from '../src/runtime/fields/seo'
 import { eponymeEnglishMessages } from '../src/runtime/locales'
 import { isFieldVisible } from '../src/runtime/utils/is-field-visible'
+import { serializeEponymeFilter } from '../src/runtime/utils/serialize-eponyme-filter'
 import { getEponymeCollections, getEponymeForms, getEponymeSchemas, isEponymeForm, isEponymeSchema } from '../src/runtime/utils/get-eponyme-schemas'
 import { findEponymeVariableRanges, interpolateEponymeText, interpolateEponymeValue, resolveEponymeVariables, summariseEponymeVariables } from '../src/runtime/utils/variables'
 import { applyPreviewSlug, readPreviewQuery, readPreviewVersion, resolvePreviewPath } from '../src/runtime/utils/preview'
@@ -17,7 +18,7 @@ import { buildEponymeNavigationTree } from '../src/runtime/utils/build-navigatio
 import { flattenEponymeNavigationTree } from '../src/runtime/utils/flatten-navigation-tree'
 import { filterEponymeNavigationTree, preloadEponymeNavigationSearch } from '../src/runtime/utils/filter-navigation-tree'
 import { cacheDuringHydrationOnly, cacheForPublicRead } from '../src/runtime/utils/hydration-cache'
-import { getEponymeCacheTags, tagPreviewPathRoutes } from '../src/runtime/utils/cache-tags'
+import { getEponymeCacheTags, getEponymeResponseTags, tagPreviewPathRoutes } from '../src/runtime/utils/cache-tags'
 import { normalizeEponymePhone, toEponymePhoneValue } from '../src/runtime/utils/normalize-phone'
 import { normalizeEponymeTags } from '../src/runtime/utils/normalize-tags'
 import { eponymeMediaEmbedUrl, parseEponymeMediaUrl } from '../src/runtime/utils/media-player'
@@ -514,16 +515,31 @@ describe('getEponymeCacheTags', () => {
   })
 })
 
+describe('getEponymeResponseTags', () => {
+  it('leaves out the global tag, which every purge sends', () => {
+    expect(getEponymeResponseTags('pages/homepage')).toEqual(['eponyme:pages/homepage'])
+    expect(getEponymeResponseTags('articles/my-article', 'articles')).toEqual([
+      'eponyme:articles/my-article',
+      'eponyme:articles',
+    ])
+  })
+
+  it('still answers the collection tag a purge sends for one of its entries', () => {
+    const purged = getEponymeCacheTags('articles/my-article', 'articles')
+    expect(purged).toEqual(expect.arrayContaining(getEponymeResponseTags('articles')))
+  })
+})
+
 describe('tagPreviewPathRoutes', () => {
   it('tags a singleton route exactly and a collection route by collection', () => {
     const rules: Record<string, { headers?: Record<string, string> }> = {}
     tagPreviewPathRoutes({ 'pages/homepage': '/', 'articles': '/articles/:slug' }, rules)
     expect(rules['/']!.headers).toEqual({
-      'Vercel-Cache-Tag': 'eponyme,eponyme:pages/homepage',
-      'Cache-Tag': 'eponyme,eponyme:pages/homepage',
+      'Vercel-Cache-Tag': 'eponyme:pages/homepage',
+      'Cache-Tag': 'eponyme:pages/homepage',
     })
     // `:slug` becomes a glob, because that is what routeRules match on.
-    expect(rules['/articles/**']!.headers).toMatchObject({ 'Cache-Tag': 'eponyme,eponyme:articles' })
+    expect(rules['/articles/**']!.headers).toMatchObject({ 'Cache-Tag': 'eponyme:articles' })
   })
 
   it('keeps the rules the application already wrote', () => {
@@ -534,17 +550,27 @@ describe('tagPreviewPathRoutes', () => {
     // The caching rule survives, and a tag the host chose is not overwritten.
     expect(rules['/articles/**']).toMatchObject({ isr: 300, headers: { 'Cache-Tag': 'mine' } })
     // The Vercel header nobody set is still filled in.
-    expect(rules['/articles/**']!.headers!['Vercel-Cache-Tag']).toBe('eponyme,eponyme:articles')
+    expect(rules['/articles/**']!.headers!['Vercel-Cache-Tag']).toBe('eponyme:articles')
   })
 
   it('ignores a preview path that is not a route', () => {
     const rules: Record<string, { headers?: Record<string, string> }> = {}
-    expect(tagPreviewPathRoutes({ articles: 'https://example.com/:slug' }, rules)).toEqual([])
+    expect(tagPreviewPathRoutes({ articles: 'https://example.com/:slug' }, rules).tagged).toEqual([])
     expect(rules).toEqual({})
   })
 
+  it('leaves a collection served from the root untagged rather than tagging the whole site', () => {
+    const rules: Record<string, { headers?: Record<string, string> }> = {}
+    const { tagged, skipped } = tagPreviewPathRoutes({ pages: '/:slug' }, rules)
+    // `/**` would carry the tag on every route, the dashboard and the API included, so one
+    // publication would purge the entire site.
+    expect(rules).toEqual({})
+    expect(tagged).toEqual([])
+    expect(skipped).toEqual([{ name: 'pages', path: '/:slug', tag: 'eponyme:pages' }])
+  })
+
   it('reports what it wrote, so the module can announce it', () => {
-    expect(tagPreviewPathRoutes({ 'pages/homepage': '/', 'articles': '/articles/:slug' }, {})).toEqual([
+    expect(tagPreviewPathRoutes({ 'pages/homepage': '/', 'articles': '/articles/:slug' }, {}).tagged).toEqual([
       { route: '/', tag: 'eponyme:pages/homepage' },
       // The glob cannot name a slug, so the collection tag is the one it will carry.
       { route: '/articles/**', tag: 'eponyme:articles' },
@@ -933,5 +959,29 @@ describe('eponymeConfigInteger()', () => {
   it('refuses a value a header or a cookie could not carry', () => {
     for (const value of [Number.NaN, Number.POSITIVE_INFINITY, -1, 1.5, 2 ** 53])
       expect(() => eponymeConfigInteger('cacheSeconds', value, { fallback: 5, min: 0, max: 31_536_000 })).toThrow(/between 0 and 31536000/)
+  })
+})
+
+describe('collection filter serialisation', () => {
+  it('gives two different filters two different cache keys', () => {
+    // A tag may contain any character, the separator included: joined text made these two filters share
+    // one cache entry, so one listing answered with the other's results.
+    const joined = serializeEponymeFilter({ tags: ['a|b'] })
+    const split = serializeEponymeFilter({ tags: ['a', 'b'] })
+
+    expect(joined.key).not.toBe(split.key)
+    expect(joined.query).toEqual({ 'where[tags]': ['a|b'] })
+    expect(split.query).toEqual({ 'where[tags]': ['a', 'b'] })
+  })
+
+  it('keeps one key for two filters that differ only in how they were written', () => {
+    const first = serializeEponymeFilter({ tags: 'nuxt', publishedOn: { gte: '2026-01-01' } })
+    const second = serializeEponymeFilter({ publishedOn: { gte: '2026-01-01' }, tags: 'nuxt' })
+
+    expect(first.key).toBe(second.key)
+  })
+
+  it('drops empty conditions from the query and from the key', () => {
+    expect(serializeEponymeFilter({ tags: [], draft: null, missing: undefined })).toEqual({ query: {}, key: '[]' })
   })
 })

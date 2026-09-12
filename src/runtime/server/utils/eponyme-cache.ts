@@ -6,7 +6,7 @@ import { useRuntimeConfig } from 'nitropack/runtime'
 const STALE_WHILE_REVALIDATE_FACTOR = 12
 
 /** Re-exported so server code keeps one import for everything cache-related. */
-export { getEponymeCacheTags } from '../../utils/cache-tags'
+export { getEponymeCacheTags, getEponymeResponseTags } from '../../utils/cache-tags'
 
 function setCacheTags(event: H3Event, tags: string[]) {
   if (!tags.length) return

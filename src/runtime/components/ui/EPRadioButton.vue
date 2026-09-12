@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { RadioGroupIndicator, RadioGroupItem, RadioGroupRoot } from 'reka-ui'
+import { useFormFieldDescribedBy } from './form-field-context'
 
 defineProps<{
   modelValue?: string
@@ -9,10 +10,12 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
+const describedBy = useFormFieldDescribedBy()
 </script>
 
 <template>
   <RadioGroupRoot
+    :aria-describedby="describedBy"
     :model-value="modelValue"
     :required="required"
     :disabled="disabled"

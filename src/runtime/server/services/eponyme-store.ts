@@ -14,6 +14,8 @@ import { eponymeRichTextRejections } from '../../utils/sanitize-rich-text'
 import { collectEponymeRelations } from '../../utils/eponyme-relations'
 import { EPONYME_RELATION_INDEX_KEY, buildEponymeIndexRows, describeEponymeIndexSchema, eponymeIndexKeys, foldEponymeIndexValue, type EponymeIndexRow } from '../../utils/eponyme-entry-index'
 import { EponymeCache, type EponymeSharedCacheStorage } from './eponyme-cache-store'
+import type { EponymeCacheFailureContext } from '../../types/hooks'
+import type { EponymePermissionAction } from '../../types/permissions'
 
 export type { EponymeAction, EponymeStatus } from '../../types'
 export type EponymeVersion = 'draft' | 'published'
@@ -48,6 +50,15 @@ export interface EponymeHistoryEntry {
 export interface EponymeConflict {
   conflict: true
   errors?: never
+}
+/** Raised when the actor may restore, but not the change to the public site the restore would make. */
+export interface EponymeForbidden {
+  forbidden: EponymePermissionAction
+  errors?: never
+}
+/** How a route says what the actor is allowed to do, without the store knowing about roles. */
+export interface EponymeRestoreOptions {
+  allows?: (action: EponymePermissionAction) => boolean
 }
 export interface EponymeScheduleTransition extends EponymeResult {
   name: string
@@ -163,6 +174,12 @@ export type EponymeCollectionEntryMeta = Omit<EponymeCollectionEntry, 'data'>
 export const COLLECTION_METADATA_KEYS = ['updatedAt', 'publishedAt', 'title', 'slug'] as const
 
 const IMPORT_TRANSACTION_MS = 120_000
+
+/**
+ * Most entries the per-process heal bookkeeping remembers. Both are optimisations, so an evicted key costs
+ * at worst one repeated heal attempt or one conflict a client resolves by reloading.
+ */
+const MAX_HEALED = 500
 
 export type PrismaEponymeRow = {
   name: string
@@ -339,6 +356,7 @@ export class EponymeService {
       cacheSeconds?: number
       cacheStorage?: string
       resolveCacheStorage?: (mount: string) => EponymeSharedCacheStorage
+      onCacheFailure?: (context: EponymeCacheFailureContext) => void
     } = {},
   ) {
     this.schemas = getEponymeSchemas(config)
@@ -346,6 +364,7 @@ export class EponymeService {
     const mount = options.cacheStorage?.trim()
     this.cache = new EponymeCache({
       cacheSeconds: options.cacheSeconds,
+      onFailure: options.onCacheFailure,
       storage: mount && options.resolveCacheStorage
         ? () => options.resolveCacheStorage?.(mount)
         : undefined,
@@ -670,6 +689,7 @@ export class EponymeService {
     if (!healed) return { state, updatedAt: row.updatedAt }
     // Marked once the write landed, so a heal that lost a race is retried rather than remembered as done.
     this.healedByRead.add(name)
+    capOldest(this.healedByRead, MAX_HEALED)
     return { state, updatedAt: healed.updatedAt ?? row.updatedAt }
   }
 
@@ -696,6 +716,7 @@ export class EponymeService {
     const after = eponymeRevision(to)
     if (!before || !after || before === after) return
     this.healedRevisions.set(`${name}\n${before}`, after)
+    capOldest(this.healedRevisions, MAX_HEALED)
   }
 
   /** Writes a new state only if the row still carries the `updatedAt` we read. */
@@ -1078,6 +1099,22 @@ export class EponymeService {
     )
   }
 
+  /** Entries of a file that would actually be written: the others cannot satisfy a relation. */
+  private async importableNames(parsed: EponymeExportFile): Promise<Set<string>> {
+    const named = parsed.entries
+      .filter(entry => this.schemas[entry.name] ?? this.getCollectionEntry(entry.name)?.definition.fields)
+      .map(entry => entry.name)
+    if (!named.length) return new Set()
+    // An entry the destination holds in its trash is skipped by the import, so it is no more a valid
+    // target than one the file never carried.
+    const trashed = await this.client.eponyme.findMany({
+      where: { name: { in: named }, deletedAt: { not: null } },
+      select: { name: true },
+    })
+    const skipped = new Set(trashed.map(row => row.name))
+    return new Set(named.filter(name => !skipped.has(name)))
+  }
+
   /** Relations an export points at that nothing would satisfy. */
   private async importRelationErrors(parsed: EponymeExportFile): Promise<string[]> {
     const references: Array<{ entry: string, entryName: string }> = []
@@ -1091,7 +1128,7 @@ export class EponymeService {
     }
     if (!references.length) return []
 
-    const carried = new Set(parsed.entries.map(entry => entry.name))
+    const carried = await this.importableNames(parsed)
     const names = [...new Set(references.map(reference => reference.entryName))].filter(name => !carried.has(name))
     const rows = names.length
       ? await this.client.eponyme.findMany({
@@ -1122,8 +1159,19 @@ export class EponymeService {
     options: { dryRun?: boolean, actorId?: string, actorUsername?: string },
     db: PrismaEponymeDelegates,
     invalidate: (name: string) => void,
-  ): Promise<EponymeImportOutcome> {
+  ): Promise<EponymeImportOutcome | EponymeImportRejection> {
     const result: EponymeImportOutcome = { dryRun: Boolean(options.dryRun), created: 0, updated: 0, skipped: [], written: [] }
+    const prepared: Array<{
+      entry: EponymeExportFile['entries'][number]
+      collectionEntry: ReturnType<EponymeService['getCollectionEntry']>
+      schema: EponymeSchema
+      state: StoredEponymeState
+      row: PrismaEponymeRow | null
+    }> = []
+    const invalid: string[] = []
+
+    // Read and check everything first: a file that would publish content the publish action refuses is
+    // turned away whole, rather than written up to the entry that fails.
     for (const entry of parsed.entries) {
       const collectionEntry = this.getCollectionEntry(entry.name)
       const schema = this.schemas[entry.name] ?? collectionEntry?.definition.fields
@@ -1158,6 +1206,19 @@ export class EponymeService {
         if (slugField in state.__eponyme.published) state.__eponyme.published[slugField] = collectionEntry.slug
       }
 
+      // A matching fingerprint describes the schema, it says nothing about the values: an import must not
+      // put online what `patch(..., 'publish')` would have refused. A draft stays free to be incomplete.
+      if (state.__eponyme.status === 'published') {
+        const errors = validateEponymeData(schema, state.__eponyme.published, 'publish')
+        const fields = Object.keys(errors)
+        if (fields.length) invalid.push(t('server.importInvalidPublished', { name: entry.name, fields: fields.join(', ') }))
+      }
+
+      prepared.push({ entry, collectionEntry, schema, state, row })
+    }
+    if (invalid.length) return { errors: invalid }
+
+    for (const { entry, collectionEntry, state, row } of prepared) {
       if (!options.dryRun) {
         const data = state as unknown as Record<string, unknown>
         const columns = stateToColumns(state)
@@ -1178,7 +1239,9 @@ export class EponymeService {
           name: entry.name,
           collection: collectionEntry && { name: collectionEntry.name, slug: collectionEntry.slug },
           wasPublished: row?.status === 'published',
-          ...toResult(state, state.__eponyme.draft),
+          // The published version for a published entry: the import route turns this into a publication
+          // hook, and a listener building a public copy from it must not receive the private draft.
+          ...toResult(state, state.__eponyme.status === 'published' ? state.__eponyme.published : state.__eponyme.draft),
         })
       }
       if (row) result.updated++
@@ -1360,11 +1423,32 @@ export class EponymeService {
     name: string,
     actor?: string | EponymeActor,
     expectedRevision?: string,
-  ): Promise<boolean | EponymeConflict> {
+    options: EponymeRestoreOptions = {},
+  ): Promise<boolean | EponymeConflict | EponymeForbidden | { errors: ValidationErrors }> {
     if (!this.getCollectionEntry(name)) return false
     // `loadRow` reads a trashed entry as missing, so the token comes from the row itself.
     const row = await this.client.eponyme.findUnique({ where: { name } })
-    if (this.isStaleRevision(name, expectedRevision, row?.updatedAt)) return { conflict: true }
+    if (!row) return false
+    if (this.isStaleRevision(name, expectedRevision, row.updatedAt)) return { conflict: true }
+
+    const schema = this.getSchema(name)
+    const state = schema ? this.rowToState(schema, row) : undefined
+    // Out of the trash, a published entry is public again, which is a publication and not just a restore.
+    if (state?.__eponyme.status === 'published' && options.allows && !options.allows('content.publish'))
+      return { forbidden: 'content.publish' }
+    // Entries this one points at may have been deleted while it sat in the trash. A published entry comes
+    // back online with its published payload, not with its draft, so that payload answers to the rules of a
+    // publication rather than being written back unread.
+    if (schema && state) {
+      const live = state.__eponyme.status === 'published'
+      const errors = mergeErrors(
+        await this.relationRejections(schema, state.__eponyme.draft),
+        live ? await this.relationRejections(schema, state.__eponyme.published) : {},
+        live ? validateEponymeData(schema, state.__eponyme.published, 'publish') : {},
+      )
+      if (Object.keys(errors).length) return { errors }
+    }
+
     const count = await this.transaction(async (tx, invalidate) => {
       invalidate(name)
       const updated = await tx.eponyme.updateMany({
@@ -1601,7 +1685,8 @@ export class EponymeService {
     versionId: number,
     actor?: string | EponymeActor,
     expectedRevision?: string,
-  ): Promise<EponymeResult | EponymeConflict | undefined> {
+    options: EponymeRestoreOptions = {},
+  ): Promise<EponymeResult | EponymeConflict | EponymeForbidden | { errors: ValidationErrors } | undefined> {
     const schema = this.getSchema(name)
     if (!schema) return undefined
     const version = await this.client.eponymeVersion.findUnique({ where: { id: versionId } })
@@ -1610,6 +1695,23 @@ export class EponymeService {
     if (!current) return undefined
     if (this.isStaleRevision(name, expectedRevision, current.updatedAt)) return { conflict: true }
     const state = this.normalizeState(schema, version.data)
+
+    // A restore rewrites the published state as well as the draft, so it may not become a way around the
+    // rights publishing, unpublishing or scheduling by hand would have asked for.
+    const allows = options.allows
+    const missing = allows && restorePermissions(current.state, state).find(action => !allows(action))
+    if (missing) return { forbidden: missing }
+
+    // A saved version can point at an entry deleted since, which a normal save would have refused. The
+    // schema may also have gained a rule since: a restore puts content back online, so it answers to the
+    // same rules as publishing it by hand.
+    const errors = mergeErrors(
+      await this.relationRejections(schema, state.__eponyme.draft),
+      state.__eponyme.status === 'published' ? await this.relationRejections(schema, state.__eponyme.published) : {},
+      state.__eponyme.status === 'published' ? validateEponymeData(schema, state.__eponyme.published, 'publish') : {},
+    )
+    if (Object.keys(errors).length) return { errors }
+
     const written = await this.transaction(async (tx, invalidate) => {
       invalidate(name)
       const write = await this.writeState(name, state, current.updatedAt, tx)
@@ -1636,6 +1738,34 @@ export class EponymeService {
     })
     if (!written) return { conflict: true }
     return toResult(state, state.__eponyme.draft, eponymeRevision(written.updatedAt))
+  }
+}
+
+/**
+ * The rights a restore needs beyond `content.restore`. Rewriting what the site serves, or when it changes,
+ * is the same change as publishing, unpublishing or scheduling by hand.
+ */
+function restorePermissions(current: StoredEponymeState, next: StoredEponymeState): EponymePermissionAction[] {
+  const from = current.__eponyme
+  const to = next.__eponyme
+  const wasLive = from.status === 'published'
+  const willBeLive = to.status === 'published'
+  const requires: EponymePermissionAction[] = []
+
+  if (willBeLive && (!wasLive || from.publishedAt !== to.publishedAt || !isDeepStrictEqual(from.published, to.published)))
+    requires.push('content.publish')
+  if (wasLive && !willBeLive) requires.push('content.unpublish')
+  if (from.scheduledPublishAt !== to.scheduledPublishAt || from.scheduledUnpublishAt !== to.scheduledUnpublishAt)
+    requires.push('content.schedule')
+
+  return requires
+}
+
+/** Keeps a per-process bookkeeping collection finite, dropping the oldest keys first. */
+export function capOldest(entries: { size: number, keys: () => IterableIterator<string>, delete: (key: string) => boolean }, max: number): void {
+  for (const key of entries.keys()) {
+    if (entries.size <= max) break
+    entries.delete(key)
   }
 }
 

@@ -1,8 +1,8 @@
 import { Buffer } from 'node:buffer'
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { createReadStream } from 'node:fs'
 import { Readable } from 'node:stream'
-import { dirname, join, relative, resolve, sep } from 'pathe'
+import { basename, dirname, join, relative, resolve, sep } from 'pathe'
 import type {
   EponymeStorageDriver,
   EponymeStorageFactory,
@@ -103,6 +103,33 @@ export function local(options: EponymeLocalStorageOptions = {}): EponymeStorageF
     return target
   }
 
+  /** The path a symlink chain actually ends at, for a file that may not exist yet. */
+  const resolveReal = async (path: string): Promise<string> => {
+    try {
+      return await realpath(path)
+    }
+    catch (error) {
+      if (!isMissing(error)) throw error
+      const parent = dirname(path)
+      if (parent === path) return path
+      return join(await resolveReal(parent), basename(path))
+    }
+  }
+
+  /**
+   * `pathFor` compares strings, which a symlink under the directory defeats: the name stays inside while
+   * the file it names is somewhere else entirely. This follows the links before deciding.
+   */
+  const realPathFor = async (key: string): Promise<string> => {
+    const target = pathFor(key)
+    const [real, realRoot] = await Promise.all([resolveReal(target), resolveReal(root)])
+    const inside = relative(realRoot, real)
+    if (inside === '' || inside.startsWith('..') || inside.startsWith(`..${sep}`)) {
+      throw new TypeError('key resolves outside the storage directory')
+    }
+    return target
+  }
+
   const readContentType = async (path: string): Promise<string> => {
     try {
       return (await readFile(`${path}${TYPE_SUFFIX}`, 'utf8')).trim() || FALLBACK_CONTENT_TYPE
@@ -132,7 +159,7 @@ export function local(options: EponymeLocalStorageOptions = {}): EponymeStorageF
 
   const driver: EponymeStorageDriver = {
     async put(key, data, meta) {
-      const path = pathFor(key)
+      const path = await realPathFor(key)
       try {
         await mkdir(dirname(path), { recursive: true })
         const body = data instanceof Uint8Array
@@ -150,19 +177,19 @@ export function local(options: EponymeLocalStorageOptions = {}): EponymeStorageF
     },
 
     async get(key) {
-      const path = pathFor(key)
+      const path = await realPathFor(key)
       await stat(path)
       return Readable.toWeb(createReadStream(path)) as ReadableStream<Uint8Array>
     },
 
     async delete(key) {
-      const path = pathFor(key)
+      const path = await realPathFor(key)
       await rm(path, { force: true })
       await rm(`${path}${TYPE_SUFFIX}`, { force: true })
     },
 
     async stat(key) {
-      const path = pathFor(key)
+      const path = await realPathFor(key)
       try {
         const stats = await stat(path)
         return { contentType: await readContentType(path), size: stats.size }
@@ -207,8 +234,7 @@ export function local(options: EponymeLocalStorageOptions = {}): EponymeStorageF
     },
 
     async move(from, to, meta) {
-      const source = pathFor(from)
-      const target = pathFor(to)
+      const [source, target] = await Promise.all([realPathFor(from), realPathFor(to)])
       if (source === target) throw new TypeError('move source and destination must be different')
       try {
         await mkdir(dirname(target), { recursive: true })

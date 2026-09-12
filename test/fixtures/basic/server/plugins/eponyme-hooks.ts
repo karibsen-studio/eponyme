@@ -7,6 +7,10 @@ export default defineNitroPlugin((nitroApp) => {
     if (context.data?.title === 'reject-me') throw new Error('Rejected by the test hook.')
     // Mutating the payload must change what is written.
     if (context.data?.title === 'amend-me') context.data.title = 'amended by hook'
+    // A publication carries the stored draft rather than a client payload, and an amendment to it must
+    // reach the version that goes online.
+    if (context.action === 'publish' && context.data?.title === 'publish-amend-me')
+      context.data.title = 'amended at publish'
   })
 
   nitroApp.hooks.hook('eponyme:entry:saved', context => void seen.push(`saved:${context.name}`))

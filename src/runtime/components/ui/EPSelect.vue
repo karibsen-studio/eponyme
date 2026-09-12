@@ -13,6 +13,7 @@ import {
   ComboboxViewport,
 } from 'reka-ui'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useFormFieldDescribedBy } from './form-field-context'
 
 defineOptions({ inheritAttrs: false })
 
@@ -28,6 +29,7 @@ const props = withDefaults(defineProps<{
   contentClass?: string
 }>(), { size: 'md' })
 
+const describedBy = useFormFieldDescribedBy()
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
 const open = ref(false)
@@ -86,6 +88,7 @@ onBeforeUnmount(() => {
           type="button"
           :aria-label="typeof $attrs['aria-label'] === 'string' ? $attrs['aria-label'] : null"
           :aria-invalid="invalid || undefined"
+          :aria-describedby="describedBy"
           :class="triggerClasses"
           tabindex="0"
           @keydown.down.prevent="openWithKeyboard"
