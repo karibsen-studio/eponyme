@@ -138,15 +138,20 @@ function fieldDisabled(fieldName: string) {
   return !canUpdate.value || props.readonlyFields.includes(fieldName)
 }
 
+/** What was sent to the server while a write is in flight, so typing during it can be told apart. */
+const sending = ref<string | null>(null)
+
 // `flush: 'sync'` is what makes the server render the real values: during SSR the fetch resolves after
 // setup, and Vue never flushes queued watchers there, so a default watcher would leave the form empty in
 // the HTML and mismatch on hydration.
 watch(eponymeData, (value) => {
-  if (value) {
-    const next = cloneData(value as Record<string, unknown>)
-    data.value = next
-    savedData.value = cloneData(next)
-  }
+  if (!value) return
+  const next = cloneData(value as Record<string, unknown>)
+  savedData.value = cloneData(next)
+  // The fields stay editable while a save runs, so the answer may arrive after a few more characters were
+  // typed. Those characters are not in it, and replacing the fields would drop them without a word.
+  if (sending.value !== null && JSON.stringify(data.value) !== sending.value) return
+  data.value = next
 }, { immediate: true, flush: 'sync' })
 
 watch(status, (value) => {
@@ -191,10 +196,12 @@ async function save(action: EponymeAction = 'draft', schedule: EponymeSchedule =
   }
   try {
     if (action !== 'draft' && contentDirty.value && canUpdate.value) {
+      sending.value = JSON.stringify(data.value)
       const saved = await persist(data.value as never, 'draft')
       if (!saved) return false
       savedData.value = cloneData(saved as Record<string, unknown>)
     }
+    sending.value = JSON.stringify(data.value)
     const response = await persist(action === 'draft' ? data.value as never : {} as never, action, schedule)
     if (response) {
       savedData.value = cloneData(response as Record<string, unknown>)
@@ -227,6 +234,9 @@ async function save(action: EponymeAction = 'draft', schedule: EponymeSchedule =
         : t('form.unexpected'),
     )
     return false
+  }
+  finally {
+    sending.value = null
   }
   return false
 }

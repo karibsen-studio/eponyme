@@ -162,12 +162,21 @@ export interface ModuleOptions {
 
     /**
      * Media types uploads are restricted to; `image/*` style wildcards are understood. Empty accepts
-     * anything.
+     * anything a browser does not run: SVG, HTML and the other active formats are always refused.
      *
      * @default []
      * @example ['image/*', 'application/pdf']
      */
     accept?: string[]
+
+    /**
+     * Serves every object through the application, to sessions holding `media.read`, and never caches it
+     * publicly. The bucket itself must be private too: this closes the module's own read route, not a
+     * public origin the driver may hand out.
+     *
+     * @default false
+     */
+    private?: boolean
   }
 
   rateLimits?: {
@@ -184,7 +193,8 @@ export interface ModuleOptions {
   }
 
   /**
-   * How long content already read may be reused, in seconds. `0` disables it.
+   * How long content already read may be reused, in seconds. `0` disables it. Without `cacheStorage` this
+   * is the window of the in-process cache; with it, the window of the shared one.
    *
    * @default 5
    */
@@ -458,6 +468,7 @@ export default defineNuxtModule<ModuleOptions>({
       prefix: storagePrefix,
       maxSize: storageMaxSize,
       accept: storageAccept,
+      private: options.storage?.private === true,
       // Read from the environment rather than from `nuxt.config`, so a secret never reaches a file that is
       // committed.
       accessKeyId: process.env.EPONYME_STORAGE_ACCESS_KEY_ID ?? '',
@@ -536,12 +547,20 @@ export default defineNuxtModule<ModuleOptions>({
     })
     addPlugin(resolver.resolve('./runtime/plugins/eponyme-theme'))
 
-    const tagged = tagPreviewPathRoutes(options.previewPaths ?? {}, nuxt.options.routeRules ??= {})
+    const { tagged, skipped } = tagPreviewPathRoutes(options.previewPaths ?? {}, nuxt.options.routeRules ??= {})
     if (tagged.length) {
       const width = Math.max(...tagged.map(({ route }) => route.length))
       logger.info(
         `Cache tags added to ${tagged.length} public route${tagged.length > 1 ? 's' : ''}, so publishing can purge them:\n`
         + tagged.map(({ route, tag }) => `  ${route.padEnd(width)}  ${tag}`).join('\n'),
+      )
+    }
+    for (const { name, path, tag } of skipped) {
+      logger.warn(
+        `previewPaths.${name} is "${path}", which covers every route, so it was left untagged: tagging it would `
+        + `put "${tag}" on the whole site and make one publication purge all of it.\n`
+        + `  Tag the routes that show this collection yourself, for example:\n`
+        + `  routeRules: { '/my-page': { headers: { 'Cache-Tag': '${tag}', 'Vercel-Cache-Tag': '${tag}' } } }`,
       )
     }
 

@@ -321,7 +321,7 @@ export default defineEponymeConfig({
         label: 'Tags',
         description: 'Suggestions, saisie libre, doublons de casse repliés.',
         suggestions: ['Nuxt', 'Vue', 'TypeScript', 'Prisma'],
-        allowCustom: false,
+        allowCustom: true,
         maxItems: 4,
         defaultValue: ['Nuxt'],
         placeholder: 'Ajouter un tag…',

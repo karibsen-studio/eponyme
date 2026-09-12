@@ -1,6 +1,7 @@
 import eponymeConfig from '#eponyme/config'
 import prisma from '#eponyme/prisma'
 import { useRuntimeConfig, useStorage } from 'nitropack/runtime'
+import { callEponymeHook } from '../utils/eponyme-hooks'
 import type { EponymeSharedCacheStorage } from './eponyme-cache-store'
 import { EponymeService } from './eponyme-store'
 import type { PrismaEponymeClient } from './eponyme-store'
@@ -20,6 +21,8 @@ export function useEponymeService(): EponymeService {
       cacheSeconds: contentConfig.cacheSeconds,
       cacheStorage: contentConfig.cacheStorage,
       resolveCacheStorage: mount => useStorage(mount) as EponymeSharedCacheStorage,
+      // Not awaited: a cache failure is already the slow path, and the hook only reports it.
+      onCacheFailure: context => void callEponymeHook('eponyme:cache:failed', context),
     })
   }
   return eponymeService

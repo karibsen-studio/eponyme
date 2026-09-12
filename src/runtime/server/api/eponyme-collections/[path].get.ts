@@ -2,12 +2,16 @@ import { t } from '#eponyme/locale'
 import { createError, defineEventHandler, getQuery } from 'h3'
 import { useEponymeService } from '../../services/eponyme-service'
 import { requireEponymePermission } from '../../utils/eponyme-permissions'
-import { getEponymeCacheTags, setEponymePublicCache } from '../../utils/eponyme-cache'
+import { getEponymeResponseTags, setEponymePublicCache } from '../../utils/eponyme-cache'
 import { interpolateEponymeContent, interpolateEponymeEntry } from '../../utils/eponyme-variables'
 import { readEponymeRoutePath } from '../../utils/route-path'
 import type { EponymeFilterCondition, EponymeFilterOperators, EponymeFilterRange } from '../../services/eponyme-store'
 
 const MAX_TAKE = 200
+/** Largest offset a caller may ask for: past this a listing is a scan, not a page. */
+const MAX_SKIP = 100_000
+/** Values one filter key may carry, so a query string cannot turn into an unbounded `IN`. */
+const MAX_FILTER_VALUES = 50
 /** Operators a filter may use. Anything else is a typo, and is refused as one. */
 const OPERATORS = ['gte', 'lte', 'gt', 'lt', 'contains', 'in', 'not'] as const
 const LIST_OPERATORS = new Set(['in', 'not'])
@@ -19,6 +23,11 @@ function readCount(raw: unknown, min: number, max: number): number | undefined {
   const value = Number(raw)
   if (!Number.isFinite(value)) return undefined
   return Math.min(max, Math.max(min, Math.trunc(value)))
+}
+
+/** Repeating a key means "any of", so the list is capped: the index reads one row per value. */
+function readValues(raw: unknown): string[] {
+  return (Array.isArray(raw) ? raw : [raw]).map(String).filter(Boolean).slice(0, MAX_FILTER_VALUES)
 }
 
 /** Repeating a key means "any of", which is what the parser already hands back as an array. */
@@ -35,7 +44,7 @@ function readFilter(query: Record<string, unknown>, allowed: string[] | undefine
       })
     }
     if (operator === undefined) {
-      const values = (Array.isArray(rawValue) ? rawValue : [rawValue]).map(String).filter(Boolean)
+      const values = readValues(rawValue)
       if (values.length) where[key] = values.length === 1 ? values[0]! : values
       continue
     }
@@ -50,7 +59,7 @@ function readFilter(query: Record<string, unknown>, allowed: string[] | undefine
     // than the last one overwriting the others.
     const operators: EponymeFilterOperators = existing && typeof existing === 'object' && !Array.isArray(existing) ? existing : {}
     if (LIST_OPERATORS.has(operator)) {
-      const values = (Array.isArray(rawValue) ? rawValue : [rawValue]).map(String).filter(Boolean)
+      const values = readValues(rawValue)
       if (values.length) operators[operator as 'in' | 'not'] = values
     }
     else {
@@ -67,7 +76,7 @@ export default defineEventHandler(async (event) => {
   const version = query.version === 'draft' ? 'draft' : 'published'
   // A draft listing carries unpublished titles and content.
   if (version === 'draft') await requireEponymePermission(event, 'content.read', { kind: 'collection', name })
-  else if (!query.raw) setEponymePublicCache(event, getEponymeCacheTags(name))
+  else if (!query.raw) setEponymePublicCache(event, getEponymeResponseTags(name))
   if (!name) throw createError({ status: 404, message: t('server.collectionNotFound') })
 
   const service = useEponymeService()
@@ -86,8 +95,10 @@ export default defineEventHandler(async (event) => {
   }
 
   const page = await service.listCollection(name, version, {
-    take: readCount(query.take, 1, MAX_TAKE),
-    skip: readCount(query.skip, 0, Number.MAX_SAFE_INTEGER),
+    // A missing `take` is a page too: without one the answer used to be the whole collection, which is a
+    // scan any visitor could ask for.
+    take: readCount(query.take, 1, MAX_TAKE) ?? MAX_TAKE,
+    skip: readCount(query.skip, 0, MAX_SKIP),
     orderBy,
     order: query.order === 'asc' ? 'asc' : query.order === 'desc' ? 'desc' : undefined,
     where: readFilter(query, service.collectionFilterKeys(name)),

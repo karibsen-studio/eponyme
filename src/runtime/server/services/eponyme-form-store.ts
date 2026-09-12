@@ -53,6 +53,8 @@ export type PrismaEponymeFormClient = {
       where: { formName: string, createdAt?: { lt: Date } } | { id: { in: string[] } }
     }): Promise<{ count: number }>
   }
+  /** Optional: the doubles the tests build have no transactions, and the fallback below is the same work. */
+  $transaction?: <T>(fn: (tx: PrismaEponymeFormClient) => Promise<T>) => Promise<T>
 }
 
 /** Types whose stored value is free text a person would search for. */
@@ -60,9 +62,12 @@ const SEARCHABLE_TYPES = new Set(['string', 'textarea', 'email', 'phone', 'url']
 
 const DEFAULT_PER_PAGE = 25
 const MAX_PER_PAGE = 100
+/** How often retention runs on its own, so a form that stopped receiving traffic still forgets. */
+const RETENTION_INTERVAL_MS = 60 * 60 * 1000
 
 export class EponymeFormService {
   private readonly forms: Record<string, EponymeFormDefinitionBase>
+  private nextRetentionAt = 0
 
   constructor(config: EponymeConfig, private readonly client: PrismaEponymeFormClient) {
     this.forms = getEponymeForms(config)
@@ -126,10 +131,7 @@ export class EponymeFormService {
 
     const validated = this.validate(name, payload)
     if (!validated || 'errors' in validated) return validated
-    await this.pruneSubmissions(name, definition, 1)
-    const row = await this.submissions().create({
-      data: { id: randomUUID(), formName: name, data: validated.data },
-    })
+    const row = await this.storeSubmission(name, definition, validated.data)
     return { submission: toSubmission(row) }
   }
 
@@ -143,10 +145,7 @@ export class EponymeFormService {
 
     const validated = this.validate(name, payload)
     if (!validated || 'errors' in validated) return validated
-    await this.pruneSubmissions(name, definition, 1)
-    const row = await this.submissions().create({
-      data: { id: randomUUID(), formName: name, data: validated.data },
-    })
+    const row = await this.storeSubmission(name, definition, validated.data)
     return { submission: toSubmission(row) }
   }
 
@@ -156,6 +155,7 @@ export class EponymeFormService {
   ): Promise<EponymeFormSubmissionPage | undefined> {
     const definition = this.forms[name]
     if (!definition || !definition.submission.store) return undefined
+    void this.applyRetentionOnSchedule()
 
     const perPage = clamp(options.perPage ?? DEFAULT_PER_PAGE, 1, MAX_PER_PAGE)
     const page = Math.max(1, Math.trunc(options.page ?? 1) || 1)
@@ -223,6 +223,36 @@ export class EponymeFormService {
     return count
   }
 
+  /**
+   * The quota is made room for and the row written as one unit, so a failed insert cannot leave a deletion
+   * behind. Two submissions landing at the same instant can still both read the same count: a strictly
+   * enforced ceiling would need a serializable transaction, which this does not take.
+   */
+  private async storeSubmission(
+    name: string,
+    definition: EponymeFormDefinitionBase,
+    data: Record<string, unknown>,
+  ): Promise<PrismaEponymeFormSubmissionRow> {
+    const write = async (client: PrismaEponymeFormClient) => {
+      await this.pruneSubmissions(name, definition, 1, client)
+      return await client.eponymeFormSubmission.create({
+        data: { id: randomUUID(), formName: name, data },
+      })
+    }
+    return this.client.$transaction ? await this.client.$transaction(write) : await write(this.client)
+  }
+
+  /**
+   * Retention on a clock rather than on traffic alone: a form that stopped receiving submissions kept
+   * everything it had, however short its configured window.
+   */
+  private async applyRetentionOnSchedule(now = Date.now()): Promise<void> {
+    if (now < this.nextRetentionAt) return
+    this.nextRetentionAt = now + RETENTION_INTERVAL_MS
+    // Maintenance, never a reason to fail the read that happened to trigger it.
+    await this.pruneStoredSubmissions().catch(() => {})
+  }
+
   /** Applies retention and quotas at boot, even when a form no longer receives traffic. */
   async pruneStoredSubmissions(): Promise<void> {
     for (const [name, definition] of Object.entries(this.forms)) {
@@ -231,24 +261,30 @@ export class EponymeFormService {
     }
   }
 
-  private async pruneSubmissions(name: string, definition: EponymeFormDefinitionBase, reservedRows: 0 | 1): Promise<void> {
+  private async pruneSubmissions(
+    name: string,
+    definition: EponymeFormDefinitionBase,
+    reservedRows: 0 | 1,
+    client: PrismaEponymeFormClient = this.client,
+  ): Promise<void> {
+    const rows = client.eponymeFormSubmission
     if (definition.submission.retentionDays !== false) {
       const cutoff = new Date(Date.now() - definition.submission.retentionDays * 24 * 60 * 60 * 1000)
-      await this.submissions().deleteMany({ where: { formName: name, createdAt: { lt: cutoff } } })
+      await rows.deleteMany({ where: { formName: name, createdAt: { lt: cutoff } } })
     }
 
     if (definition.submission.maxStored === false) return
-    const total = await this.submissions().count({ where: { formName: name } })
+    const total = await rows.count({ where: { formName: name } })
     const overflow = total - definition.submission.maxStored + reservedRows
     if (overflow <= 0) return
-    const oldest = await this.submissions().findMany({
+    const oldest = await rows.findMany({
       where: { formName: name },
       orderBy: { createdAt: 'asc' },
       take: overflow,
       select: { id: true },
     })
     if (oldest.length)
-      await this.submissions().deleteMany({ where: { id: { in: oldest.map(row => row.id) } } })
+      await rows.deleteMany({ where: { id: { in: oldest.map(row => row.id) } } })
   }
 }
 

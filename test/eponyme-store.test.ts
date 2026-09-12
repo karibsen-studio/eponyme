@@ -3,7 +3,7 @@ import { defineEponymeConfig } from '../src/config/config'
 import { collection } from '../src/config/collection'
 import { field } from '../src/runtime/fields'
 import { today } from '../src/runtime/fields/date'
-import { EponymeService, isEponymeLive, schemaFingerprint, type EponymeExportFile, type EponymeFilterCondition, type PrismaEponymeClient, type PrismaEponymeDelegates, type PrismaEponymeWhere, type PrismaStringFilter } from '../src/runtime/server/services/eponyme-store'
+import { capOldest, EponymeService, isEponymeLive, schemaFingerprint, type EponymeExportFile, type EponymeImportOutcome, type EponymeFilterCondition, type PrismaEponymeClient, type PrismaEponymeDelegates, type PrismaEponymeWhere, type PrismaStringFilter } from '../src/runtime/server/services/eponyme-store'
 import { buildEponymeIndexRows, type EponymeIndexRow } from '../src/runtime/utils/eponyme-entry-index'
 import { createDefaultEponymeData } from '../src/runtime/utils/create-default-eponyme-data'
 import { validateEponymeData } from '../src/runtime/utils/validate-eponyme-data'
@@ -357,6 +357,20 @@ const config = defineEponymeConfig({
   }),
 })
 
+/** The same articles collection with one more rule, for the restores that must answer to it. */
+const stricterArticles = defineEponymeConfig({
+  articles: collection({
+    label: 'Articles',
+    titleField: 'title',
+    slugField: 'slug',
+    fields: {
+      title: field.string({ required: true }),
+      slug: field.slug({ required: true }),
+      summary: field.textarea({ required: true }),
+    },
+  }),
+})
+
 describe('isEponymeLive', () => {
   const now = new Date('2026-08-08T12:00:00.000Z')
   const state = (scheduledPublishAt: string | null, scheduledUnpublishAt: string | null, status = 'published' as const) => ({
@@ -503,6 +517,19 @@ describe('EponymeService', () => {
     // The winner's content is what remains stored – never a silent mix of both.
     const stored = await service.get('homepage', 'draft')
     expect(['From tab A', 'From tab B']).toContain(stored!.title)
+  })
+
+  it('keeps the reconciliation bookkeeping finite, oldest first', () => {
+    const seen = new Set(['a', 'b', 'c'])
+    const revisions = new Map([['a', '1'], ['b', '2'], ['c', '3']])
+
+    capOldest(seen, 2)
+    capOldest(revisions, 2)
+
+    // What a long-lived instance remembers about past heals cannot grow without end, and the
+    // key it forgets is the one least likely to still matter to an open tab.
+    expect([...seen]).toEqual(['b', 'c'])
+    expect([...revisions.keys()]).toEqual(['b', 'c'])
   })
 
   it('does not let the schema reconciliation overwrite a save that lands during it', async () => {
@@ -805,6 +832,99 @@ describe('EponymeService', () => {
     await expect(service.history('homepage')).resolves.toHaveLength(3)
   })
 
+  // S03: `content.restore` alone must not become a way to publish, unpublish or reschedule, since a
+  // restore rewrites the published state as well as the draft.
+  it('asks for the rights the restored state changes, not just for the right to restore', async () => {
+    const { client } = createClient()
+    const service = new EponymeService(config, client)
+    const without = (denied: string) => ({ allows: (action: string) => action !== denied })
+
+    await service.patch('homepage', { title: 'Live' }, 'publish')
+    const published = (await service.history('homepage'))![0]!
+    await service.patch('homepage', {}, 'unpublish')
+
+    // Putting a published version back is a publication.
+    await expect(service.restore('homepage', published.id, undefined, undefined, without('content.publish')))
+      .resolves.toEqual({ forbidden: 'content.publish' })
+    await expect(service.getResult('homepage')).resolves.toBeUndefined()
+
+    await expect(service.restore('homepage', published.id, undefined, undefined, without('content.unpublish')))
+      .resolves.toMatchObject({ status: 'published' })
+    await expect(service.get('homepage')).resolves.toMatchObject({ title: 'Live' })
+
+    // And taking it back off the site is an unpublication.
+    const unpublished = (await service.history('homepage'))!.find(version => version.status === 'unpublished')!
+    await expect(service.restore('homepage', unpublished.id, undefined, undefined, without('content.unpublish')))
+      .resolves.toEqual({ forbidden: 'content.unpublish' })
+  })
+
+  it('asks for the scheduling right when the restored version carries other dates', async () => {
+    const { client } = createClient()
+    const service = new EponymeService(config, client)
+
+    await service.patch('homepage', { title: 'Planned' }, 'draft')
+    const plain = (await service.history('homepage'))![0]!
+    await service.patch('homepage', {}, 'schedule', undefined, { scheduledPublishAt: '2026-12-01T09:00:00.000Z' })
+
+    await expect(service.restore('homepage', plain.id, undefined, undefined, { allows: action => action !== 'content.schedule' }))
+      .resolves.toEqual({ forbidden: 'content.schedule' })
+    await expect(service.restore('homepage', plain.id, undefined, undefined, { allows: () => true }))
+      .resolves.toMatchObject({ scheduledPublishAt: null })
+  })
+
+  // A restore that keeps the entry where it is asks for nothing more than `content.restore`.
+  it('leaves a draft-only restore to the restore right alone', async () => {
+    const { client } = createClient()
+    const service = new EponymeService(config, client)
+
+    await service.patch('homepage', { title: 'First draft' }, 'draft')
+    const first = (await service.history('homepage'))![0]!
+    await service.patch('homepage', { title: 'Second draft' }, 'draft')
+
+    await expect(service.restore('homepage', first.id, undefined, undefined, { allows: () => false }))
+      .resolves.toMatchObject({ data: { title: 'First draft' } })
+  })
+
+  // B12: a restore rewrites the published state, so it answers to the rules publishing by hand answers to.
+  // A schema that gained a rule after the version was saved is the case that reaches this.
+  it('refuses to restore a published version the publish action would refuse', async () => {
+    const { client } = createClient()
+    const stricter = defineEponymeConfig({
+      homepage: {
+        title: field.string({ required: true, defaultValue: 'Welcome' }),
+        enabled: field.boolean({ defaultValue: true }),
+        tags: field.array({ of: field.string({ required: true, minLength: 2 }), defaultValue: ['nuxt'], minItems: 1, maxItems: 3 }),
+        subtitle: field.string({ required: true }),
+      },
+    })
+
+    const service = new EponymeService(config, client)
+    await service.patch('homepage', { title: 'Live' }, 'publish')
+    const published = (await service.history('homepage'))![0]!
+
+    const strict = new EponymeService(stricter, client)
+    // The same payload through the publish action, for the comparison the restore has to match.
+    await expect(strict.patch('homepage', { title: 'Live' }, 'publish'))
+      .resolves.toEqual({ errors: { subtitle: ['This field is required.'] } })
+    await expect(strict.restore('homepage', published.id, undefined, undefined, { allows: () => true }))
+      .resolves.toEqual({ errors: { subtitle: ['This field is required.'] } })
+    // And nothing of it reached the site.
+    await expect(strict.get('homepage')).resolves.toMatchObject({ subtitle: '' })
+  })
+
+  // A version that is not published stays free to be incomplete, which is what the draft state is for.
+  it('restores an unpublished version the publish rules would refuse', async () => {
+    const { client } = createClient()
+    const service = new EponymeService(config, client)
+    await service.createCollectionEntry('articles', { title: 'Only a draft' })
+    await service.patch('articles/only-a-draft', { summary: 'Second draft' }, 'draft')
+    const first = (await service.history('articles/only-a-draft'))!.at(-1)!
+
+    const strict = new EponymeService(stricterArticles, client)
+    await expect(strict.restore('articles/only-a-draft', first.id, undefined, undefined, { allows: () => true }))
+      .resolves.toMatchObject({ data: { title: 'Only a draft' }, status: 'draft' })
+  })
+
   it('attributes each version to the user who wrote it', async () => {
     const { client } = createClient()
     const service = new EponymeService(config, client)
@@ -935,6 +1055,28 @@ describe('EponymeService', () => {
     expect(rows.has('articles/lete-a-paris')).toBe(true)
   })
 
+  // B13: an entry trashed while published comes back online with its published payload, so that payload
+  // answers to the publish rules rather than being written back unread.
+  it('refuses to take a published entry out of the trash when its published payload no longer passes', async () => {
+    const { client } = createClient()
+    const service = new EponymeService(config, client)
+    await service.createCollectionEntry('articles', { title: 'Trashed while live' })
+    await service.patch('articles/trashed-while-live', {}, 'publish')
+    await expect(service.deleteCollectionEntry('articles/trashed-while-live')).resolves.toEqual({ deleted: true })
+
+    const strict = new EponymeService(stricterArticles, client)
+    await expect(strict.restoreCollectionEntry('articles/trashed-while-live', undefined, undefined, { allows: () => true }))
+      .resolves.toEqual({ errors: { summary: ['This field is required.'] } })
+    // Still in the trash, so nothing of it is public.
+    await expect(strict.get('articles/trashed-while-live')).resolves.toBeUndefined()
+
+    // An entry trashed as a draft promises nothing to the site, and comes back as it always did.
+    await service.createCollectionEntry('articles', { title: 'Trashed as a draft' })
+    await service.deleteCollectionEntry('articles/trashed-as-a-draft')
+    await expect(strict.restoreCollectionEntry('articles/trashed-as-a-draft', undefined, undefined, { allows: () => true }))
+      .resolves.toBe(true)
+  })
+
   it('trashes, restores and purges a collection entry', async () => {
     const { client, rows, versions } = createClient()
     const service = new EponymeService(config, client)
@@ -976,6 +1118,52 @@ describe('EponymeService', () => {
     expect(versions.filter(version => version.entryName === 'articles/lete-a-paris')).toHaveLength(0)
     // The slug is free again.
     await expect(service.createCollectionEntry('articles', { title: 'Retake', slug: 'lete-a-paris' })).resolves.toMatchObject({ slug: 'lete-a-paris' })
+  })
+
+  it('treats bringing a published entry out of the trash as a publication', async () => {
+    const { client } = createClient()
+    const service = new EponymeService(config, client)
+
+    await service.createCollectionEntry('articles', { title: 'L’été à Paris' })
+    await service.patch('articles/lete-a-paris', {}, 'publish')
+    await service.deleteCollectionEntry('articles/lete-a-paris')
+
+    await expect(service.restoreCollectionEntry('articles/lete-a-paris', undefined, undefined, {
+      allows: action => action !== 'content.publish',
+    })).resolves.toEqual({ forbidden: 'content.publish' })
+    await expect(service.get('articles/lete-a-paris')).resolves.toBeUndefined()
+
+    // A trashed draft goes back with the restore right alone: nothing becomes public.
+    await service.createCollectionEntry('articles', { title: 'Brouillon' })
+    await service.deleteCollectionEntry('articles/brouillon')
+    await expect(service.restoreCollectionEntry('articles/brouillon', undefined, undefined, { allows: () => false }))
+      .resolves.toBe(true)
+  })
+
+  it('refuses a restore whose relations point at an entry deleted since', async () => {
+    const related = defineEponymeConfig({
+      homepage: { author: field.relation({ to: 'articles' }) },
+      articles: collection({
+        label: 'Articles',
+        titleField: 'title',
+        slugField: 'slug',
+        fields: { title: field.string({ required: true }), slug: field.slug({ required: true }) },
+      }),
+    })
+    const { client } = createClient()
+    const service = new EponymeService(related, client)
+
+    await service.createCollectionEntry('articles', { title: 'Cible' })
+    await service.patch('homepage', { author: 'cible' }, 'draft')
+    const version = (await service.history('homepage'))![0]!
+    // The reference has to go first: an entry something points at cannot be trashed.
+    await service.patch('homepage', { author: '' }, 'draft')
+    await service.deleteCollectionEntry('articles/cible')
+
+    await expect(service.restore('homepage', version.id)).resolves.toEqual({
+      errors: { author: [expect.stringContaining('cible')] },
+    })
+    await expect(service.get('homepage', 'draft')).resolves.toMatchObject({ author: '' })
   })
 
   it('writes an entry and its history version as one transaction', async () => {
@@ -1425,6 +1613,126 @@ describe('Eponyme export and import', () => {
     }))
     // A creation has no previous state, so it never reads as an unpublication.
     expect(applied.written).toContainEqual(expect.objectContaining({ name: 'articles/still-a-draft', wasPublished: false }))
+  })
+
+  it('refuses a relation to an entry the import will skip for being in the trash', async () => {
+    const related = defineEponymeConfig({
+      homepage: { author: field.relation({ to: 'articles' }) },
+      articles: collection({
+        label: 'Articles',
+        titleField: 'title',
+        slugField: 'slug',
+        fields: { title: field.string({ required: true }), slug: field.slug({ required: true }) },
+      }),
+    })
+    const { client } = createClient()
+    const service = new EponymeService(related, client)
+    await service.createCollectionEntry('articles', { title: 'Cible', slug: 'target' })
+    await service.deleteCollectionEntry('articles/target')
+
+    // The file carries the target, but the destination holds it in its trash, so the import skips it:
+    // saying the relation is satisfied would leave the singleton pointing at nothing.
+    const file: EponymeExportFile = {
+      eponyme: {
+        format: 1,
+        exportedAt: new Date().toISOString(),
+        schemas: { homepage: schemaFingerprint(related.homepage), articles: schemaFingerprint(related.articles.fields) },
+      },
+      entries: [
+        {
+          name: 'homepage',
+          draft: { author: 'target' },
+          published: {},
+          status: 'draft',
+          publishedAt: null,
+          scheduledPublishAt: null,
+          scheduledUnpublishAt: null,
+        },
+        {
+          name: 'articles/target',
+          collection: 'articles',
+          draft: { title: 'Cible', slug: 'target' },
+          published: {},
+          status: 'draft',
+          publishedAt: null,
+          scheduledPublishAt: null,
+          scheduledUnpublishAt: null,
+        },
+      ],
+    }
+
+    await expect(service.importContent(file)).resolves.toMatchObject({
+      errors: [expect.stringContaining('articles/target')],
+    })
+    await expect(service.get('homepage', 'draft')).resolves.toMatchObject({ author: '' })
+  })
+
+  it('refuses a file that would publish what a publication refuses', async () => {
+    const { client, rows } = createClient()
+    const service = new EponymeService(config, client)
+    const file: EponymeExportFile = {
+      eponyme: {
+        format: 1,
+        exportedAt: new Date().toISOString(),
+        schemas: { articles: schemaFingerprint(config.articles.fields) },
+      },
+      entries: [{
+        name: 'articles/empty-title',
+        collection: 'articles',
+        // `title` is required: `patch(..., 'publish')` would refuse this, and a file must not be a way
+        // around it.
+        draft: { title: '', slug: 'empty-title' },
+        published: { title: '', slug: 'empty-title' },
+        status: 'published',
+        publishedAt: new Date().toISOString(),
+        scheduledPublishAt: null,
+        scheduledUnpublishAt: null,
+      }],
+    }
+
+    await expect(service.importContent(file, { dryRun: true })).resolves.toMatchObject({
+      errors: [expect.stringContaining('title')],
+    })
+    await expect(service.importContent(file)).resolves.toMatchObject({
+      errors: [expect.stringContaining('articles/empty-title')],
+    })
+    // Refused whole: nothing of the file was written.
+    expect(rows.has('articles/empty-title')).toBe(false)
+
+    // The same entry as a draft is imported: a draft is allowed to be incomplete.
+    file.entries[0]!.status = 'draft'
+    file.entries[0]!.published = {}
+    file.entries[0]!.publishedAt = null
+    await expect(service.importContent(file)).resolves.toMatchObject({ created: 1 })
+  })
+
+  it('reports the published version of an imported entry, not its private draft', async () => {
+    const { client } = createClient()
+    const service = new EponymeService(config, client)
+    const file: EponymeExportFile = {
+      eponyme: {
+        format: 1,
+        exportedAt: new Date().toISOString(),
+        schemas: { articles: schemaFingerprint(config.articles.fields) },
+      },
+      entries: [{
+        name: 'articles/two-versions',
+        collection: 'articles',
+        draft: { title: 'Private draft', slug: 'two-versions' },
+        published: { title: 'Public', slug: 'two-versions' },
+        status: 'published',
+        publishedAt: new Date().toISOString(),
+        scheduledPublishAt: null,
+        scheduledUnpublishAt: null,
+      }],
+    }
+
+    const outcome = await service.importContent(file) as EponymeImportOutcome
+    // The route turns this into a publication hook: a listener building a public copy from it must not
+    // receive the draft nobody published.
+    expect(outcome.written[0]).toMatchObject({ status: 'published', data: { title: 'Public' } })
+    await expect(service.get('articles/two-versions')).resolves.toMatchObject({ title: 'Public' })
+    await expect(service.get('articles/two-versions', 'draft')).resolves.toMatchObject({ title: 'Private draft' })
   })
 
   it('refuses a file whose relations point at an entry neither it nor the application holds', async () => {

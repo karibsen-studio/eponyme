@@ -14,6 +14,10 @@ export function eponymeRateLimitPolicies() {
     loginIp: { limit: config.loginPerIp, windowMs: 60_000 },
     loginGlobal: { limit: config.loginGlobal, windowMs: 60_000 },
     loginAccountFailure: { limit: config.loginAccountFailures, windowMs: 15 * 60_000 },
+    // Not configurable: a password change is a rare action, and the limit exists to bound the KDF work an
+    // account or an address can ask for, not to shape a workflow.
+    passwordChangeAccount: { limit: 10, windowMs: 15 * 60_000 },
+    passwordChangeIp: { limit: 20, windowMs: 15 * 60_000 },
     formIp: { limit: config.formPerIp, windowMs: 60_000 },
     formGlobal: { limit: config.formGlobal, windowMs: 60_000 },
     formReserve: FORM_RESERVE,

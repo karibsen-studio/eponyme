@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { t } from '#eponyme/locale'
 import { computed, ref } from 'vue'
+import { useFormFieldDescribedBy } from './form-field-context'
 import {
   TagsInputItem,
   TagsInputItemDelete,
@@ -22,6 +23,7 @@ const props = withDefaults(defineProps<{
   invalid?: boolean
 }>(), { modelValue: () => [], suggestions: () => [] })
 
+const describedBy = useFormFieldDescribedBy()
 const emit = defineEmits<{ 'update:modelValue': [value: string[]] }>()
 
 const search = ref('')
@@ -88,6 +90,7 @@ function onEnter(event: KeyboardEvent) {
 
       <input
         v-model="search"
+        :aria-describedby="describedBy"
         :placeholder="full ? undefined : placeholder"
         :disabled="disabled || full"
         class="ep:min-w-24 ep:flex-1 ep:border-0 ep:bg-transparent ep:px-2 ep:text-sm ep:text-text-strong ep:outline-none ep:placeholder:text-text-muted ep:disabled:cursor-not-allowed"

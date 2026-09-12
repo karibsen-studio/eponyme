@@ -67,13 +67,20 @@ export default defineEventHandler(async (event) => {
   const data = action === 'draft' ? body : current?.data
   if (!data) throw createError({ status: 404, message: t('server.entryNotFound') })
   // Listeners may amend `data` here, so the hook runs on the payload that will be written rather than on a
-  // copy of it.
+  // copy of it. For a publication that payload is the entry's own draft, so this snapshot is what tells a
+  // listener's amendment apart from it.
   const beforeSave = { name, collection, action, data: data as Record<string, unknown>, userId: user.id }
+  const original = action === 'draft' ? '' : JSON.stringify(beforeSave.data)
   await callEponymeBlockingHook('eponyme:entry:beforeSave', beforeSave)
+  // A publication normally writes nothing of its own - it consumes the stored draft, which is what keeps
+  // the client from smuggling content through it. What a listener changed is the exception, and it is sent
+  // on so the amendment lands in the version that goes online.
+  const amended = action !== 'draft' && JSON.stringify(beforeSave.data) !== original
+  const payload = action === 'draft' || amended ? beforeSave.data : {}
 
   // Optional: a caller that never read a revision - a public read, a script - keeps writing
   // last-write-wins.
-  const result = await service.patch(name, action === 'draft' ? beforeSave.data : {}, action, user, {
+  const result = await service.patch(name, payload, action, user, {
     scheduledPublishAt: typeof scheduleBody?.scheduledPublishAt === 'string' ? scheduleBody.scheduledPublishAt : null,
     scheduledUnpublishAt: typeof scheduleBody?.scheduledUnpublishAt === 'string' ? scheduleBody.scheduledUnpublishAt : null,
   }, readEponymeRevision(event))

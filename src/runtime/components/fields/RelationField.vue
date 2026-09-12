@@ -5,6 +5,8 @@ import { refDebounced } from '@vueuse/core'
 import { computed, ref, watch } from 'vue'
 import type { RelationFieldDefinition } from '../../types'
 import type { EponymeCollectionEntry } from '../../server/services/eponyme-store'
+import { useEponymeConfig } from '../../composables/useEponymeConfig'
+import { getEponymeCollections } from '../../utils/get-eponyme-schemas'
 import EPButton from '../ui/EPButton.vue'
 import EPDialog from '../ui/EPDialog.vue'
 import EPFormField from '../ui/EPFormField.vue'
@@ -28,6 +30,9 @@ const emit = defineEmits<{ 'update:modelValue': [value: string | string[]] }>()
 
 const requestFetch = useRequestFetch()
 const collection = computed(() => props.definition.options.to)
+// A collection names its own title field: reading `data.title` would show the slug wherever it is called
+// something else, until the picker happened to load the entry.
+const titleField = computed(() => getEponymeCollections(useEponymeConfig())[collection.value]?.titleField ?? 'title')
 const multiple = computed(() => Boolean(props.definition.options.multiple))
 const maxItems = computed(() => props.definition.options.maxItems)
 
@@ -60,8 +65,12 @@ function rememberTitles(rows: EponymeCollectionEntry[]) {
   titles.value = next
 }
 
+/** Identifies the search a response belongs to, so a slower earlier one cannot replace a later one. */
+let currentRequest = 0
+
 /** `append` is what "Load more" asks for; a new search starts the list over instead. */
 async function loadEntries(append = false) {
+  const request = ++currentRequest
   loading.value = true
   try {
     const response = await requestFetch<{ entries: EponymeCollectionEntry[], total: number }>(
@@ -78,12 +87,14 @@ async function loadEntries(append = false) {
         },
       },
     )
+    // The answer of a search the editor has already moved on from is dropped, results and count alike.
+    if (request !== currentRequest) return
     entries.value = append ? [...entries.value, ...response.entries] : response.entries
     total.value = response.total
     rememberTitles(response.entries)
   }
   finally {
-    loading.value = false
+    if (request === currentRequest) loading.value = false
   }
 }
 
@@ -97,7 +108,7 @@ async function loadSelectedTitles() {
         `/api/eponyme/${collection.value}/${encodeURIComponent(slug)}`,
         { query: { version: 'draft', raw: 1 } },
       )
-      return { slug, title: String(entry.data.title || slug) }
+      return { slug, title: String(entry.data[titleField.value] || slug) }
     }
     catch {
       // Left as its slug: the save is what refuses a target that no longer exists.

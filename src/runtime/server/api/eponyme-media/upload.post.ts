@@ -23,10 +23,11 @@ export default defineEventHandler(async (event) => {
   const settings = useEponymeMediaSettings()
   const contentType = String(body.contentType ?? '')
   const size = Number(body.size)
-  assertEponymeUpload(contentType, size, settings)
+  const name = String(body.name ?? '')
+  assertEponymeUpload(contentType, size, settings, name)
 
   const driver = await useEponymeStorage()
-  const key = buildEponymeMediaKey(String(body.name ?? ''), settings)
+  const key = buildEponymeMediaKey(name, settings)
   const meta = { contentType, size }
   const throughApplication = `/api/eponyme-media/object?key=${encodeURIComponent(key)}`
 
@@ -40,7 +41,7 @@ export default defineEventHandler(async (event) => {
       // Whether the browser is allowed to reach the bucket is a CORS rule only the browser can discover, so
       // the answer carries both routes and the client falls back on its own.
       fallbackUrl: throughApplication,
-      publicUrl: await eponymePublicUrl(driver, key),
+      publicUrl: await eponymePublicUrl(driver, key, settings),
     }
   }
 
@@ -49,6 +50,6 @@ export default defineEventHandler(async (event) => {
     key,
     url: throughApplication,
     headers: { 'content-type': contentType },
-    publicUrl: await eponymePublicUrl(driver, key),
+    publicUrl: await eponymePublicUrl(driver, key, settings),
   }
 })

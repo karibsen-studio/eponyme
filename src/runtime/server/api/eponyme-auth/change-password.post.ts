@@ -6,14 +6,24 @@ import {
   requireEponymeUser,
   setEponymeSessionCookie,
 } from '../../utils/auth'
-import { readEponymeBody } from '../../utils/body'
+import { EPONYME_LOGIN_BODY_BYTES, readEponymeBody } from '../../utils/body'
+import {
+  assertEponymeRateLimit,
+  eponymeRateLimitPolicies,
+  eponymeRequestClientKey,
+} from '../../utils/rate-limit'
 import { getEponymePermissions } from '../../utils/eponyme-permissions'
 import { recordEponymeAudit } from '../../utils/eponyme-audit'
 
 export default defineEventHandler(async (event) => {
   assertEponymeMutationOrigin(event)
   const user = await requireEponymeUser(event, { allowPasswordChangeRequired: true })
-  const body = await readEponymeBody<{ currentPassword?: unknown, newPassword?: unknown }>(event)
+  // The login counts its attempts; this route hashes a password too, and a stolen session could otherwise
+  // guess the current one here without ever meeting that counter.
+  const limits = eponymeRateLimitPolicies()
+  await assertEponymeRateLimit(event, `password-change:account:${user.id}`, limits.passwordChangeAccount)
+  await assertEponymeRateLimit(event, `password-change:ip:${eponymeRequestClientKey(event)}`, limits.passwordChangeIp)
+  const body = await readEponymeBody<{ currentPassword?: unknown, newPassword?: unknown }>(event, EPONYME_LOGIN_BODY_BYTES)
   const result = await useEponymeAuthService().changePassword(
     user.id,
     body?.currentPassword,

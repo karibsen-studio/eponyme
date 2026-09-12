@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { SliderRange, SliderRoot, SliderThumb, SliderTrack } from 'reka-ui'
 import { computed } from 'vue'
+import { useFormFieldDescribedBy } from './form-field-context'
 
 const props = defineProps<{
   id?: string
@@ -15,6 +16,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ 'update:modelValue': [value: number] }>()
+const describedBy = useFormFieldDescribedBy()
 const minValue = computed(() => props.min ?? 0)
 const maxValue = computed(() => props.max ?? 100)
 const stepValue = computed(() => props.step ?? 1)
@@ -43,6 +45,7 @@ function update(values?: number[]) {
       <SliderThumb
         :id="id"
         :aria-label="label"
+        :aria-describedby="describedBy"
         class="ep:block ep:h-5 ep:w-5 ep:cursor-grab ep:rounded-full ep:border-2 ep:border-contrast ep:bg-surface-raised ep:outline-none ep:transition-colors ep:hover:bg-text-default ep:focus-visible:ring-2 ep:focus-visible:ring-contrast/30 ep:active:cursor-grabbing"
       />
     </SliderRoot>
