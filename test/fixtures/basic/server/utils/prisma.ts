@@ -461,11 +461,13 @@ const delegates = {
       sessions.delete(session.id)
       return session
     },
-    async deleteMany({ where }: { where: { userId?: string, tokenHash?: string } }) {
+    async deleteMany({ where }: { where: { userId?: string, tokenHash?: string, expiresAt?: { lte: Date } } }) {
       let count = 0
       for (const session of sessions.values()) {
         if (where.userId && session.userId !== where.userId) continue
         if (where.tokenHash && session.tokenHash !== where.tokenHash) continue
+        // The periodic sweep asks for expired rows only, and this double has to answer the same.
+        if (where.expiresAt && session.expiresAt.getTime() > where.expiresAt.lte.getTime()) continue
         sessions.delete(session.id)
         count++
       }
