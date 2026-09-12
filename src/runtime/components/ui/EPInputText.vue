@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useFormFieldDescribedBy } from './form-field-context'
 
 const props = withDefaults(defineProps<{
   modelValue?: string | number
@@ -18,6 +19,8 @@ const props = withDefaults(defineProps<{
   size: 'md',
 })
 
+// Set by the surrounding `EPFormField`: the description and the error message of this field.
+const describedBy = useFormFieldDescribedBy()
 const emit = defineEmits<{ 'update:modelValue': [value: string | number] }>()
 
 const padding = computed(() => {
@@ -46,6 +49,7 @@ function update(event: Event) {
 
 <template>
   <input
+    :aria-describedby="describedBy"
     :type="type"
     :value="modelValue"
     :aria-invalid="invalid || undefined"

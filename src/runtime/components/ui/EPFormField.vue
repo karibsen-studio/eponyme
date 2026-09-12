@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, inject } from 'vue'
-import { formFieldContextKey } from './form-field-context'
+import { computed, inject, provide } from 'vue'
+import { formFieldContextKey, formFieldDescribedByKey } from './form-field-context'
 
 const props = withDefaults(defineProps<{
   id?: string
@@ -24,6 +24,9 @@ const describedBy = computed(() => [
   props.description ? descriptionId.value : undefined,
   props.errors.length ? errorId.value : undefined,
 ].filter(Boolean).join(' ') || undefined)
+// Handed to the control in the slot rather than set on the wrapper below: only the control's own
+// `aria-describedby` is read out when it takes focus.
+provide(formFieldDescribedByKey, describedBy)
 </script>
 
 <template>
@@ -48,10 +51,7 @@ const describedBy = computed(() => [
         {{ description }}
       </p>
     </template>
-    <div
-      class="ep:block ep:min-w-0"
-      :aria-describedby="describedBy"
-    >
+    <div class="ep:block ep:min-w-0">
       <slot />
     </div>
     <p
