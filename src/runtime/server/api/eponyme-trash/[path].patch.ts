@@ -1,8 +1,8 @@
 import { t } from '#eponyme/locale'
-import { createError, defineEventHandler } from 'h3'
+import { createError, defineEventHandler, setResponseStatus } from 'h3'
 import { useEponymeService } from '../../services/eponyme-service'
 import { assertEponymeMutationOrigin } from '../../utils/auth'
-import { requireEponymePermission } from '../../utils/eponyme-permissions'
+import { hasEponymePermission, requireEponymePermission } from '../../utils/eponyme-permissions'
 import { callEponymeHook } from '../../utils/eponyme-hooks'
 import { splitEponymeCollectionEntry } from '../../utils/eponyme-entry'
 import { requireEponymeRevision } from '../../utils/eponyme-revision'
@@ -15,10 +15,18 @@ export default defineEventHandler(async (event) => {
   const collection = name ? splitEponymeCollectionEntry(service, name) : undefined
   if (!collection)
     throw createError({ status: 404, message: t('server.trashedNotFound') })
-  const user = await requireEponymePermission(event, 'content.restore', { kind: 'collection', name: collection.name })
-  const result = await service.restoreCollectionEntry(name, user, requireEponymeRevision(event))
-  if (typeof result !== 'boolean')
-    throw createError({ status: 409, message: t('server.entryConflict') })
+  const resource = { kind: 'collection' as const, name: collection.name }
+  const user = await requireEponymePermission(event, 'content.restore', resource)
+  // An entry trashed while published comes back public, which is a publication of its own.
+  const result = await service.restoreCollectionEntry(name, user, requireEponymeRevision(event), {
+    allows: action => hasEponymePermission(user.role, action, resource),
+  })
+  if (typeof result !== 'boolean') {
+    if ('conflict' in result) throw createError({ status: 409, message: t('server.entryConflict') })
+    if ('forbidden' in result) throw createError({ status: 403, message: t('server.forbidden') })
+    setResponseStatus(event, 422)
+    return { errors: result.errors }
+  }
   if (!result)
     throw createError({ status: 404, message: t('server.trashedNotFound') })
 

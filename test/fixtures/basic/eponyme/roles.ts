@@ -43,6 +43,15 @@ export default defineEponymeRoles({
       ),
     ],
   },
+  'history-restorer': {
+    label: 'History restorer',
+    permissions: [
+      permission.allow(
+        ['content.read', 'content.update', 'content.trash', 'content.restore'],
+        permission.collection('articles'),
+      ),
+    ],
+  },
   'release-editor': {
     label: 'Release editor',
     permissions: [
