@@ -1,9 +1,9 @@
-import { defineEventHandler, getCookie } from 'h3'
+import { defineEventHandler } from 'h3'
 import { useEponymeAuthService } from '../../services/eponyme-auth-service'
 import {
   assertEponymeMutationOrigin,
   clearEponymeSessionCookie,
-  EPONYME_SESSION_COOKIE,
+  readEponymeSessionCookie,
   getEponymeEventUser,
 } from '../../utils/auth'
 import { recordEponymeAudit } from '../../utils/eponyme-audit'
@@ -11,7 +11,7 @@ import { recordEponymeAudit } from '../../utils/eponyme-audit'
 export default defineEventHandler(async (event) => {
   assertEponymeMutationOrigin(event)
   const user = await getEponymeEventUser(event)
-  await useEponymeAuthService().logout(getCookie(event, EPONYME_SESSION_COOKIE))
+  await useEponymeAuthService().logout(readEponymeSessionCookie(event))
   if (user) {
     await recordEponymeAudit(event, {
       actor: user,
