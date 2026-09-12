@@ -37,6 +37,7 @@ declare module '@nuxt/schema' {
       prefix: string
       maxSize: number
       accept: string[]
+      private: boolean
       accessKeyId: string
       secretAccessKey: string
       sessionToken: string

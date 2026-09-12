@@ -1,15 +1,18 @@
-import { chmod, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import {
   assertEponymeMediaKey,
   assertEponymeUpload,
+  assertEponymeReservedKey,
   buildEponymeMediaKey,
   eponymePublicUrl,
   eponymeRawUrl,
   formatBytes,
   guessContentType,
+  isEponymeActiveMedia,
+  limitEponymeStream,
   toEponymeMediaItems,
 } from '../src/runtime/server/utils/eponyme-media'
 import { local } from '../src/runtime/server/utils/local-storage'
@@ -45,6 +48,19 @@ describe('media keys', () => {
       .toBe('uploads/2026/08/cover-a1b2c3.png')
   })
 
+  it('accepts only a key it would have generated for an upload', () => {
+    expect(() => assertEponymeReservedKey(buildEponymeMediaKey('photo.jpg', settings), settings)).not.toThrow()
+    for (const key of ['uploads/logo.png', 'uploads/2026/cover.png', 'uploads/2026/08/Cover.PNG']) {
+      expect(status(() => assertEponymeReservedKey(key, settings))).toBe(400)
+    }
+  })
+
+  it('keeps the same rule when no prefix is configured', () => {
+    const bare = { ...settings, prefix: '' }
+    expect(() => assertEponymeReservedKey(buildEponymeMediaKey('photo.jpg', bare), bare)).not.toThrow()
+    expect(status(() => assertEponymeReservedKey('logo.png', bare))).toBe(400)
+  })
+
   it('builds a dated, slugified, collision-proof key', () => {
     const key = buildEponymeMediaKey('Café Été – Rapport final.PDF', settings)
     expect(key).toMatch(/^uploads\/\d{4}\/\d{2}\/cafe-ete-rapport-final-[a-z0-9]{6}\.pdf$/)
@@ -55,9 +71,41 @@ describe('media keys', () => {
     expect(buildEponymeMediaKey('../../etc/passwd', settings)).toMatch(/^uploads\/\d{4}\/\d{2}\/passwd-[a-z0-9]{6}$/)
   })
 
+  it('recognises the formats a browser would run', () => {
+    expect(isEponymeActiveMedia('uploads/a/b.svg')).toBe(true)
+    expect(isEponymeActiveMedia('uploads/a/b.bin', 'text/html')).toBe(true)
+    expect(isEponymeActiveMedia('uploads/a/b.png', 'image/png')).toBe(false)
+  })
+
   it('names a type from the extension without asking the provider', () => {
     expect(guessContentType('uploads/a/b.webp')).toBe('image/webp')
     expect(guessContentType('uploads/a/b.unknown')).toBe('application/octet-stream')
+  })
+
+  it('cuts a body that keeps sending past the limit', async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(600))
+        controller.enqueue(new Uint8Array(600))
+        controller.close()
+      },
+    })
+
+    // The driver would have read both chunks and written 1200 bytes for an upload allowed 1024.
+    await expect(new Response(limitEponymeStream(stream, settings.maxSize)).arrayBuffer())
+      .rejects.toThrow('exceeded the configured size limit')
+  })
+
+  it('passes a body that stays within the limit through untouched', async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(512))
+        controller.close()
+      },
+    })
+
+    await expect(new Response(limitEponymeStream(stream, settings.maxSize)).arrayBuffer())
+      .resolves.toHaveProperty('byteLength', 512)
   })
 
   it('formats sizes the way the interface shows them', () => {
@@ -71,7 +119,7 @@ describe('the address saved into an entry', () => {
   const driver = (address: string) => ({ url: async () => address }) as unknown as EponymeStorageDriver
 
   it('keeps a public origin as it is', async () => {
-    await expect(eponymePublicUrl(driver('https://cdn.example.com/uploads/cover.png'), object.key))
+    await expect(eponymePublicUrl(driver('https://cdn.example.com/uploads/cover.png'), object.key, settings))
       .resolves.toBe('https://cdn.example.com/uploads/cover.png')
   })
 
@@ -80,7 +128,7 @@ describe('the address saved into an entry', () => {
     'https://storage.googleapis.com/media/uploads/cover.png?X-Goog-Signature=abc',
   ])('replaces a presigned address that would expire: %s', async (address) => {
     // Fifteen minutes is not a lifetime an entry can be published with.
-    await expect(eponymePublicUrl(driver(address), object.key))
+    await expect(eponymePublicUrl(driver(address), object.key, settings))
       .resolves.toBe('/api/eponyme-media/raw/uploads/2026/08/cover-a1b2c3.png')
   })
 
@@ -89,8 +137,18 @@ describe('the address saved into an entry', () => {
       .toBe('/api/eponyme-media/raw/uploads/2026/caf%C3%A9%20%26%20th%C3%A9.png')
   })
 
+  it('keeps a private object on the route that checks the session', async () => {
+    const isolated = { ...settings, private: true }
+    const public_ = driver('https://cdn.example.com/uploads/cover.png')
+
+    await expect(eponymePublicUrl(public_, object.key, isolated))
+      .resolves.toBe('/api/eponyme-media/raw/uploads/2026/08/cover-a1b2c3.png')
+    const [item] = await toEponymeMediaItems(public_, [object], isolated)
+    expect(item!.url).toBe('/api/eponyme-media/raw/uploads/2026/08/cover-a1b2c3.png')
+  })
+
   it('carries the stable address through to the library item', async () => {
-    const [item] = await toEponymeMediaItems(driver('https://bucket.example.com/a.png?X-Amz-Signature=abc'), [object])
+    const [item] = await toEponymeMediaItems(driver('https://bucket.example.com/a.png?X-Amz-Signature=abc'), [object], settings)
     expect(item!.url).toBe('/api/eponyme-media/raw/uploads/2026/08/cover-a1b2c3.png')
     expect(item!.contentType).toBe('image/png')
     expect(item!.lastModified).toBe('2026-08-14T10:00:00.000Z')
@@ -106,7 +164,7 @@ describe('the address saved into an entry', () => {
     } as unknown as EponymeStorageDriver
     const objects = Array.from({ length: 60 }, (_, index) => ({ ...object, key: `uploads/${index}.png` }))
 
-    const items = await toEponymeMediaItems(counting, objects)
+    const items = await toEponymeMediaItems(counting, objects, settings)
 
     expect(items).toHaveLength(60)
     // Sixty signed URLs would have been built only to be thrown away.
@@ -114,7 +172,7 @@ describe('the address saved into an entry', () => {
   })
 
   it('has nothing to decide for an empty page', async () => {
-    await expect(toEponymeMediaItems(driver('https://cdn.example.com/a.png'), [])).resolves.toEqual([])
+    await expect(toEponymeMediaItems(driver('https://cdn.example.com/a.png'), [], settings)).resolves.toEqual([])
   })
 })
 
@@ -134,8 +192,26 @@ describe('upload limits', () => {
     expect(status(() => assertEponymeUpload(contentType, size, settings))).toBe(expected)
   })
 
-  it('accepts anything when no list is configured', () => {
-    expect(() => assertEponymeUpload('text/html', 10, { ...settings, accept: [] })).not.toThrow()
+  it('accepts anything but an active format when no list is configured', () => {
+    expect(() => assertEponymeUpload('application/zip', 10, { ...settings, accept: [] }, 'archive.zip')).not.toThrow()
+    expect(status(() => assertEponymeUpload('text/html', 10, { ...settings, accept: [] }, 'page.html'))).toBe(415)
+  })
+
+  it.each([
+    ['image/svg+xml', 'drawing.svg'],
+    ['image/png', 'drawing.svg'],
+    ['image/svg+xml', 'drawing.png'],
+    ['image/png', 'page.html'],
+  ])('refuses an active document declared as %j named %j', (contentType, fileName) => {
+    // A script inside the file would run on the site's own origin once the document is opened.
+    expect(status(() => assertEponymeUpload(contentType, 10, { ...settings, accept: ['image/*', 'text/html'] }, fileName))).toBe(415)
+  })
+
+  it('refuses a name that disagrees with the declared type', () => {
+    expect(status(() => assertEponymeUpload('image/png', 10, settings, 'photo.jpg'))).toBe(400)
+    expect(() => assertEponymeUpload('image/png', 10, settings, 'photo.png')).not.toThrow()
+    // An extension the module does not name stays the client's business.
+    expect(() => assertEponymeUpload('image/png', 10, settings, 'photo.bin')).not.toThrow()
   })
 })
 
@@ -166,6 +242,25 @@ describe('local storage driver', () => {
   it('reports a missing object as null rather than as a failure', async () => {
     expect(await driver.stat('uploads/absent.txt')).toBeNull()
     await expect(driver.delete('uploads/absent.txt')).resolves.toBeUndefined()
+  })
+
+  // S15: the key check compares strings, which a symlink defeats - the name stays inside the directory
+  // while the file it names is somewhere else entirely.
+  it('refuses a key whose real path leaves the directory through a symlink', async () => {
+    const outside = await mkdtemp(join(tmpdir(), 'eponyme-outside-'))
+    await writeFile(join(outside, 'secret.txt'), 'not yours', 'utf8')
+    await symlink(outside, join(directory, 'escape'))
+
+    await expect(driver.get('escape/secret.txt')).rejects.toThrow('outside the storage directory')
+    await expect(driver.stat('escape/secret.txt')).rejects.toThrow('outside the storage directory')
+    await expect(driver.put('escape/written.txt', new Uint8Array([1]), { contentType: 'text/plain', size: 1 }))
+      .rejects.toThrow('outside the storage directory')
+    await expect(driver.delete('escape/secret.txt')).rejects.toThrow('outside the storage directory')
+    // The file it pointed at is untouched.
+    await expect(readFile(join(outside, 'secret.txt'), 'utf8')).resolves.toBe('not yours')
+
+    await rm(join(directory, 'escape'), { force: true })
+    await rm(outside, { recursive: true, force: true })
   })
 
   it('refuses a key that would escape the directory', async () => {

@@ -125,4 +125,6 @@ export type {
   EponymeEntryBeforeSaveContext,
   EponymeEntryTrashContext,
   EponymeFormSubmissionContext,
+  EponymeCacheFailureContext,
+  EponymeCacheOperation,
 } from './runtime/types'
